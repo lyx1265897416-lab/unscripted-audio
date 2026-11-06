@@ -1456,7 +1456,7 @@ function acceptCall() {
   if (!C || C.phase !== 'incoming') return;
   primeCallAudio(); unlockCtx();
   stopRing();
-  C.accepted = true; C.phase = 'connecting';
+  C.accepted = true; C.phase = 'connecting'; C.acceptedAt = Date.now();
   if (C.rec) { C.rec.status = 'live'; saveCalls(true); }
   ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save();
   renderCall();
@@ -1599,7 +1599,8 @@ function endCall(reason) {
   stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT);
   try { callAudio.pause(); } catch (e) { /* ignore */ }
   clearInterval(call.timer);
-  call.secs = call.t0 ? Math.round((Date.now() - call.t0) / 1000) : 0;
+  const base = call.t0 || call.acceptedAt;  // 计时从他开口算；没开口就从接通算，不会记成 0:00
+  call.secs = base ? Math.round((Date.now() - base) / 1000) : 0;
   call.phase = 'ended'; call.endReason = reason;
   if (call.cid) API.callEnd({ cid: call.cid, seconds: call.secs }).catch(() => {});
   recFinish(call, reason === 'error' && !call.t0 ? 'failed' : 'done');
