@@ -71,3 +71,10 @@ Series 字段 + `synopsis`（较长简介）+ `cast`：`[{"name":"Magnus","role"
 ## 通话提速（2026-11-06）
 - 第 1 轮（响铃期间）用本机 Opus 写开场；第 2 轮起用快模型 `CALL_FAST_MODEL`（默认 deepseek/deepseek-v4.1-flash，第一句约 3 秒）+ 精简版世界卡。
 - 他每轮说完，服务器按两个快捷回复和“沉默”预先写好他的下一轮、第一句先配好音。她点快捷回复 / Stay silent 时 `/api/call/turn` 直接返回那个预先生成的 job，第一句马上能播；打字、说话的自由回复照常现写（实测约 12 秒，主要花在配音）。没被选中的预先生成丢弃（每条约 15 credits 的第一句配音）。
+
+## 收听模式接口（2026-11-06）
+- `POST /api/play`、`/api/call/start` 多一个可选 `me`（她的“Your story self”，≤400 字）。
+- `POST /api/next` 的 `via` 多一个 `auto`（她没回应，故事自己往下走）；返回多 `matched`（语音/打字被判成某个选项时是那个选项原文）和最终 `via`。
+- `GET /api/cue?sid=&n=` → `{"url","text","n"}`：第 n 集结尾旁白念的提问。第一次约 5–10 秒，之后秒回。
+- `POST /api/wish {k, sid, text}` → `{"ok":true,"wishes":[…]}`：听的过程中对故事说的话，下一集要接住（最多记 3 条，下一集开写后清空）。
+- `GET /api/specs?sid=` → `{"n":下一集号,"specs":{"选项原文":{"job","n","ep"}}}`：预先写好的下一集（第 1 句已配音），前端点选项时本地直接开播。

@@ -265,12 +265,14 @@ const RealAPI = {
   },
   series() { return this.get('api/series', null, true); },
   seriesDetail(id) { return this.get('api/series/' + encodeURIComponent(id), null, true); },
-  play({ series, name }) { return this.post('api/play', { series, lang: LANG, name }); },
+  play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, me: S.me || '' }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
   job(id) { return this.get('api/job', { id }, false); },
   specs(sid) { return this.get('api/specs', { sid }, false); },
+  cue(sid, n) { return this.get('api/cue', { sid, n }, false); },
+  wish(sid, text) { return this.post('api/wish', { sid, text }); },
   fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
-  callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction }); },
+  callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '' }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
   callEnd({ cid, seconds }) { return this.post('api/call/end', { cid, seconds }); },
 };
@@ -288,6 +290,8 @@ const MockAPI = {
   },
   calls: new Map(),
   async specs() { return { n: 0, specs: {} }; },
+  async cue() { await sleep(400); return { url: 'mock/line_a.mp3', text: 'Mock question: this way, or that way?' }; },
+  async wish() { return { ok: true }; },
   async fillers() { await sleep(300); return { urls: ['mock/line_c.mp3'], think: ['mock/line_a.mp3', 'mock/line_b.mp3'] }; },
   async callStart({ series, who, direction }) {
     await sleep(200);
@@ -450,6 +454,7 @@ const ICON = {
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
   unlock: '<rect x="5" y="10.5" width="14" height="10" rx="2.2"/><path d="M8 10.5V8a4 4 0 0 1 7.7-1.5"/>',
+  hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V13M17 10.5a1.5 1.5 0 0 1 3 0V15a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.6-2.2L4 16.2a1.5 1.5 0 0 1 2.3-1.9L8 16"/>',
   mic: '<rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
   send: '<path d="M4.5 12 20 4.5 15 20l-3.2-6.8z"/><path d="m11.8 13.2 3.7-3.7"/>',
   close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
@@ -626,7 +631,7 @@ const isPlaying = () => P.want && (!audio.paused || P.waiting);
 
 /** Start an episode (produced: one mp3 + cues; live: sequential lines). */
 function playEpisode(id, ep, opts = {}) {
-  cancelUpNext();
+  cancelUpNext(); bedStop(); stopAutoCountdown(); hfStop(true);
   P.id = id; P.ep = ep; P.needChoice = false; P.waiting = false; P.loading = false;
   P.idx = opts.line || 0; P.lineStart = 0;
   P.jobDone = ep.kind !== 'live' || ep._done !== false;
@@ -718,6 +723,7 @@ function maybeSpecs(force) {
   else if (!near && isFinite(audio.duration) && audio.duration > 0) near = audio.duration - audio.currentTime < 45;
   if (!near || Date.now() - SPEC.at < 6000) return;
   SPEC.at = Date.now();
+  if (modeOf() === 'voice') fetchCue(ss.sid, ep.n);
   if (SPEC.key !== key) { SPEC.key = key; SPEC.map = {}; SPEC.n = ep.n + 1; SPEC.warm = []; }
   API.specs(ss.sid).then((r) => {
     if (!r || SPEC.key !== key || r.n !== ep.n + 1) return;
@@ -801,8 +807,9 @@ if ('mediaSession' in navigator) {
   h('pause', () => doPause());
   h('seekbackward', () => skip(-10));
   h('seekforward', () => skip(10));
-  h('previoustrack', () => prevEpisode());
-  h('nexttrack', () => nextEpisode());
+  // headphone / lock-screen buttons at a cliffhanger: next = answer by voice (or let it carry on), previous = hear the question again
+  h('previoustrack', () => { if (P.needChoice && modeOf() === 'voice') startHandsFree(); else prevEpisode(); });
+  h('nexttrack', () => { if (P.needChoice) { if (SR && modeOf() !== 'tap' && document.visibilityState === 'visible') hfListen(); else continueOnItsOwn(); } else nextEpisode(); });
   h('seekto', (d) => { if (P.ep && P.ep.kind !== 'live' && d && isFinite(d.seekTime)) audio.currentTime = d.seekTime; });
 }
 
@@ -930,7 +937,7 @@ function onEpisodeEnd() {
   P.needChoice = true;
   saveProgress();
   updatePlayerUI(); renderMini();
-  if (!sleepEoe) { openChoiceSheet(); maybeIncomingCall(); }
+  if (!sleepEoe) endOfEpisodeFlow();
   else toast('Sleep timer: stopped at end of episode');
 }
 function saveProgressDone() {
@@ -972,6 +979,7 @@ function openChoiceSheet() {
       <div><small>YOUR MOVE · END OF EP ${ep.n}</small><b>${esc(s.title)}</b></div>
       <button class="icon-btn" data-act="sheet-close" aria-label="Close" style="margin-left:auto">${ic('close')}</button>
     </div>
+    <div class="ch-hf" id="ch-hf" hidden></div>
     <h3 class="ch-prompt">${esc(ep.prompt || (LANG === 'zh' ? '你怎么做？' : 'What do you do?'))}</h3>
     <div class="ch-opts">
       ${choices.map((c, i) => `<button class="ch-opt" data-act="choose" data-i="${i}"><i>${'AB'[i]}</i><span>${esc(c)}</span></button>`).join('')}
@@ -988,10 +996,13 @@ function openChoiceSheet() {
       <span class="lockinfo">${locked ? `${ic('lock', 'xs')} Ep ${nextN} · ${coinIc('sm')} ${PRICE} to unlock` : `${ic('spark', 'xs')} Ep ${nextN} is written live from your answer`}</span>
       <button class="link-btn" data-act="silent">Stay silent</button>
     </div>
+    <div class="ch-auto" id="ch-auto" hidden></div>
+    <button class="ch-mode" data-act="mode-sheet">${ic(MODES[modeOf()].icon, 'xs')} ${MODES[modeOf()].name} · change how you listen</button>
     <div class="ch-err" id="ch-err" hidden></div>`;
-  const entry = openSheet(html, { cls: 'choice-sheet', kind: 'choice', onClose: stopMic });
+  const entry = openSheet(html, { cls: 'choice-sheet', kind: 'choice', onClose: () => { stopMic(); hfStop(); stopAutoCountdown(); } });
   const inp = $('#ch-text', entry.el), send = $('.ch-send', entry.el);
-  inp.addEventListener('input', () => { send.disabled = !inp.value.trim(); });
+  inp.addEventListener('input', () => { send.disabled = !inp.value.trim(); stopAutoCountdown(); });
+  inp.addEventListener('focus', () => { stopAutoCountdown(); hfStop(); });
   $('form', entry.el).addEventListener('submit', (e) => {
     e.preventDefault();
     const t = inp.value.trim(); if (!t) return;
@@ -1001,6 +1012,7 @@ function openChoiceSheet() {
 function stopMic() { if (recog) { try { recog.abort(); } catch (e) { /* ignore */ } recog = null; } }
 function toggleMic(btn) {
   if (!SR) return;
+  stopAutoCountdown(); hfStop();
   if (recog) { stopMic(); btn.classList.remove('rec'); return; }
   const inp = $('#ch-text');
   try {
@@ -1027,8 +1039,267 @@ function toggleMic(btn) {
   } catch (e) { recog = null; btn.classList.remove('rec'); toast('Voice input unavailable'); }
 }
 
+/* =========================================================================
+ * 9b. Listening modes (11-06, from the audio discussion with 阿炫):
+ *   voice — Hands-free: at each cliffhanger the narrator asks out loud, the mic opens, she just answers.
+ *           Stays quiet → the story carries on by itself. No need to pick up the phone.
+ *   auto  — Lean back: no questions, the story keeps going on its own (sleep / passive listening).
+ *   tap   — Tap to choose: the choice sheet; if she doesn't answer the story carries on after 30 s.
+ * "Talk to the story" (any time) steers what happens next. Calling a character is a separate thing.
+ * ========================================================================= */
+const MODES = {
+  voice: { icon: 'mic', name: 'Hands-free', short: 'I ask out loud, you just answer', desc: 'At every cliffhanger the narrator asks out loud and listens. Just answer with your voice — or stay quiet and the story carries on. Eyes closed, phone down.' },
+  auto: { icon: 'moon', name: 'Lean back', short: 'The story keeps going on its own', desc: 'No questions. The story keeps moving by itself, episode after episode — for winding down or falling asleep.' },
+  tap: { icon: 'hand', name: 'Tap to choose', short: 'Pick on screen', desc: 'Choose on screen or type your own answer. If you don’t answer, the story carries on after 30 seconds.' },
+};
+if (!MODES[S.mode]) S.mode = SR ? 'voice' : 'tap';
+const modeOf = () => (S.mode === 'voice' && !SR ? 'tap' : S.mode);
+const AUTO_WAIT = { tap: 30, voice: 8, auto: 5 };
+
+/* earcons + a soft ambient bed while the next episode is being written (WebAudio, no network, no credits) */
+function earcon(kind) {
+  unlockCtx();
+  if (!actx || actx.state !== 'running') return;
+  const t = actx.currentTime + 0.02;
+  if (kind === 'open') { tone(t, 784, 0.22, 0.07); tone(t + 0.12, 1175, 0.32, 0.06); }
+  else if (kind === 'ok') { tone(t, 1175, 0.18, 0.05); tone(t + 0.09, 1568, 0.36, 0.05); }
+  else { tone(t, 660, 0.25, 0.05); tone(t + 0.12, 494, 0.35, 0.045); }
+}
+let bed = null;
+function bedStart() {
+  unlockCtx();
+  if (bed || !actx || actx.state !== 'running') return;
+  try {
+    const g = actx.createGain(); g.gain.value = 0.0001;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    lp.connect(g); g.connect(actx.destination);
+    const oscs = [110, 164.81, 220.5, 277.18].map((f, i) => {
+      const o = actx.createOscillator(); o.type = i % 2 ? 'triangle' : 'sine'; o.frequency.value = f; o.detune.value = (i - 1.5) * 4;
+      const og = actx.createGain(); og.gain.value = [0.5, 0.25, 0.3, 0.12][i];
+      const l = actx.createOscillator(); l.frequency.value = 0.07 + i * 0.03; const lg = actx.createGain(); lg.gain.value = 0.12; l.connect(lg); lg.connect(og.gain);
+      o.connect(og); og.connect(lp); o.start(); l.start(); return [o, l];
+    }).flat();
+    g.gain.exponentialRampToValueAtTime(0.05, actx.currentTime + 1.6);
+    bed = { g, oscs };
+  } catch (e) { bed = null; }
+}
+function bedStop() {
+  if (!bed || !actx) return;
+  const b = bed; bed = null;
+  try { b.g.gain.cancelScheduledValues(actx.currentTime); b.g.gain.setValueAtTime(Math.max(b.g.gain.value, 0.0001), actx.currentTime); b.g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.7); } catch (e) { /* ignore */ }
+  setTimeout(() => b.oscs.forEach((o) => { try { o.stop(); } catch (e) { /* ignore */ } }), 900);
+}
+
+/* narrator's spoken question at the end of an episode (prefetched ~45 s before the end) */
+const cueAudio = new Audio(); cueAudio.preload = 'auto'; cueAudio.setAttribute('playsinline', '');
+document.addEventListener('pointerdown', () => {
+  if (cueAudio.dataset.primed) return;
+  cueAudio.dataset.primed = '1';
+  try { cueAudio.src = SILENT; const p = cueAudio.play(); if (p && p.catch) p.catch(() => { delete cueAudio.dataset.primed; }); } catch (e) { /* ignore */ }
+}, { capture: true, passive: true });
+const CUE = {};
+function fetchCue(sid, n) {
+  const k = sid + ':' + n;
+  if (!CUE[k]) {
+    CUE[k] = API.cue(sid, n).then((d) => {
+      if (d && d.url) { try { const a = new Audio(); a.preload = 'auto'; a.src = absUrl(d.url); a.load(); } catch (e) { /* ignore */ } }
+      return d;
+    }).catch(() => { delete CUE[k]; return null; });
+  }
+  return CUE[k];
+}
+
+const HF = { phase: '', recog: null, t: 0, heard: '', key: '', misses: 0 };
+let autoT = 0, autoLeft = 0;
+
+function endOfEpisodeFlow() {
+  const m = modeOf();
+  openChoiceSheet();
+  if (m === 'voice') startHandsFree();
+  else if (m === 'auto') startAutoCountdown(AUTO_WAIT.auto, 'Lean back · the story continues in');
+  else { startAutoCountdown(AUTO_WAIT.tap, 'No answer? The story continues in'); maybeIncomingCall(); }
+}
+function startAutoCountdown(sec, label) {
+  stopAutoCountdown();
+  autoLeft = sec;
+  const n = P.ep && P.ep.n;
+  const paint = () => {
+    const el = $('#ch-auto'); if (!el) return;
+    el.hidden = false;
+    el.innerHTML = `<span class="ca-ring" style="--p:${(autoLeft / sec) * 100}"></span><span>${esc(label)} <b class="tnum">${autoLeft}s</b></span><button class="link-btn" data-act="ch-wait">Wait for me</button>`;
+  };
+  paint();
+  autoT = setInterval(() => {
+    if (!P.needChoice || !P.ep || P.ep.n !== n) { stopAutoCountdown(); return; }
+    autoLeft -= 1;
+    if (autoLeft <= 0) { stopAutoCountdown(); continueOnItsOwn(); return; }
+    paint();
+  }, 1000);
+}
+function stopAutoCountdown() { clearInterval(autoT); autoT = 0; const el = $('#ch-auto'); if (el) { el.hidden = true; el.innerHTML = ''; } }
+function continueOnItsOwn() {
+  if (!P.needChoice) return;
+  earcon('ok');
+  toast(`${ic('spark', 'sm')} The story carries on…`);
+  submitChoice('', 'auto');
+}
+
+async function startHandsFree() {
+  const ss = getSess(P.id), ep = P.ep; if (!ss || !ep) return;
+  hfStop(true);
+  HF.key = ss.sid + ':' + ep.n; HF.misses = 0;
+  const key = HF.key;
+  HF.phase = 'ask'; paintHF();
+  doPause(); P.needChoice = true;
+  let d = null;
+  try { d = await Promise.race([fetchCue(ss.sid, ep.n), sleep(9000).then(() => null)]); } catch (e) { d = null; }
+  if (HF.key !== key || !P.needChoice) return;
+  if (d && d.text) HF.ask = d.text;
+  if (d && d.url) {
+    cueAudio.onended = cueAudio.onerror = () => { cueAudio.onended = cueAudio.onerror = null; if (HF.key === key && P.needChoice && HF.phase === 'ask') hfListen(); };
+    cueAudio.src = absUrl(d.url); cueAudio.playbackRate = 1;
+    const p = cueAudio.play();
+    paintHF();
+    if (p && p.catch) p.catch(() => { if (HF.key === key && HF.phase === 'ask') hfListen(); });
+  } else hfListen();
+}
+function hfListen() {
+  if (!P.needChoice || !SR) return;
+  try { cueAudio.pause(); } catch (e) { /* ignore */ }
+  stopAutoCountdown();
+  if (HF.recog) { try { HF.recog.abort(); } catch (e) { /* ignore */ } HF.recog = null; }
+  HF.phase = 'listen'; HF.heard = ''; paintHF();
+  earcon('open');
+  const key = HF.key;
+  setTimeout(() => {
+    if (HF.key !== key || HF.phase !== 'listen') return;
+    let finalText = '', denied = false;
+    try {
+      const r = HF.recog = new SR();
+      r.lang = LANG === 'zh' ? 'zh-CN' : 'en-US'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
+      r.onresult = (ev) => {
+        let t = ''; for (let i = 0; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) finalText = t; }
+        HF.heard = t; clearTimeout(HF.t); HF.t = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 6000); paintHF();
+      };
+      r.onerror = (ev) => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') denied = true; };
+      r.onend = () => {
+        clearTimeout(HF.t);
+        if (HF.recog !== r) return;
+        HF.recog = null;
+        const t = (finalText || HF.heard || '').trim();
+        if (HF.key !== key || !P.needChoice) return;
+        if (t) { HF.phase = 'heard'; HF.heard = t; paintHF(); earcon('ok'); setTimeout(() => { if (HF.key === key && P.needChoice) submitChoice(t, 'voice'); }, 650); return; }
+        if (denied) { HF.phase = 'denied'; paintHF(); startAutoCountdown(12, 'Mic is off · the story continues in'); return; }
+        HF.misses += 1; HF.phase = 'quiet'; paintHF();
+        startAutoCountdown(HF.misses > 1 ? 3 : 5, 'Quiet night? The story continues in');
+      };
+      r.start();
+      HF.t = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 12000);
+    } catch (e) { HF.recog = null; HF.phase = 'denied'; paintHF(); startAutoCountdown(12, 'The story continues in'); }
+  }, 380);
+}
+function hfStop(silent) {
+  clearTimeout(HF.t);
+  if (HF.recog) { const r = HF.recog; HF.recog = null; try { r.abort(); } catch (e) { /* ignore */ } }
+  try { if (!cueAudio.src.startsWith('data:')) cueAudio.pause(); } catch (e) { /* ignore */ }
+  cueAudio.onended = cueAudio.onerror = null;
+  if (!silent) { HF.phase = ''; paintHF(); }
+}
+function paintHF() {
+  const el = $('#ch-hf'); if (!el) return;
+  const ph = HF.phase;
+  if (!ph) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const label = {
+    ask: `${ic('headphones', 'sm')} The narrator is asking…`,
+    listen: 'Listening — just say it',
+    heard: 'Got it',
+    quiet: 'I didn’t hear anything',
+    denied: 'Microphone is off',
+  }[ph];
+  const sub = ph === 'ask' ? esc(HF.ask || '') : ph === 'listen' ? (HF.heard ? `“${esc(HF.heard)}”` : 'Answer with one of the two — or anything you want to happen.')
+    : ph === 'heard' ? `“${esc(HF.heard)}”` : ph === 'quiet' ? 'Tap the mic to answer, or let the story carry on.' : 'Allow the microphone to answer by voice, or tap a choice.';
+  el.className = 'ch-hf ' + ph;
+  el.innerHTML = `
+    <button class="hf-orb" data-act="${ph === 'listen' ? 'hf-stop' : 'hf-again'}" aria-label="${ph === 'listen' ? 'Stop listening' : 'Answer by voice'}">${ic('mic')}<i></i><i></i></button>
+    <div class="hf-t"><b>${label}</b><span>${sub}</span></div>`;
+}
+
+/* Talk to the story (any time while listening): steers the next episode. Not a call with a character. */
+let talkRecog = null;
+function openTalkSheet() {
+  const s = byId(P.id); if (!s || !P.ep) return;
+  if (P.needChoice) { if (SR && modeOf() !== 'tap') { hfListen(); return; } openChoiceSheet(); return; }
+  const wasPlaying = isPlaying();
+  if (wasPlaying) doPause();
+  const lead = shortName(callerOf(s));
+  const entry = openSheet(`
+    <div class="sh-h"><div><h3>Talk to the story</h3><p>Say what you want to happen next — Episode ${P.ep.n + 1} will follow it.</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="ch-hf listen" id="tk-hf">
+      <button class="hf-orb" data-act="talk-mic" aria-label="Speak">${ic('mic')}<i></i><i></i></button>
+      <div class="hf-t"><b id="tk-l">${SR ? 'Listening…' : 'Type it below'}</b><span id="tk-s">e.g. “I want him to finally admit it.” “Take me somewhere with just us.”</span></div>
+    </div>
+    <form class="ch-input" data-form="wish" autocomplete="off"><div class="fld"><input id="tk-text" type="text" maxlength="200" placeholder="Or type it…" enterkeyhint="send" aria-label="What should happen"><button class="ch-send" type="submit" aria-label="Send">${ic('send')}</button></div></form>
+    <p class="tk-note">${ic('phone', 'xs')} Want to talk to ${esc(lead)} himself? That’s a call — tap the phone at the top.</p>`, { kind: 'talk', onClose: () => { stopTalk(); if (wasPlaying && !P.needChoice) { P.want = true; P.ep.kind === 'live' && (P.waiting || !P.cur) ? liveAdvance() : doPlay(); } } });
+  entry.wasPlaying = wasPlaying;
+  if (SR) talkListen();
+}
+function stopTalk() { if (talkRecog) { const r = talkRecog; talkRecog = null; try { r.abort(); } catch (e) { /* ignore */ } } }
+function talkListen() {
+  stopTalk(); earcon('open');
+  const l = $('#tk-l'), sub = $('#tk-s'), box = $('#tk-hf');
+  if (box) box.className = 'ch-hf listen';
+  if (l) l.textContent = 'Listening…';
+  let fin = '', heard = '';
+  try {
+    const r = talkRecog = new SR();
+    r.lang = LANG === 'zh' ? 'zh-CN' : 'en-US'; r.interimResults = true; r.maxAlternatives = 1;
+    r.onresult = (ev) => { let t = ''; for (let i = 0; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) fin = t; } heard = t; if (sub) sub.textContent = `“${t}”`; };
+    r.onend = () => {
+      if (talkRecog !== r) return; talkRecog = null;
+      const t = (fin || heard).trim();
+      if (t) sendWish(t);
+      else { if (box) box.className = 'ch-hf quiet'; if (l) l.textContent = 'Tap the mic and say it'; }
+    };
+    r.start();
+  } catch (e) { talkRecog = null; if (l) l.textContent = 'Type it below'; }
+}
+async function sendWish(text) {
+  const ss = getSess(P.id); if (!ss || !text) return;
+  earcon('ok');
+  const top = topSheet(); if (top && top.kind === 'talk') closeSheet(top);
+  toast(`${ic('spark', 'sm')} Got it — Episode ${P.ep.n + 1} will follow that`);
+  ss.wishes = (ss.wishes || []).concat(text).slice(-3); save();
+  SPEC.key = ''; SPEC.map = {}; // the pre-written next episodes are being rewritten around her wish
+  try { await API.wish(ss.sid, text); } catch (e) { console.warn(e); }
+}
+
+function openModeSheet() {
+  const cur = modeOf();
+  openSheet(`
+    <div class="sh-h"><div><h3>How do you want to listen?</h3><p>Switch any time. Calls with characters work in every mode.</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="mode-list">
+      ${Object.entries(MODES).map(([k, m]) => `<button class="mode-opt ${cur === k ? 'on' : ''}" data-act="set-mode" data-m="${k}" ${k === 'voice' && !SR ? 'disabled' : ''}>
+        <span class="mo-ic">${ic(m.icon)}</span><span class="mo-t"><b>${m.name}${k === 'voice' && !SR ? ' · not supported in this browser' : ''}</b><small>${m.desc}</small></span>${cur === k ? ic('check') : ''}</button>`).join('')}
+    </div>`, { kind: 'mode' });
+}
+function setMode(m) {
+  if (!MODES[m] || (m === 'voice' && !SR)) return;
+  S.mode = m; save();
+  closeSheet(); toast(`${ic(MODES[m].icon, 'sm')} ${MODES[m].name}`);
+  updateModePill();
+  if (P.needChoice) { closeAllSheets(); hfStop(); stopAutoCountdown(); endOfEpisodeFlow(); }
+}
+function updateModePill() {
+  const el = $('#pl-mode'); if (!el) return;
+  const m = MODES[modeOf()];
+  const html = `${ic(m.icon, 'sm')}<span><b>${m.name}</b> · ${m.short}</span>${ic('chevR', 'xs')}`;
+  if (el.dataset.m !== modeOf()) { el.dataset.m = modeOf(); el.innerHTML = html; }
+}
+
 function submitChoice(text, via) {
   if (!P.ep || !P.needChoice) return;
+  stopAutoCountdown(); hfStop(true);
   const id = P.id, nextN = P.ep.n + 1;
   primeAudio();
   if (!isUnlocked(id, nextN)) {
@@ -1053,7 +1324,8 @@ async function sendNext(id, text, via) {
   ensureToday(); S.tasks.choices += 1;
   P.needChoice = false;
   audio.pause(); P.cur = '';
-  const sp = via === 'option' && SPEC.key === ss.sid + ':' + nextN ? SPEC.map[text] : null;
+  const specText = via === 'auto' ? ((P.ep.choices || [])[0] || '') : text;
+  const sp = (via === 'option' || via === 'auto') && SPEC.key === ss.sid + ':' + nextN ? SPEC.map[specText] : null;
   if (sp && sp.ep && sp.ep.n === nextN && sp.ep.lines && sp.ep.lines[0] && sp.ep.lines[0].url) {
     // Instant start: the next episode for this choice was pre-written and its first lines are voiced.
     SPEC.key = '';
@@ -1064,7 +1336,7 @@ async function sendNext(id, text, via) {
     playEpisode(id, ep, { autoplay: true });
     P.jobDone = false;
     openPlayer(); updatePlayerUI(); renderMini();
-    API.next({ sid: ss.sid, text, via }).then((res) => {
+    API.next({ sid: ss.sid, text: via === 'auto' ? '' : text, via }).then((res) => {
       if (res && res.job === sp.job) startGeneration(res.job, nextN, text, false, true);
       else if (res && res.job) { // relay could not use the pre-written episode: fall back to the fresh one
         ss.eps = ss.eps.filter((e) => e !== ep); audio.pause(); P.cur = ''; P.ep = null;
@@ -1077,6 +1349,7 @@ async function sendNext(id, text, via) {
   }
   P.gen = { n: nextN, text, via, status: 'writing', err: null };
   save();
+  bedStart();
   updatePlayerUI(); renderMini(); openPlayer();
   try {
     const res = await API.next({ sid: ss.sid, text: via === 'silence' ? '' : text, via });
@@ -1085,7 +1358,7 @@ async function sendNext(id, text, via) {
     startGeneration(res.job, nextN, text, false);
   } catch (e) {
     console.warn(e);
-    P.gen = null; P.needChoice = true;
+    P.gen = null; P.needChoice = true; bedStop();
     updatePlayerUI(); renderMini();
     openChoiceSheet();
     const err = $('#ch-err'); if (err) { err.hidden = false; err.textContent = `Couldn't write the next episode (${e.message || 'error'}). Try again.`; }
@@ -1093,7 +1366,7 @@ async function sendNext(id, text, via) {
 }
 
 let genToken = 0;
-function cancelGen() { genToken++; P.gen = null; }
+function cancelGen() { genToken++; P.gen = null; bedStop(); }
 function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
   const my = ++genToken;
   const id = P.id;
@@ -1323,6 +1596,11 @@ function openProfile() {
     </div>
     <label class="field-l" for="pf-name">What characters call you</label>
     <form class="field" data-form="name"><input id="pf-name" maxlength="24" value="${esc(S.name)}" placeholder="Your name" autocomplete="given-name"><button class="btn btn-ghost" type="submit">Save</button></form>
+    <label class="field-l" for="pf-me">Your story self <small>who you want to become, the life you want, how you want to be loved</small></label>
+    <form class="field me" data-form="me"><textarea id="pf-me" maxlength="400" rows="3" placeholder="${LANG === 'zh' ? '比如：我在海边开了一家花店。我想被毫不犹豫地选择，被温柔又笃定地爱着。' : 'e.g. I run my own flower shop. I want to be chosen without hesitation, and loved gently but surely.'}">${esc(S.me || '')}</textarea><button class="btn btn-ghost" type="submit">Save</button></form>
+    <div class="me-chips">${(LANG === 'zh' ? ['我想被坚定地选择。', '我是在上海开工作室的设计师。', '我想被好好地宠着、护着。', '我比自己以为的更勇敢。'] : ['I want to be chosen, firmly.', 'I\u2019m a successful designer in New York.', 'I want to feel safe and adored.', 'I\u2019m braver than I think.']).map((t) => `<button class="chip" data-act="me-chip" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+    <span class="field-l">How you listen</span>
+    <button class="opt mode-row" data-act="mode-sheet"><span class="ol">${ic(MODES[modeOf()].icon)} ${MODES[modeOf()].name} · ${MODES[modeOf()].short}</span>${ic('chevR', 'sm')}</button>
     <span class="field-l">Story language</span>
     <div class="segc"><button class="${LANG === 'en' ? 'on' : ''}" data-act="lang" data-l="en">English</button><button class="${LANG === 'zh' ? 'on' : ''}" data-act="lang" data-l="zh">中文</button></div>
     <div class="toggle-row"><span>Auto-unlock episodes<small>Spend ${PRICE} coins automatically on Ep 4+</small></span><button class="switch ${S.autoUnlock ? 'on' : ''}" data-act="auto-unlock" role="switch" aria-checked="${S.autoUnlock}" aria-label="Auto-unlock"></button></div>
@@ -2603,6 +2881,7 @@ function renderPlayer() {
         <div class="pl-art-wrap"><div class="pl-art"><img id="pl-art" alt=""><video id="pl-vid" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video><video id="pl-vid2" muted loop playsinline preload="auto" aria-hidden="true"></video><span class="pl-badge" id="pl-badge" hidden></span></div></div>
         <div class="pl-titles"><div class="tt"><h2 id="pl-title"></h2><p id="pl-ep"></p></div>
           <button class="icon-btn" data-act="pl-save" id="pl-save" aria-label="Add to Library">${ic('plus')}</button></div>
+        <button class="pl-mode" id="pl-mode" data-act="mode-sheet" aria-label="Listening mode"></button>
         <div class="pl-sub" id="pl-sub" aria-live="polite"></div>
         <div class="pl-gen" id="pl-gen" hidden></div>
         <div class="pl-prog">
@@ -2619,6 +2898,7 @@ function renderPlayer() {
         <div class="pl-tools">
           <button class="tool" data-act="speed" id="pl-speed" aria-label="Playback speed"><b>1x</b>Speed</button>
           <button class="tool" data-act="sleep-sheet" id="pl-sleep" aria-label="Sleep timer">${ic('moon')}<span>Sleep</span></button>
+          <button class="tool talk" data-act="talk" aria-label="Talk to the story">${ic('mic')}<span>Talk</span></button>
           <button class="tool" data-act="pl-eps" aria-label="Episode list">${ic('list')}<span>Episodes</span></button>
           <button class="tool" data-act="share" id="pl-share" aria-label="Share">${ic('share')}<span>Share</span></button>
         </div>
@@ -2638,6 +2918,7 @@ function renderPlayer() {
   } else if (vid.paused) vid.play().catch(() => {});
   $('#pl-series').textContent = s.title;
   $('#pl-share').dataset.id = s.id;
+  updateModePill();
   updatePlayerUI();
 }
 /* 剧情画面：播放器封面区跟着音频切静音循环片段（服务器给的画面库 s.visuals = {clips:{id:src}, pool:[id…]}）。
@@ -2711,7 +2992,7 @@ function updatePlayerUI(force) {
       } else {
         const n = P.gen ? P.gen.n : 1;
         const status = P.gen ? ({ writing: 'Writing your episode…', voicing: 'Voicing the first lines…', done: 'Starting…' }[P.gen.status] || 'Writing your episode…') : (P.loadStatus === 'voicing' ? 'Voicing Episode 1…' : 'Preparing Episode 1…');
-        const said = P.gen ? (P.gen.via === 'silence' || !P.gen.text ? 'You stayed silent.' : `You said “${P.gen.text}”`) : 'First listen — this takes a few seconds';
+        const said = P.gen ? (P.gen.via === 'auto' ? 'The story carries on by itself…' : P.gen.via === 'silence' || !P.gen.text ? 'You stayed silent.' : `You said “${P.gen.text}”`) : 'First listen — this takes a few seconds';
         gen.innerHTML = `<span class="ring"><svg viewBox="0 0 58 58"><circle class="trk" cx="29" cy="29" r="25.5"/><circle class="arc" cx="29" cy="29" r="25.5"/></svg><img src="${esc(coverOf(s))}" alt=""></span>
           <span class="gt"><small>EPISODE ${n}${P.gen ? ' · WRITTEN LIVE' : ''}</small><b>${status}</b>${waveBars(22)}<span class="said">${esc(said)}</span></span>`;
       }
@@ -2956,6 +3237,14 @@ document.addEventListener('click', (e) => {
     case 'choose': { const c = (P.ep && P.ep.choices || [])[+el.dataset.i]; if (c) submitChoice(c, 'option'); break; }
     case 'silent': submitChoice('', 'silence'); break;
     case 'mic': toggleMic(el); break;
+    case 'mode-sheet': openModeSheet(); break;
+    case 'set-mode': setMode(el.dataset.m); break;
+    case 'talk': openTalkSheet(); break;
+    case 'talk-mic': if (SR) { if (talkRecog) stopTalk(); else talkListen(); } break;
+    case 'hf-again': hfListen(); break;
+    case 'hf-stop': if (HF.recog) { try { HF.recog.stop(); } catch (e) { /* ignore */ } } break;
+    case 'ch-wait': stopAutoCountdown(); hfStop(); toast('Take your time'); break;
+    case 'me-chip': { const t = $('#pf-me'); if (t) { t.value = (t.value ? t.value.trim() + ' ' : '') + el.dataset.t; t.focus(); } break; }
     case 'ul-coins': {
       const t = topSheet(); if (!t || t.kind !== 'unlock') break;
       const price = t.price || PRICE;
@@ -3021,6 +3310,11 @@ document.addEventListener('submit', (e) => {
     const q = $('#ex-q'); if (q) q.blur();
   } else if (f.dataset.form === 'call') {
     const t = (($('#cl-text') || {}).value || '').trim(); if (t) sendCallTurn(t, 'free');
+  } else if (f.dataset.form === 'me') {
+    S.me = ((($('#pf-me') || {}).value) || '').trim().slice(0, 400); save();
+    toast(S.me ? `${ic('spark', 'sm')} Your next episodes and calls will be written around you` : 'Cleared');
+  } else if (f.dataset.form === 'wish') {
+    const t = ((($('#tk-text') || {}).value) || '').trim(); if (t) sendWish(t);
   } else if (f.dataset.form === 'ob-name') {
     obNext();
   }

@@ -233,6 +233,19 @@ C2: <another, clearly different>
 END: no            (yes only when this is a true ending of the story)'''
 
 
+def me_block(me, lang):
+    """个性化（11-06 阿炫提的 Manifest 思路）：她在个人页写的“想成为的人 / 想要的生活 / 想被怎样对待”。是心愿不是剧情事实。"""
+    me = (me or '').strip()
+    if not me: return ''
+    if lang == 'zh':
+        return ('她写给自己的心愿（想成为的人、想要的生活、想被怎样对待）：\n' + me +
+                '\n用法：这是她的向往，不是剧情事实。不违背世界卡的前提下，让故事慢慢回应它——角色怎么看她、她身上的细节、她做到的事、她被怎样对待。'
+                '不要生硬复述原话，不要每集都提，自然地把她放进她向往的样子里。')
+    return ('What she wrote about herself (who she wants to become, the life she wants, how she wants to be treated):\n' + me +
+            '\nUse: these are wishes, not story facts. Without breaking the world card, let the story answer them over time — how characters see her, '
+            'details about her, what she achieves, how she is treated. Never quote it back verbatim; not every episode; let her live inside who she wants to be.')
+
+
 def system_prompt(sess):
     s, lang, w = sess['series'], sess['lang'], WORLD[sess['series']]
     cast = [k for k in VOICES[s] if not k.startswith('_')]
@@ -240,6 +253,7 @@ def system_prompt(sess):
             'You are the writer of a women-focused serialized audio drama (Pocket FM style), writing the next episode live for one listener.')
     return '\n\n'.join([head, '世界卡（内部资料，真相按节奏揭晓，不提前剧透）：\n' + json.dumps(w, ensure_ascii=False),
                         RULES[lang].replace('{name}', sess['name']),
+                        me_block(sess.get('me'), lang),
                         FORMAT.replace('{cast}', ', '.join(cast)).replace('{t}', '，6–10 字' if lang == 'zh' else ', 2–5 words')])
 
 
@@ -277,6 +291,9 @@ def story_so_far(sess):
 
 
 def her_said(text, via, lang):
+    if via == 'auto':
+        return ('她没有回应——她只是闭着眼在听。按角色自己的意志和主线往下推进一步，不替她做重大决定，也不要写“你没说话”。' if lang == 'zh'
+                else "She doesn't answer — she's just listening with her eyes closed. Move the story one step on the characters' own will and the main line; don't make big decisions for her, and don't mention that she stayed quiet.")
     if via == 'silence' or not text.strip(): return '她没有说话，只是沉默。' if lang == 'zh' else 'She stays silent.'
     if lang != 'zh':
         return f'She chooses: {text}' if via == 'option' else f'She says ({"spoken" if via == "voice" else "typed"}): {text}'
@@ -364,6 +381,10 @@ def next_msg(sess, her):
     if n >= MAX_EPS - 2: pace = '\n（快到这条线的结局了：接下来 1–2 集内收束主要悬念。）' if lang == 'zh' else '\n(Approaching the end of this route: resolve the main thread within 1–2 episodes.)'
     if n >= MAX_EPS: pace = '\n（这是最后一集：给一个有余味的结局，END: yes。）' if lang == 'zh' else '\n(This is the final episode: give a resonant ending, END: yes.)'
     so_far = story_so_far(dict(sess, eps=eps))
+    w = [x for x in (sess.get('wishes') or []) if x]
+    if w:  # 她在听上一集时随口说的话（“对故事说话”）：下一集要接住
+        pace += ('\n她在听上一集的时候还对故事说过：' + ' / '.join(f'“{x}”' for x in w) + '。这一集要明显回应、照她想要的方向走。') if lang == 'zh' else \
+                ('\nWhile listening to the last episode she also told the story: ' + ' / '.join(f'"{x}"' for x in w) + '. This episode must clearly answer that and go where she wants.')
     return (f'到目前为止：\n{so_far}\n\n现在写第 {n} 集。{pace}' if lang == 'zh' else f'Story so far:\n{so_far}\n\nNow write episode {n}.{pace}')
 
 
@@ -474,6 +495,73 @@ def start_ep_specs(sess):
         threading.Thread(target=run_episode, args=(JOBS[jid], sess, next_msg(sess, her), {'base': len(sess['eps'])}, her), daemon=True).start()
 
 
+def fast_chat(prompt, max_tokens=200, timeout=8):
+    body = {'model': MAPPER, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': max_tokens, 'temperature': 0, 'reasoning': {'enabled': False}}
+    req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
+                    headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
+    return json.loads(op.open(req, timeout=timeout).read())['choices'][0]['message']['content'].strip()
+
+
+def match_choice(sess, text):
+    """她用语音/打字回了一句：意思就是 C1 或 C2（没有多出来的要求）→ 直接用预先写好的那集；“继续/你决定/随便” → AUTO；否则 None（现写）。约 1–2 秒。"""
+    ch = (sess['eps'][-1].get('choices') or [])[:2]
+    if len(ch) < 2 or not text.strip(): return None
+    pr = (f'选择点的两个选项：\nC1: {ch[0]}\nC2: {ch[1]}\n\n听众用语音回答（可能有识别错字）：“{text}”\n\n'
+          '判断：她的回答就是 C1 或 C2 的意思、没有多出来的具体要求 → 输出 C1 或 C2；她只是让故事继续/让对方决定/随便/没意见 → 输出 AUTO；'
+          '她说了别的、或在选项基础上加了新要求/新动作/新台词 → 输出 FREE。只输出一个词。')
+    try:
+        r = fast_chat(pr, 8, 6).upper()
+    except Exception as e:
+        print('match_choice failed', repr(e)[:200], flush=True); return None
+    print('match_choice', repr(text[:40]), '->', r, flush=True)
+    if 'C1' in r: return ch[0]
+    if 'C2' in r: return ch[1]
+    if 'AUTO' in r: return 'AUTO'
+    return None
+
+
+CUE_OK = {}
+
+
+def cue_text(sess, ep, n):
+    """集尾的“旁白提问”：把选择点改写成贴着耳朵问她的一句话（闭眼听模式念给她听，然后开麦）。"""
+    lang = sess['lang']; ch = (ep.get('choices') or [])[:2]
+    first = n <= 2
+    if lang == 'zh':
+        pr = (f'有声连载剧的集尾选择点：\n情境：{ep.get("prompt", "")}\n选项一：{ch[0] if ch else ""}\n选项二：{ch[1] if len(ch) > 1 else ""}\n\n'
+              '把它改写成旁白贴着耳朵问听众“你”的一段话，口语、自然、带悬念，40–70 个字：先一句点出此刻的处境，再用“是……还是……”把两个选项的意思说出来（不要念“选项一/二”，不要引号），'
+              + ('最后一句告诉她：直接说出来就好，也可以说别的；不出声，故事也会自己往下走。' if first else '最后用一句很短的话请她回答。') + '只输出这段话。')
+    else:
+        pr = (f'End-of-episode choice in an audio drama:\nSituation: {ep.get("prompt", "")}\nOption one: {ch[0] if ch else ""}\nOption two: {ch[1] if len(ch) > 1 else ""}\n\n'
+              'Rewrite it as the narrator asking the listener "you", close to the ear: spoken, natural, suspenseful, 25–45 words. One line on the moment, then "...or..." with the meaning of both options (no "option one", no quotes), '
+              + ('and finish by telling her she can just say it out loud, or say anything else; if she stays quiet, the story will carry on.' if first else 'and a very short invitation to answer.') + ' Output only that.')
+    try:
+        t = fast_chat(pr, 220, 10).strip().strip('"“”')
+        if len(t) > 8: return t
+    except Exception:
+        pass
+    if lang == 'zh':
+        return f'{ep.get("prompt", "")}……{ch[0] if ch else ""}？还是，{ch[1] if len(ch) > 1 else ""}？' + ('直接说出来就好；不出声，故事也会自己往下走。' if first else '你说。')
+    return f'{ep.get("prompt", "")} {ch[0] if ch else ""}? Or… {ch[1] if len(ch) > 1 else ""}?' + (' Just say it out loud — or stay quiet, and the story carries on.' if first else ' Tell me.')
+
+
+def make_cue(sess, n):
+    """第 n 集结尾的提问配音（旁白声）。第 1 集按剧/语言存盘复用，实时集存在会话里。"""
+    ep = next((e for e in sess['eps'] if e['n'] == n), None)
+    if not ep: return None
+    key = (sess['sid'], n)
+    if key in CUE_OK: return CUE_OK[key]
+    f = CACHE / 'cue' / f'{sess["series"]}.{sess["lang"]}.json' if n == 1 else None
+    if f and f.exists():
+        CUE_OK[key] = json.load(open(f)); return CUE_OK[key]
+    t = cue_text(sess, ep, n + 1)
+    u = tts_hedged(sess['series'], 'NARR', t, sess['lang'], 2)
+    d = {'url': u, 'text': t, 'n': n}
+    CUE_OK[key] = d
+    if f: f.parent.mkdir(parents=True, exist_ok=True); json.dump(d, open(f, 'w'), ensure_ascii=False)
+    return d
+
+
 def commit_ep_spec(sess, text):
     sp = (sess.get('spec') or {}).get(text); sess['spec'] = {}
     if not sp or sp['base'] != len(sess['eps']): return None
@@ -557,7 +645,7 @@ def call_system(c, lite=False):
     head = (f'你是女性向互动音频剧的角色演员，现在在电话里演 {c["who"]}。' if lang == 'zh' else f'You are voicing {c["who"]} live on a phone call in a women-focused interactive audio drama.')
     return '\n\n'.join([head, '世界卡（内部资料）：\n' + json.dumps(w, ensure_ascii=False),
                         '这个角色：\n' + json.dumps(ch, ensure_ascii=False),
-                        CALL_RULES[lang].format(who=c['who'], role=role, name=c['name']), CALL_FORMAT])
+                        CALL_RULES[lang].format(who=c['who'], role=role, name=c['name']), me_block(c.get('me'), lang), CALL_FORMAT])
 
 
 def call_context(c):
@@ -732,6 +820,12 @@ class H(BaseHTTPRequestHandler):
                 if sid not in BASE or who not in VOICES[sid]: return self._send(404, {'error': 'no caller'})
                 try: return self._send(200, call_fillers(sid, who, lang))
                 except Exception as e: return self._send(500, {'error': str(e)[:200]})
+            if u.path == '/api/cue':  # 闭眼听模式：集尾旁白把选择点念给她听（第一次约 5–8 秒，前端提前 45 秒取）
+                sess = SESS.get(g('sid') or '')
+                if not sess: return self._send(404, {'error': 'session expired'})
+                try: d = make_cue(sess, int(g('n') or len(sess['eps'])))
+                except Exception as e: return self._send(500, {'error': str(e)[:200]})
+                return self._send(200 if d else 404, d or {'error': 'no episode'})
             if u.path == '/api/specs':  # 她还在听这一集时，前端先取两个选项预先写好的下一集（前两句已配音），点选项就本地直接播，省掉公网往返
                 sess = SESS.get(g('sid') or '')
                 out = {}
@@ -767,7 +861,7 @@ class H(BaseHTTPRequestHandler):
             name = (body.get('name') or ('你' if lang == 'zh' else 'you')).strip()[:24]
             sid = time.strftime('%m%d%H%M') + rid(4)
             sc = ep1_script(series, lang)
-            sess = SESS[sid] = {'sid': sid, 'series': series, 'lang': lang, 'name': name,
+            sess = SESS[sid] = {'sid': sid, 'series': series, 'lang': lang, 'name': name, 'me': (body.get('me') or '').strip()[:400],
                                 'eps': [{'n': 1, 'title': sc['title'], 'lines': [{'who': l['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', l['text'])} for l in sc['lines']], 'prompt': sc['prompt'], 'choices': sc['choices']}]}
             log(sid, {'start': True, 'series': series, 'lang': lang, 'name': name, 'at': time.strftime('%F %T')})
             c = ep1_cached(series, lang)
@@ -780,7 +874,7 @@ class H(BaseHTTPRequestHandler):
             name = (body.get('name') or ('你' if lang == 'zh' else 'you')).strip()[:24]
             sess = SESS.get(body.get('sid') or '')
             cid = 'c' + time.strftime('%m%d%H%M') + rid(4)
-            c = CALLS[cid] = {'cid': cid, 'series': series, 'lang': lang, 'name': name, 'who': who, 'sid': sess['sid'] if sess and sess['series'] == series else None,
+            c = CALLS[cid] = {'cid': cid, 'series': series, 'lang': lang, 'name': name, 'who': who, 'me': (body.get('me') or (sess or {}).get('me') or '').strip()[:400], 'sid': sess['sid'] if sess and sess['series'] == series else None,
                               'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': []}
             log('call-' + cid, {'start': True, 'series': series, 'who': who, 'lang': lang, 'name': name, 'sid': c['sid'], 'direction': c['direction'], 'at': time.strftime('%F %T')})
             return self._send(200, {'cid': cid, 'who': who, 'job': start_job(run_call, c, '')})
@@ -799,11 +893,31 @@ class H(BaseHTTPRequestHandler):
             sess = SESS.get(body.get('sid'))
             if not sess: return self._send(404, {'error': 'session expired'})
             text = (body.get('text') or '').strip()[:400]; via = body.get('via') or 'free'
-            her = her_said(text, via, sess['lang']); n = len(sess['eps']) + 1
-            jid = commit_ep_spec(sess, text) if via == 'option' else None
+            n = len(sess['eps']) + 1; matched = None
+            if via in ('voice', 'free') and sess.get('spec'):
+                m = match_choice(sess, text)  # 她说的就是某个选项的意思 → 用预先写好的那集，马上开播
+                if m == 'AUTO': via = 'auto'
+                elif m: matched = m
+            if via == 'auto':  # 闭眼听/被动收听：她没回应，故事自己往下走；有预先写好的就用第一个（默认走向），马上开播
+                ch = (sess['eps'][-1].get('choices') or [])
+                matched = ch[0] if ch and sess.get('spec') else None
+            pick = matched if matched else (text if via == 'option' else None)
+            jid = commit_ep_spec(sess, pick) if pick else None
             if not jid: sess['spec'] = {}
-            log(sess['sid'], {'her': text, 'via': via, 'next': n, 'spec': bool(jid), 'at': time.strftime('%F %T')})
-            return self._send(200, {'job': jid or start_job(run_episode, sess, next_msg(sess, her), None, her)})
+            her = her_said(text, via, sess['lang']) if not jid or via == 'option' else (her_said(matched, 'option', sess['lang']))
+            log(sess['sid'], {'her': text, 'via': via, 'matched': matched, 'next': n, 'spec': bool(jid), 'wishes': sess.get('wishes'), 'at': time.strftime('%F %T')})
+            out = jid or start_job(run_episode, sess, next_msg(sess, her), None, her)
+            sess['wishes'] = []
+            return self._send(200, {'job': out, 'matched': matched, 'via': via})
+        if u.path == '/api/wish':  # 听的过程中对故事说的话：记下，按它重写两个选项的下一集（仍然秒开）
+            sess = SESS.get(body.get('sid'))
+            if not sess: return self._send(404, {'error': 'session expired'})
+            text = (body.get('text') or '').strip()[:300]
+            if text:
+                sess.setdefault('wishes', []).append(text); sess['wishes'] = sess['wishes'][-3:]
+                log(sess['sid'], {'wish': text, 'after_ep': len(sess['eps']), 'at': time.strftime('%F %T')})
+                if not sess['eps'][-1].get('ending'): threading.Thread(target=start_ep_specs, args=(sess,), daemon=True).start()
+            return self._send(200, {'ok': True, 'wishes': sess.get('wishes', [])})
         self._send(404, {'error': 'not found'})
 
 
