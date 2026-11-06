@@ -1,0 +1,147 @@
+{
+ "title": "The Part That Wasn't an Act",
+ "amb": "quiet morning bedroom, faint distant city, soft cotton sheets rustling, small apartment kitchen hum down the hall",
+ "lines": [
+  {
+   "who": "NARR",
+   "text": "Friday, early evening. Your phone buzzes against the kitchen counter. Evan. Again."
+  },
+  {
+   "who": "Rafael",
+   "text": "Evan again?"
+  },
+  {
+   "who": "NARR",
+   "text": "Fourth call today, you tell him. You broke up a month ago."
+  },
+  {
+   "who": "Rafael",
+   "text": "Want your roommate to pick up? I'm very convincing."
+  },
+  {
+   "who": "NARR",
+   "text": "\"Tempting,\" you say. \"No.\" You grab your keys from the bowl by the door. Drinks with Maya at Cole's. Don't wait up."
+  },
+  {
+   "who": "Rafael",
+   "text": "I'll be at Cole's later anyway. Text me if he shows."
+  },
+  {
+   "who": "NARR",
+   "text": "You don't text. A few drinks in, Maya steps away to the bar, and Evan slides into her seat."
+  },
+  {
+   "who": "Evan",
+   "text": "Come on. You can barely sit up. I'll drive you home."
+  },
+  {
+   "who": "NARR",
+   "text": "You tell him no. You're good. You're so good. His hand closes around your wrist."
+  },
+  {
+   "who": "Evan",
+   "text": "Let's go."
+  },
+  {
+   "who": "NARR",
+   "text": "You stand too fast. The floor tilts. Then there's a warm, steady arm at your back."
+  },
+  {
+   "who": "Rafael",
+   "text": "Whoa. I got you."
+  },
+  {
+   "who": "NARR",
+   "text": "His jacket smells like engine oil and cold night air. You say his name. Then, louder: \"This is my boyfriend.\""
+  },
+  {
+   "who": "Evan",
+   "text": "Since when? You two are just friends."
+  },
+  {
+   "who": "NARR",
+   "text": "You turn to Rafael. \"Kiss me. Make him believe it.\" He looks at you for one long second. Then he does."
+  },
+  {
+   "who": "NARR",
+   "text": "When it ends, the chair across the table is empty."
+  },
+  {
+   "who": "Rafael",
+   "text": "[quietly] He's gone."
+  },
+  {
+   "who": "Rafael",
+   "text": "Okay. Water. Then I'm taking you home."
+  },
+  {
+   "who": "NARR",
+   "text": "Saturday morning. Pale light through blinds that aren't yours. Sheets that smell like his laundry soap. You're in Rafael's room, still in last night's clothes. He's up already, sitting in the desk chair."
+  },
+  {
+   "who": "Rafael",
+   "text": "Awake? Water's here."
+  },
+  {
+   "who": "NARR",
+   "text": "A glass slides across the nightstand, close enough to reach. Down the hall, the coffee machine hums."
+  },
+  {
+   "who": "Rafael",
+   "text": "Leave the coffee if your head hurts. Temporary boyfriend duty last night. I thought I did all right."
+  },
+  {
+   "who": "NARR",
+   "text": "You laugh, and it hurts. He grins. Then the grin fades, and the room goes very quiet."
+  },
+  {
+   "who": "Rafael",
+   "text": "One thing needs clearing up, though."
+  },
+  {
+   "who": "Rafael",
+   "text": "Keeping Evan off your back was an act."
+  },
+  {
+   "who": "Rafael",
+   "text": "[softly] Wanting to kiss you wasn't."
+  },
+  {
+   "who": "NARR",
+   "text": "In the kitchen, the coffee machine beeps. He doesn't turn toward it. He doesn't reach for a joke. He just keeps looking at you."
+  },
+  {
+   "who": "Rafael",
+   "text": "I like you. Have for a while."
+  },
+  {
+   "who": "Rafael",
+   "text": "And last night doesn't mean you agreed to anything. You'd been drinking. You asked for that kiss to get rid of him. Not because of me."
+  },
+  {
+   "who": "NARR",
+   "text": "He rubs his palm down his jeans. One breath, slightly uneven."
+  },
+  {
+   "who": "Rafael",
+   "text": "So. Will you go on a date with me? A real one. Not just dinner because we happen to be heading the same way."
+  },
+  {
+   "who": "NARR",
+   "text": "Your keys are in the bowl by his. Your handwriting sits next to his on the grocery list on the fridge. Three years of this."
+  },
+  {
+   "who": "Rafael",
+   "text": "You don't have to answer right now. And you don't have to give an answer you don't want just to make me feel better. The water's yours either way."
+  },
+  {
+   "who": "NARR",
+   "text": "He waits. He's sober. So are you. This time, nobody's pretending."
+  }
+ ],
+ "prompt": "Rafael has asked you on a real date and is waiting, giving you room. What do you say to him first?",
+ "choices": [
+  "\"Okay. Tell me what a real first date with you would actually look like.\"",
+  "\"Before I answer, how do we keep living here while I think it over?\""
+ ]
+}

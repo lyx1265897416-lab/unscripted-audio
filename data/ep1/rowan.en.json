@@ -1,0 +1,135 @@
+{
+ "title": "The Stranger Who Caught the Sign",
+ "amb": "morning sea breeze with distant waves and gulls, a wooden sign creaking on an iron bracket",
+ "lines": [
+  {
+   "who": "NARR",
+   "text": "Early morning. The tide is out, the gulls are loud, and you're watering the lavender by the gate."
+  },
+  {
+   "who": "NARR",
+   "text": "Above you, the old wooden sign creaks on its iron bracket. Then the creaking stops, and it falls."
+  },
+  {
+   "who": "NARR",
+   "text": "You hear a thud, but it isn't wood on stone. It's wood landing in hands. Someone on the other side of your gate has caught it."
+  },
+  {
+   "who": "Rowan",
+   "text": "Got it. Got it. Nobody panic. Especially the sign."
+  },
+  {
+   "who": "NARR",
+   "text": "He's tall, with salt wind in his hair, and he's hugging the sign to his chest. The sage-green gate is waist-high and shut between you. He's an arm's length away."
+  },
+  {
+   "who": "NARR",
+   "text": "Then he looks up at you, and his whole face lights up. It's like you're the best part of his morning."
+  },
+  {
+   "who": "Rowan",
+   "text": "Morning! You're already out here. That's good. That's really good."
+  },
+  {
+   "who": "NARR",
+   "text": "You raise the watering can. \"Put it down.\""
+  },
+  {
+   "who": "Rowan",
+   "text": "This? Your toes might have a problem with that."
+  },
+  {
+   "who": "NARR",
+   "text": "You tell him you mean the sign. Put it down, and take a step back."
+  },
+  {
+   "who": "Rowan",
+   "text": "Okay. Okay. Just so we are clear, I am not waterproof."
+  },
+  {
+   "who": "NARR",
+   "text": "He leans the sign against the stone wall, letters facing the stones, and steps back onto the cobbles. His hands are up. He's still smiling."
+  },
+  {
+   "who": "Rowan",
+   "text": "I'm Rowan. Here to fix the sign."
+  },
+  {
+   "who": "NARR",
+   "text": "You've never seen him before. You'd remember a grin like that. You tell him he doesn't look like anyone you hired."
+  },
+  {
+   "who": "Rowan",
+   "text": "[chuckles softly] Bad introduction. Want me to start over?"
+  },
+  {
+   "who": "NARR",
+   "text": "You don't answer. Water drips from the spout onto your boot."
+  },
+  {
+   "who": "Rowan",
+   "text": "Starting over. Hi. Rowan. I fix things. Windows, doors, signs that throw themselves off buildings."
+  },
+  {
+   "who": "Rowan",
+   "text": "That bracket's been loose for a while. The left hook goes first. It's always the left."
+  },
+  {
+   "who": "NARR",
+   "text": "You glance up. The left hook hangs open, bent and rusted. You didn't know that until just now."
+  },
+  {
+   "who": "NARR",
+   "text": "So how does a stranger know it?"
+  },
+  {
+   "who": "Rowan",
+   "text": "Gate looks great, by the way. Told you that green would work."
+  },
+  {
+   "who": "NARR",
+   "text": "Told you. The words land wrong. The breeze turns cool on your neck, and your grip tightens on the handle."
+  },
+  {
+   "who": "NARR",
+   "text": "You take one step back from the gate. You don't say anything. You don't have to."
+  },
+  {
+   "who": "NARR",
+   "text": "His smile fades. Quietly, he takes two more steps back across the cobbles, until the whole path lies between you."
+  },
+  {
+   "who": "Rowan",
+   "text": "[quietly] Too much. Sorry. I'll stay right here."
+  },
+  {
+   "who": "NARR",
+   "text": "He waits. He doesn't argue, and he doesn't reach for the latch. He just watches you like your answer matters."
+  },
+  {
+   "who": "Rowan",
+   "text": "You don't have to take my word for anything. I've got a tool bag. Very official. Very boring."
+  },
+  {
+   "who": "Rowan",
+   "text": "Or there's Nora. She'll vouch for me. Probably while rolling her eyes."
+  },
+  {
+   "who": "NARR",
+   "text": "Next door, an oven door bangs. Warm bread smell drifts over the wall. Through the bakery window, a shadow moves behind the glass."
+  },
+  {
+   "who": "NARR",
+   "text": "A gull cries overhead. The sign rests against your wall. Your name is hidden against the stone."
+  },
+  {
+   "who": "NARR",
+   "text": "The gate is still shut. And he's still looking at you as if he knows you."
+  }
+ ],
+ "prompt": "A stranger who knows your gate a little too well is waiting on the other side. How will you check who he is?",
+ "choices": [
+  "I aim the can at him: open your tool bag, slowly.",
+  "I shout toward the bakery window for Nora to vouch."
+ ]
+}

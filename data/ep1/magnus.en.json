@@ -1,0 +1,147 @@
+{
+ "title": "Ten Minutes to His Engagement",
+ "amb": "underground parking garage hum, buzzing fluorescent tubes, distant elevator chime, echoing footsteps on concrete",
+ "lines": [
+  {
+   "who": "NARR",
+   "text": "The elevator doors slide open onto cold air and concrete. Your earpiece crackles. It's the wedding planner, frantic. The groom is missing, and the Thornes are asking for him."
+  },
+  {
+   "who": "NARR",
+   "text": "Check the garage, she snaps. No groom, no photos. No photos, no pay."
+  },
+  {
+   "who": "NARR",
+   "text": "So here you are on Level B2. Your camera strap bites into your shoulder. Your press badge swings against your chest. Overhead, the fluorescent tubes buzz, and one of them flickers."
+  },
+  {
+   "who": "NARR",
+   "text": "Your footsteps echo down the rows of black cars. One sits longer and quieter than the rest. A Maybach. The engine is off and the back window is dark."
+  },
+  {
+   "who": "NARR",
+   "text": "The earpiece crackles again. Find the groom. The announcement is in ten."
+  },
+  {
+   "who": "NARR",
+   "text": "You pass the rear door. Inside, someone draws a sharp breath, like a man torn out of a dream."
+  },
+  {
+   "who": "NARR",
+   "text": "The door swings open. A hand closes around your wrist. It's warm and firm, and it doesn't hurt."
+  },
+  {
+   "who": "Magnus",
+   "text": "[low] Don't move."
+  },
+  {
+   "who": "NARR",
+   "text": "He's tall, taller than he looked in the portraits upstairs. His dark hair is pushed back, with a few strands loose across his forehead. Stubble shadows a hard jaw. He breathes in slowly, as if he's tasting the air around you."
+  },
+  {
+   "who": "NARR",
+   "text": "Then you see his eyes. A second ago they were brown. You're sure of it. Now they're burning gold."
+  },
+  {
+   "who": "Magnus",
+   "text": "Tell me..."
+  },
+  {
+   "who": "Magnus",
+   "text": "Where did you come from?"
+  },
+  {
+   "who": "NARR",
+   "text": "You tell him you came from upstairs, from the party. You tell him to let go."
+  },
+  {
+   "who": "NARR",
+   "text": "His grip eases, but he doesn't let go. His gaze drops to the badge on your chest."
+  },
+  {
+   "who": "Magnus",
+   "text": "The photographer."
+  },
+  {
+   "who": "Magnus",
+   "text": "They sent you down here for me."
+  },
+  {
+   "who": "NARR",
+   "text": "You tell him the planner wants the groom, and the announcement is in ten minutes. Standing this close, you finally understand whose engagement you were hired to shoot."
+  },
+  {
+   "who": "Magnus",
+   "text": "Give me the camera."
+  },
+  {
+   "who": "NARR",
+   "text": "You hold it tighter and ask him why."
+  },
+  {
+   "who": "Magnus",
+   "text": "Because no one sees me like this."
+  },
+  {
+   "who": "NARR",
+   "text": "His phone buzzes on the leather seat behind him. He answers it on speaker without taking his eyes off you."
+  },
+  {
+   "who": "Luca",
+   "text": "[urgent] Sir. Harland moved the engagement announcement up. Ten minutes. They're sending people down to the garage."
+  },
+  {
+   "who": "Magnus",
+   "text": "Kill the cameras. Every one on this level."
+  },
+  {
+   "who": "Luca",
+   "text": "Sir, the Arkwrights are already—"
+  },
+  {
+   "who": "Magnus",
+   "text": "Now, Luca."
+  },
+  {
+   "who": "NARR",
+   "text": "One by one, the tiny red lights in the ceiling go dark. The hum of the garage seems to grow louder. Far away, an elevator chimes."
+  },
+  {
+   "who": "NARR",
+   "text": "He lets go of your wrist slowly, as if it costs him something. The heat of his hand lingers on your skin."
+  },
+  {
+   "who": "NARR",
+   "text": "Then he steps closer. He doesn't touch you, but he's close enough that you smell cedar, smoke and rain on leather. Close enough to hear his breathing, ragged at the edges."
+  },
+  {
+   "who": "Magnus",
+   "text": "[quietly] I need to touch you. Once."
+  },
+  {
+   "who": "NARR",
+   "text": "You ask him what that's supposed to mean."
+  },
+  {
+   "who": "Magnus",
+   "text": "To know you're real."
+  },
+  {
+   "who": "NARR",
+   "text": "His hand rises and stops an inch from your cheek. It's trembling. The gold in his eyes flares, then holds."
+  },
+  {
+   "who": "Magnus",
+   "text": "Say yes, or say no. I'll listen."
+  },
+  {
+   "who": "NARR",
+   "text": "Footsteps echo on the ramp, and voices come closer. The elevator doors slide open again. Nine minutes now. He still hasn't touched you. He's waiting for your answer."
+  }
+ ],
+ "prompt": "His hand hovers an inch from your face, and footsteps are closing in. Will you let him touch you?",
+ "choices": [
+  "Yes. Once. Then tell me what's happening to your eyes.",
+  "I step back and say: let me go back upstairs. Now."
+ ]
+}

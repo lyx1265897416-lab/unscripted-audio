@@ -1,0 +1,159 @@
+{
+ "title": "别信正在说话的我",
+ "amb": "quiet desk at night, laptop fan hum, faint rain on a window; then dead power in a concrete room, faint electrical buzz from a red emergency light, muffled pounding on a steel door",
+ "lines": [
+  {
+   "who": "NARR",
+   "text": "23:24。你的耳机里，跳进一条语音。"
+  },
+  {
+   "who": "Lena",
+   "text": "[whispering] 别信正在说话的我。"
+  },
+  {
+   "who": "NARR",
+   "text": "就这一句。气声很近，像她把嘴唇贴在了话筒上。"
+  },
+  {
+   "who": "NARR",
+   "text": "你点开 Meridian 媒体中心的中心转播。"
+  },
+  {
+   "who": "Lena",
+   "text": "我没事。别叫人来。"
+  },
+  {
+   "who": "NARR",
+   "text": "转播里的她在笑。纸杯推过桌面，刮出一声轻响。"
+  },
+  {
+   "who": "NARR",
+   "text": "你盯着屏幕等。十几秒后，同一个笑，同一句话。"
+  },
+  {
+   "who": "Lena",
+   "text": "我没事。别叫人来。"
+  },
+  {
+   "who": "NARR",
+   "text": "纸杯又刮了一下。那声刮擦的尾音，连底噪都一模一样。"
+  },
+  {
+   "who": "NARR",
+   "text": "你想起开局前那条匿名消息。午夜，她那一层会放灭火气体。六年前的今晚，楼下也锁死过一个人。"
+  },
+  {
+   "who": "NARR",
+   "text": "发信人没有名字。这些，Lena 一件都不知道。"
+  },
+  {
+   "who": "NARR",
+   "text": "直连突然接通。电流嘶的一声，然后是呼吸，又急又浅。"
+  },
+  {
+   "who": "Lena",
+   "text": "[low] 你在吗？我在地下二层。放映室。"
+  },
+  {
+   "who": "Lena",
+   "text": "门锁死了。没电。只有一盏红灯。"
+  },
+  {
+   "who": "NARR",
+   "text": "话音没落，咚。钢门被狠狠砸了一下。"
+  },
+  {
+   "who": "NARR",
+   "text": "又一下。震动顺着线，直接砸进你的耳膜。"
+  },
+  {
+   "who": "Lena",
+   "text": "有人。在门外。"
+  },
+  {
+   "who": "NARR",
+   "text": "你告诉她，转播里，她一直在说自己没事。"
+  },
+  {
+   "who": "Lena",
+   "text": "我没说过。你那边看到什么？"
+  },
+  {
+   "who": "NARR",
+   "text": "你说，同一段话，循环了两遍，连纸杯声都没变。"
+  },
+  {
+   "who": "Lena",
+   "text": "那不是现在的我。"
+  },
+  {
+   "who": "NARR",
+   "text": "可你不能只凭一个声音就信她。"
+  },
+  {
+   "who": "NARR",
+   "text": "你说：Lena，说“蓝伞”。现在。"
+  },
+  {
+   "who": "Lena",
+   "text": "……蓝伞。"
+  },
+  {
+   "who": "NARR",
+   "text": "你又说：敲两下话筒，再念四、九、一。"
+  },
+  {
+   "who": "NARR",
+   "text": "嗒。嗒。"
+  },
+  {
+   "who": "Lena",
+   "text": "[quietly] 蓝伞。四，九，一。"
+  },
+  {
+   "who": "NARR",
+   "text": "转播里的她，还在笑着说没事。线这头的她，声音在发抖。"
+  },
+  {
+   "who": "NARR",
+   "text": "你确定了。这个，才是她。"
+  },
+  {
+   "who": "Lena",
+   "text": "信我了？好。现在怎么办？"
+  },
+  {
+   "who": "NARR",
+   "text": "砸门声，停了。"
+  },
+  {
+   "who": "NARR",
+   "text": "太安静了。只剩那盏红灯，滋滋地响。"
+  },
+  {
+   "who": "Lena",
+   "text": "他走了？"
+  },
+  {
+   "who": "NARR",
+   "text": "然后，你听见一声很轻的金属响。咔。"
+  },
+  {
+   "who": "NARR",
+   "text": "门把手，在转。"
+  },
+  {
+   "who": "Lena",
+   "text": "[whispering] 在转。它在转。"
+  },
+  {
+   "who": "NARR",
+   "text": "离午夜，还剩三十六分钟。这条线上，她只能听你的。"
+  }
+ ],
+ "prompt": "门把手正在一点点转动，Lena 屏住呼吸等你开口：你要她守住这扇门，还是离开门口另找出路？",
+ "choices": [
+  "Lena，压上门闩，顶住门，别出声。",
+  "Lena，离开门口，摸黑找别的出口。"
+ ]
+}

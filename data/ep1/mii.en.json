@@ -1,0 +1,147 @@
+{
+ "title": "No Work Today, Mii's Got You",
+ "amb": "phone alarm buzzing, soft rustle of a duvet, morning birds outside the window, tiny paws on a wool rug, plate and jam jar lid clinking on a wooden counter",
+ "lines": [
+  {
+   "who": "NARR",
+   "text": "Bzzz. Bzzz. Your phone alarm buzzes on the nightstand, for the second time. You fumble for it, press it quiet, and sink back under the duvet."
+  },
+  {
+   "who": "NARR",
+   "text": "Then something small lands on the blanket. It's as light as a bread roll. Four soft steps climb toward your chest."
+  },
+  {
+   "who": "NARR",
+   "text": "A round paw presses down on the corner of your duvet. It's pinning it, very firmly."
+  },
+  {
+   "who": "Mii",
+   "text": "No work today. Mii will take care of you."
+  },
+  {
+   "who": "NARR",
+   "text": "You open one eye. It's Mii, your three-month-old orange kitten, in its cream linen bib with the little blue fish on the pocket. Its whiskers twitch. It is trying very hard to look serious."
+  },
+  {
+   "who": "NARR",
+   "text": "You blink at the ceiling. Then it comes back to you."
+  },
+  {
+   "who": "NARR",
+   "text": "\"Oh, right,\" you mumble. \"It's my day off. I forgot the alarm.\""
+  },
+  {
+   "who": "Mii",
+   "text": "Mii heard it. Two times. Too loud."
+  },
+  {
+   "who": "Mii",
+   "text": "So today, Mii is in charge."
+  },
+  {
+   "who": "NARR",
+   "text": "You reach out and rub the top of its head with one finger. Its ears flatten, then spring right back up."
+  },
+  {
+   "who": "Mii",
+   "text": "You stay. Mii does everything."
+  },
+  {
+   "who": "NARR",
+   "text": "It hops off the bed and lands with a soft thump on the rug. Then comes a scuffing sound, back and forth, back and forth. Something is being pushed across the floor, slowly and with great effort."
+  },
+  {
+   "who": "Mii",
+   "text": "Slippers. For you."
+  },
+  {
+   "who": "NARR",
+   "text": "You sit up and look down. Your slippers wait neatly beside the bed, toes pointing at the mattress and heels facing out. They're backwards."
+  },
+  {
+   "who": "NARR",
+   "text": "You tell Mii, gently, that they're the wrong way round."
+  },
+  {
+   "who": "Mii",
+   "text": "Mii knew. Not on purpose."
+  },
+  {
+   "who": "Mii",
+   "text": "Round two."
+  },
+  {
+   "who": "NARR",
+   "text": "It butts one slipper with its forehead until the slipper swings around, then does the other. You slide your feet in. They're warm, because Mii was lying on them."
+  },
+  {
+   "who": "NARR",
+   "text": "Pad, pad, pad. It leads you to the kitchen with its tail straight up like a little flag."
+  },
+  {
+   "who": "NARR",
+   "text": "The wooden counter is cool under your palms. A slice of bread already sits on a plate, slightly crooked. Next to it is a jar of apricot jam with a loose lid, and the handle of a small spoon peeks out from under the lid."
+  },
+  {
+   "who": "Mii",
+   "text": "Breakfast. Mii makes it. You sit."
+  },
+  {
+   "who": "NARR",
+   "text": "Mii stands up on its back legs, tucks its head under the lid, and pushes. The lid wobbles, tips, and clacks onto the counter, spinning."
+  },
+  {
+   "who": "Mii",
+   "text": "Open. Easy."
+  },
+  {
+   "who": "NARR",
+   "text": "The smell is sweet and sunny. Mii taps the spoon handle. The spoon tips, and a bright blob of jam plops onto the bread."
+  },
+  {
+   "who": "NARR",
+   "text": "Then, to spread it, Mii pats it. Pat. Pat."
+  },
+  {
+   "who": "NARR",
+   "text": "It lifts its paw. Right in the middle of your toast is one perfect paw print, four little toe beans and a pad pressed into apricot jam."
+  },
+  {
+   "who": "Mii",
+   "text": "That is the decoration."
+  },
+  {
+   "who": "NARR",
+   "text": "It licks its sticky paw with its tiny tongue going fast. Its ears dip, just a little."
+  },
+  {
+   "who": "NARR",
+   "text": "A laugh slips out of you before you can stop it."
+  },
+  {
+   "who": "Mii",
+   "text": "Good laugh? Okay. You eat. Mii watches."
+  },
+  {
+   "who": "NARR",
+   "text": "You lean toward the plate. Then something crinkles, papery and soft. It's coming from the bib pocket, which is round and full, as if it was packed ahead of time."
+  },
+  {
+   "who": "NARR",
+   "text": "Your eyes drift to it. Instantly, both of Mii's paws fly up and cover the little blue fish. It sits very, very straight."
+  },
+  {
+   "who": "Mii",
+   "text": "[whispering] Not for you. Not yet."
+  },
+  {
+   "who": "NARR",
+   "text": "It doesn't look away. Under its paws, the pocket rustles again. Whatever is in there, Mii brought it to your bed this morning on purpose."
+  }
+ ],
+ "prompt": "Your paw-print toast is waiting, and Mii is guarding that rustling pocket with both paws. How do you respond to your little caretaker?",
+ "choices": [
+  "I take a big bite right through the jam paw print.",
+  "I ask softly, \"What's in your pocket, sweetheart?\""
+ ]
+}

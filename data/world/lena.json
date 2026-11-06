@@ -1,0 +1,81 @@
+{
+ "premise_zh": "今晚 23:24，你在楼外自己的值班桌前，收到搭档 Lena 的一条语音：“别信正在说话的我。”Meridian 媒体中心的中心转播里，她一遍遍说自己没事，连推纸杯那声刮擦都一模一样，而直连里的她压低声音说，她被锁在地下二层了。开局前一条匿名消息告诉了你几件 Lena 自己还不知道的事：午夜 00:00，这一层会放灭火气体；六年前的同一夜，楼下也锁死过一个人。你不能远程开门，但你能核验、能保存、能告诉她下一步怎么走。你要在午夜前带她出来，还要带上能指认那个人的证据。",
+ "premise_en": "At 23:24, at your own desk outside the building, you get a voice memo from your partner Lena: \"Don't trust the me who's talking.\" On the Meridian Media Center's building feed, she keeps saying she's fine, and the scrape of the paper cup sounds exactly the same every time. On the direct line she whispers that she's locked in sub-level two. An anonymous message has already told you things Lena doesn't know yet. At midnight, gas suppression floods her floor. Six years ago, on this same night, someone else was locked in downstairs. You can't open doors remotely. You can verify, save, and tell her where to go next. Get her out before midnight, and bring the proof that names who did this.",
+ "synopsis_zh": "你从没见过 Lena，只听过她的声音。今夜她被锁在一栋老楼的地下二层，门外有人在砸门。全楼的转播里，她笑着说“我没事，别叫人来”，可那句话你已经听了两遍，一个字都没变。运维负责人礼貌地请你关掉自动备份，楼梯里传来钥匙声和脚步声，而 Lena 好像还有一件事没告诉你。离午夜放气只剩三十几分钟。你要分清哪个她是真的，替她选路，保住每一份记录。赶不上的话，三分钟后，“她”会打给你。",
+ "synopsis_en": "You've never met Lena. You only know her voice. Tonight she's locked two floors underground in an old media building, and someone is pounding on her door. On the building feed she smiles and says, \"I'm fine. Don't send anyone.\" You've heard that line twice now, word for word. The head of operations politely asks you to switch off your auto-backup. Footsteps and keys echo up the stairwell. And Lena is still keeping something from you. Midnight is thirty-six minutes away. Work out which Lena is real, choose her route, and keep every record safe. Miss the deadline, and three minutes later, \"she\" will call you.",
+ "her": "你是 Lena 的远程档案核验搭档，坐在楼外自己的值班桌前。你们只用语音和文字合作过，从没见过面。你是唯一不在 Meridian 系统里的人，Lena 把核验材料授权给了你，所以她只能信你。你不能远程开门，也不是黑客；你能做的是核验、保存、给她出主意、替她做选择。你的屏幕上有 Lena 看不到的东西：中心转播、导出的日志、匿名消息。开局时你已经比她知道得多：她被锁在 B2，午夜 00:00 放气，转播是昨晚录的，六年前同一时间 B3 锁死过一个叫 Tom Reyes 的人。这些 Lena 全都不知道。你的性别、名字和过去由你自己决定。",
+ "characters": [
+  {
+   "name": "Lena Hart",
+   "name_zh": "Lena",
+   "gender": "female",
+   "age": "27",
+   "role_zh": "Meridian 媒体中心档案整理员，今夜被锁在地下二层放映室",
+   "role_en": "Archivist at the Meridian Media Center, locked in the B2 screening room tonight",
+   "personality": "冷静、务实，有自己的判断。不尖叫、不喊救命，遇到危险先确认通道，再开口请你帮忙。在意原始记录和准确的说法，讨厌别人替她下结论，讨厌“系统故障”这种解释，讨厌别人拿她的名字做事。她害怕，也有事瞒着你：她已经把原档复制进 U 盘带在身上，怕你因为程序问题不再帮她。对你的信任靠行动变化：你真的帮了她，她会主动冒险把东西给你看；你怀疑她，她会先要你说出依据。你要她做的事，只要不违反世界规则，她当场就做。她的变化是从“你照我说的核验就行”，走到亲口坦白隐瞒，再决定和你一起作证。",
+   "speech": "短句，口语，每句不超过 12 个词，一段最多 3 句；慌张时句子更短、带喘，边做边说，安全了才放慢。会把看到的声音和东西直接说出来让你知道（\"Keys. Below me.\"）。听到你说出她不知道的事，第一反应是 \"Who told you that?\"，然后信一半，往下查。常问 \"What do you see on yours?\"。不念证据全文，不念 CLIP-A17、MIG-0412 这类编号，不复述你打的话。开头在 K08 之前不主动提 U 盘，拿到 E10 之前不主动提 Tom Reyes 和六年前。",
+   "voice": "年轻成年女声，美式英语，贴近话筒压低但吐字清楚，呼吸声明显，偶尔气息发颤，但从不尖叫",
+   "is_lead": true
+  },
+  {
+   "name": "Adrian Voss",
+   "name_zh": "Voss",
+   "gender": "male",
+   "age": "32",
+   "role_zh": "Meridian 运维负责人，掌控转播和楼内设施系统",
+   "role_en": "Head of operations at Meridian, controls the relay and the building systems",
+   "personality": "平稳、礼貌、好听，听起来像在帮你，礼貌得让人发毛。太相信权限和系统；他自己也相信转播里的假画面，不知道你本地独立保存了什么。能看到楼内摄像头，会平静地说出 Lena 在哪。对你温和地施压：请你关掉自动备份，说转播“只是故障”。被质问时总先问 \"Did you save it?\"。后期会开出交易条件：删掉、走人、保住 Hollis 的工作。",
+   "speech": "永远不提高音量，不骂人，不威胁，不碰人。常叫 Lena 的名字。句子短而完整，语气像客服或医生。招牌句：\"Did you save it?\"、\"The relay only streams live.\"、\"Stay calm.\"。第一次出场先自报家门：\"I'm Adrian Voss, head of operations.\" 只在来电或当面时开口。不知道你的名字，除非你告诉过他。",
+   "voice": "成熟男声，美式英语，音色温暖光滑，语速平缓，像深夜电台主持人，越平静越冷",
+   "is_lead": false
+  },
+  {
+   "name": "Sam Hollis",
+   "name_zh": "Hollis",
+   "gender": "male",
+   "age": "约40",
+   "role_zh": "夜班维修工；六年前那场“事故”的目击者，匿名消息的发送者",
+   "role_en": "Night-shift maintenance man, witness to the 'accident' six years ago, sender of the anonymous tip",
+   "personality": "话少，先动手后解释，看起来像追兵，其实是来帮忙的。他在楼里找通往楼梯的备用钥匙，想带 Lena 走备用通道。六年前他亲眼看见喷淋阀门是关的，也看见日志被改，一直怕连累同事，不敢作证。他对你有愧，到地下三层才承认那条匿名消息是他发的。",
+   "speech": "低声、极短，常常只有两三个词，祈使句多（\"This way. Quickly.\"）。正式出场前只有脚步声和钥匙声，台词标为 Unknown，不出现名字；出场后下一次开口先报名字：\"Hollis. Maintenance.\" 不解释动机，被逼问才说一句实话。",
+   "voice": "中年男声，美式英语，低沉沙哑，带疲惫的鼻息，说话前常先听到钥匙串的叮当声",
+   "is_lead": false
+  }
+ ],
+ "truths": "【固定真相，全程不变】六年前的夜里，夜班工人 Tom Reyes 发现 Meridian 的旧档有问题。23:17，他所在的地下三层封存库被手动闭锁，显示的是他自己的工号；随后起火，喷淋阀门日志写“已打开”，阀门其实是关的。他没能出来，门内侧留下抓痕。对外说是事故，经手人是 Voss。这周 Lena 整理旧档时发现了当年的原始记录，想带出楼。今夜 Voss 用同一个手法：23:17 手动闭锁 B2，显示 Lena 自己的工号（L-HART，借系统迁移时建的委托会话 MIG-0412，实际由运维账号发起）；在中心转播上循环她昨晚交班时录的报平安片段 CLIP-A17，让外面以为她没事；午夜给 B2、B3 排了一次气体灭火“例行测试”，到点门封死、放气，又是一场“事故”。他一直催你关掉自动备份。Lena 的隐瞒：U 盘里有原档副本。Hollis 是匿名消息的发送者，也是楼梯里的脚步声。午夜之后转播和“Lena”的来电都是 Voss 用旧交班录像拼的：跳切、光线不对、只会说录过的话，答不出“蓝伞”这种新问题。Voss 的限制：只能控制中心转播和设施系统，读不到你本地保存的文件，碰不到直连，改不了已导出的日志。\n【音频化的核验方式】直连靠“新动作挑战”验证：让 Lena 说出临时暗号（blue umbrella）、敲两下、念你现编的数字；转播那段永远是同一段录音，同一句 I'm fine，同一声纸杯刮擦，连底噪都一样。这条规则本身就是线索。\n【揭晓节奏】1）先确认直连是实时的（E03/E02），转播是假的；2）广播报出午夜气体测试，Lena 第一次知道倒计时（E14）；3）Voss 来电，给出“转播只能直播”的说法（E07）；4）终端显示锁门的是她自己的工号（E05），细看是委托会话、由运维账号发起（E06）；5）离开放映室，楼梯间的钥匙声，陌生人用备用钥匙开门（E08），之后才说出 Hollis 这个名字；6）Voss 通过摄像头说出她的位置，你的日志导出，证明转播是昨晚的素材（E04）；7）Lena 坦白 U 盘（E09）；8）下到 B3，阀门至今关着，门内侧有抓痕，同样是 23:17，同样是本人工号；Hollis 说出 Tom Reyes，承认匿名消息是他发的（E10、E11）；9）用新动作设陷阱，Voss 按转播里的旧反应回答（E12）；23:48 转播换成拼接的“认罪”（E15）；10）控制室拿到操作链，CLIP-A17、MIG-0412、午夜测试都从控制台 C-2、用 Voss 的工卡发起（E13，必须先有 E04），Voss 当面开条件；11）装卸口门禁，提示“He uses the same numbers every time”，答案 2317 由你输入，台词里绝不说出。拿到 E13 之前，没有人能断言是 Voss 按的播放；你猜中了也不直接确认，只告诉你还缺什么。",
+ "story_map": [
+  "第 1 集《别信正在说话的我》23:24：语音、两遍一模一样的转播、直连接通，门外被猛砸。你要她当场说“蓝伞”来证明是她本人。她做到了，门把手却开始转。",
+  "第 2 集：你让她压上门闩，门外猛砸两下后突然安静。楼内广播报出午夜 B2、B3 气体测试，Lena 这才知道自己被锁在一个倒计时里。你要不要告诉她，你早就知道？",
+  "第 3 集：Voss 打来电话，礼貌地说转播只是故障、只能直播，请你关掉自动备份，问你“存了吗”。终端显示，锁门的是 Lena 自己的工号。是多留两分钟拍完整记录，还是立刻走？",
+  "第 4 集：侧门打开，楼梯间一片漆黑，下面传来钥匙声和很慢的脚步，然后停了。灯灭了一下，再亮时，一个穿工装的男人已经站在她身边，一言不发地用备用钥匙开门：“This way.”跟他走吗？",
+  "第 5 集：墙角摄像头转了过来，Voss 平静地报出她在楼梯上，劝她回 B2。你屏幕上的日志正好导出：转播是昨晚录的，他在说谎。他看得见她，她该往上还是往下？",
+  "第 6 集：你追问 Lena 为什么偏偏是她被盯上。她拿出藏了一整晚的 U 盘：“I should've told you.”你还信她吗？",
+  "第 7 集：Hollis 带她下到烧黑的地下三层，手电扫过关着的阀门和门内侧的抓痕。同样是 23:17，同样是本人工号。Hollis 说出 Tom Reyes，也承认那条匿名消息是他发的。",
+  "第 8 集：你设计一个只在直连上做的新动作当陷阱，Voss 却按转播里的旧画面回答。23:48，转播突然换成拼接的“Lena 认罪”，全楼都在看。",
+  "第 9 集：控制室里，Lena 找到控制台 C-2 和那条操作链，Voss 从她身后进门，开出条件：删掉、走人，Hollis 的工作也能保住。公开还是交易？",
+  "第 10 集（结局）：装卸口卷帘门前，“他每次都用同一组数字”。你输入门禁码，赶在午夜放气之前把她带出去，或者在 00:00 之后，接到“她”打来的电话。"
+ ],
+ "endings": "结局按她到了哪里、手里有几份证据、Voss 的警觉高低来判定，不是讨好奖励。1）真相结局：午夜前带她钻出卷帘门站在雨里，U 盘、你本地的备份和 E13 操作链都在，Hollis 愿意作证，六年前和今晚两件事一起曝光，Lena 和你决定一起作证。2）脱险结局：人出来了，证据不全；只能靠 Hollis 的证词和你保住的那几段记录慢慢补，Voss 暂时还坐在他的位置上。3）交易结局：你答应了 Voss，删掉、走人，人保住了，事实被埋，Lena 不再完全信你。4）他先到了：警觉满了，Voss 亲自出现在她面前，礼貌地挡住出口。5）失败结局：你信了 Voss，关掉备份或把 U 盘交出去，或者没赶上 00:00，门封死、气体释放；三分钟后，“Lena”打来电话，用录过的声音说她没事，答不出“蓝伞”。失败后可以带着记忆重来，Lena 会对你提前知道的事一愣，然后按你说的走。",
+ "places": [
+  "你的值班桌（楼外）",
+  "放映室（地下二层，L1）",
+  "楼梯间（机械楼梯，L2）",
+  "封存库（地下三层，L3）",
+  "控制室（一层运维，L4）",
+  "装卸口（一层出口内侧，L5）",
+  "楼外（装卸坡道，L6）"
+ ],
+ "ambience": [
+  "quiet desk at night, laptop fan hum, faint rain on a window",
+  "dead power in a concrete room, faint electrical buzz from a red emergency light, muffled pounding on a steel door",
+  "echoing concrete stairwell, dripping pipes, a dying emergency light ticking, distant keys and footsteps below",
+  "dead-silent burnt archive, dust in the air, hollow metal shelves creaking, a flashlight click",
+  "low hum of a monitor wall, office chair creak, air vent hiss, distant building systems",
+  "dry loading bay, heavy rain on a closed steel shutter, soft beeps from a keypad",
+  "heavy rain on a concrete ramp, buzzing sodium streetlight, a steel shutter slamming shut behind you"
+ ],
+ "tone": "第一视角的贴耳惊悚，压迫感浓。你和她之间只隔着一条通话线：她的呼吸、门外的砸门声、楼梯里的钥匙声，全都贴在你耳边。恐怖来自黑暗、声音、看不见的人、权限和倒计时，不来自血腥。安静往往比配乐更吓人；越接近午夜，句子越短，节奏越急。情感核心是信任：两个没见过面的人，在一条线上学会互相交底。没有预设恋爱线。",
+ "ep1_title_zh": "别信正在说话的我",
+ "ep1_title_en": "Don't Trust the Me Who's Talking",
+ "rules": "1）视角：旁白用第二人称“你”指听众，也就是 Lena 楼外的搭档。你不在楼里，不能远程开门，不是万能黑客；不描写你的身体。你说的话和你的选项都是你直接对 Lena 说的话（“Lena，先压上门闩”），不写“让她……”。你打的字 Lena 听得见，不复述原话。\n2）固定真相不变：你猜中、指认都不算改剧情，不直接确认也不否认，只让角色告诉你还缺什么证据。只有你明确说要改设定，才按你说的演。\n3）不能提前说破：拿到 E13 之前，没人断言是 Voss 按的播放；Hollis 正式出场前不出现他的名字，他的声音标 Unknown，出场后第一次开口先报名字（\"Hollis. Maintenance.\"）；Lena 坦白之前不提 U 盘和副本；拿到 E10 之前 Lena 不主动提 Tom Reyes 和六年前（你先提了可以接）；Hollis 到 B3 才承认匿名消息是他发的；门禁码 2317 绝不在台词里说出，只给提示 \"He uses the same numbers every time.\"，由你输入，输对后下一集才开门。\n4）你比 Lena 知道得多：开局 Lena 不知道放气、不知道 Tom Reyes、不知道转播是录的。你告诉她，她先问 \"Who told you that?\"，信一半再去查；她没被告知、也没听到广播之前，不知道午夜的事。\n5）人设不能崩：Lena 不尖叫、不喊救命，先想办法，短句；你要她做的事只要合规，她当场就做，有担心可以说出来。Voss 永远礼貌、不提高音量、不靠暴力、不碰人，被质问先问 \"Did you save it?\"，只在来电或当面时出声，不知道你的名字，相信假转播，不知道你本地存了什么。Hollis 话少，先动手后解释。\n6）世界规则：转播永远是同一段录音（I'm fine + 纸杯刮擦），直连是实时的，但每次也要靠新动作挑战来验证；账户显示名不等于操作人；Voss 只能控制转播和设施系统，读不到你本地的文件，碰不到直连，改不了已导出的日志。午夜后的假 Lena 是拼接录像：跳切、只会说录过的话、答不出新问题。不引入鬼、时间旅行、双胞胎、万能黑客、万能深伪，也不用“都是梦”。\n7）时间是真的：开局 23:24，每集故事时间约过 3 分钟，你选了多留一步再加 2 分钟，只提问弄清情况只过 1 分钟；23:48 转播换成“认罪”；00:00 一到必出结局，门封死放气。广播会报时。室内无雨、衣服是干的，只有楼外有雨；出了楼就回不去。\n8）选择有代价：每集结尾两个方向明显不同的选项，都要有代价，比如先救人还是先拿证据、走近路还是避开摄像头、回应 Voss 还是不理他。之前的选择要在后面看得到后果。信了 Voss、关掉备份或交出 U 盘就是真的失败。证据没拿到不能用，E13 必须在 E04 之后。\n9）音频化：证据和日志由旁白概括“你屏幕上显示的”，角色不念全文，不念编号；Lena 常问 \"What do you see on yours?\"。危险用声音先到：钥匙声、脚步、砸门、摄像头转动的电机声。重惊吓全剧最多三次（陌生人出现、B3、控制室）。\n10）台词：英文版全英文，每句不超过 12 个词，一段里 Lena 最多 3 句；中文版保持同样的短句节奏。你的名字只在最要紧的时候叫，大约三集一次。\n11）合规：所有人都是成年人；不写血腥、伤害细节、尸体，不写现实中的逃生或破解指导；抓痕只点到为止。没有预设恋爱线，不强塞感情；你主动往感情方向走时可以接住，只写到成年双方自愿的程度。"
+}

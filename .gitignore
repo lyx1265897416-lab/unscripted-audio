@@ -1,0 +1,7 @@
+token.txt
+logs/
+cache/
+*.bak*
+__pycache__/
+.DS_Store
+data/motion_src/*.mp4

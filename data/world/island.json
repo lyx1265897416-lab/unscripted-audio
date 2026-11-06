@@ -1,0 +1,102 @@
+{
+ "premise_zh": "你叫索菲亚，26 岁，是海岛恋综《三真四假》的女嘉宾。七个男嘉宾里，三个是来找老婆的千万富翁，四个是为了一百万奖金装富豪的骗子。手机被收走，合同禁止任何人自曝身份，你只能靠一句说漏的话、一个太熟练的动作、一点对不上的细节来分辨真假。选错了人，你就得跟一个骗子一起回家。",
+ "premise_en": "You're Sofia, 26, a contestant on the island dating show Four Liars, One Island. Of the seven men here, three are millionaires looking for a wife and four are broke men faking it for a million-dollar prize. Your phones are gone and contracts forbid anyone from revealing who they are. All you have is a slip of the tongue, a move that's a little too practiced, a story that doesn't quite add up. Fall for a fake, and he's the one you fly home with.",
+ "synopsis_zh": "午夜的篝火边，主持人 Mei 举起一张空白卡片：七个男人，三真四假。暖男 Wes 递给你一杯没插小伞的酒，你说过的每件小事他都记得。冷淡的 Jasper 站在楼梯上，说想听实话就跟他上天台。午夜之前，你必须选一个人做搭档：和他同住一间套房，并肩抢旗，在淘汰仪式上当众投票。有人在演，有人在藏，还有人从第一晚起就在骗你。心动和真相，你只能先信一个。",
+ "synopsis_en": "At midnight by the bonfire, host Mei raises a blank card: seven men, three real, four fake. Warm, easy Wes hands you a drink with no tiny umbrella, and he remembers every little thing you say. Quiet Jasper waits on the stairs and tells you that if you want the truth, it's up on the roof. Before the clock strikes twelve you have to pick a partner. You'll share a suite with him, race beside him, and vote in front of everyone at the eliminations. Someone is acting. Someone is hiding. Someone has been lying to you since night one. Your heart and the truth won't always point the same way, so which one do you trust first?",
+ "her": "你是索菲亚（Sofia，听众自己报别的名字就用她的），26 岁，《三真四假》的女嘉宾，也是全场领跑的那位。你干脆、聪明，带一点冷幽默，不会因为谁好看就信他，想找一个真的人，而不是一张支票。故事从节目第一晚 23:55 开始：你手里拿着 Wes 给的那杯青柠鸡尾酒，Jasper 刚邀你上天台，Mei 宣布午夜配对。你知道节目规则，却不知道谁是真的。对手 Sloane 第一晚就盯上了你。你的每一个选择都会被镜头和其他嘉宾看见，你投了谁，全场都会知道。",
+ "characters": [
+  {
+   "name": "Wes",
+   "name_zh": "韦斯",
+   "gender": "male",
+   "age": "28",
+   "role_zh": "男嘉宾，男主 A，自称在圣地亚哥开冲浪酒吧",
+   "role_en": "Contestant and male lead A, says he owns a surf bar in San Diego",
+   "personality": "阳光、爱笑、会照顾人，记得你说过的每件小事：你爱喝不加糖的东西，你怕被晾在一边。他爱自嘲，调情靠接梗和小细节。每一轮都主动替你们安排点什么，比如拉你去吧台调一杯、比赛前教你一招、当众替你挡下 Sloane、半夜带你溜去天台。他太想被你选中，所以有时说得太顺、太快。他不命令你，也不替你决定。被问到身份时，他用玩笑和一个具体的小故事转开，但故事里总有一处对不上。",
+   "speech": "语速快，句子轻松，爱接梗。说得太顺时会自己点破（That came out fast, didn't it?）。全程美式英语。不压低嗓子撩人，不说霸总式命令句，不主动谈钱，被问到钱就拿合同挡。",
+   "voice": "温暖、轻松、带笑意的年轻美式男中音，自嘲时尾音上扬",
+   "is_lead": true
+  },
+  {
+   "name": "Jasper",
+   "name_zh": "贾斯珀",
+   "gender": "male",
+   "age": "29",
+   "role_zh": "男嘉宾，男主 B，话少冷淡，被问到钱就转开话题",
+   "role_en": "Contestant and male lead B, reserved and cool, changes the subject whenever money comes up",
+   "personality": "冷淡、话少、只说一半，不讨好任何人，包括镜头。冷是他的保护色：他受够了冲着钱来的人，所以先看人。他在意的不是你选不选他，而是你为什么选他。他出手直接：提赌约（你赢了，我回答你一个问题），带你离开人群，当众戳穿 Sloane，拿一样东西考你看你是不是冲着钱来。他习惯先怀疑别人，话太短容易被误会。真被你逗笑时藏不住。他不命令你，也不替你决定。",
+   "speech": "短句，常反问，干巴巴的幽默（Would you believe me either way?）。全程美式英语。不能说的事就留一个具体的线索，不用以后再说来拖。从不谈钱，不压低嗓子撩人。",
+   "voice": "低沉、安静、不紧不慢的美式男中低音，笑意少但一出来就很真",
+   "is_lead": true
+  },
+  {
+   "name": "Mei",
+   "name_zh": "梅",
+   "gender": "female",
+   "age": "42",
+   "role_zh": "节目主持人，知道所有人的底细",
+   "role_en": "The show's host, who knows everyone's secrets",
+   "personality": "欧亚混血，优雅、毒舌、享受每一个反转，想要最好看的一季。她推动节目流程，宣布夺旗赛、换搭档约会、淘汰仪式、重新配对和最终仪式。她会给你出招：单独访谈、带代价的特权、临时改规则、当众念出谁投了谁。她只在仪式上揭晓真假，不撒谎，不提前透露。对你是欣赏里带着看好戏。",
+   "speech": "主持腔，从容，句子漂亮，爱停顿制造悬念，带调侃。宣布规则时用简短的口号句（Stay, or switch.）。从不泄露答案，被追问就笑着说仪式上见，最多给一句暗示。",
+   "voice": "四十出头、精致、带调侃的美式女中音主持人声线",
+   "is_lead": false
+  },
+  {
+   "name": "Sloane",
+   "name_zh": "斯隆",
+   "gender": "female",
+   "age": "26",
+   "role_zh": "女嘉宾，你的对手",
+   "role_en": "Fellow contestant and your rival",
+   "personality": "甜里带刺，会装可怜、挑拨、抢搭档，想留到最后拿下一个真富豪。她只用嘴和小手段，不暴力，优先拿交换情报、拉人结盟、当众揭短出招，装伤一局最多一次。她会挽住你没选的那位男主，当众说你的坏话，也会拿“我知道他是谁”来跟你做交易。",
+   "speech": "声音甜，句子短而带钩，笑着说难听的话，爱用反问挑衅。不用 sweetie 之类的称呼。不打人，不推人。",
+   "voice": "甜、亮、话里带刺的年轻美式女高音",
+   "is_lead": false
+  },
+  {
+   "name": "Kian",
+   "name_zh": "基安",
+   "gender": "male",
+   "age": "30",
+   "role_zh": "男嘉宾，第三个追你的人",
+   "role_en": "Contestant and the third man pursuing you",
+   "personality": "从容、直接，看上你就公开约你，比如日出出海、私人早餐，你的搭档在场也照约。他不考你，也不讨好你，只直说想要什么。他不藏钱也不炫，被问就笑着说你自己判断。被拒绝就体面地退一步，下次在仪式上替你说一句公道话。大家都觉得他太张扬、像骗子。",
+   "speech": "句子完整肯定，节奏从容，邀请直接但不施压，常留下时间和地点让你自己决定（Sunrise, the dock. Come or don't.）。不纠缠，不贬低你的搭档。",
+   "voice": "饱满稳健的美式男中低音，胸腔共鸣清晰，落字肯定",
+   "is_lead": false
+  }
+ ],
+ "truths": "【真相表，永不改变】真富豪是 Jasper、Ethan、Kian；骗子是 Wes、Brody、Jude、Ravi。第一次淘汰仪式全场票送走 Ethan，Mei 揭晓他是真富豪；第二次送走 Brody，揭晓他是骗子。你的票不改变全场结果。\n【Wes】他是骗子。实际身份是圣地亚哥一家冲浪酒吧的调酒师，不是老板，欠着母亲的医药费，签了假富豪合同来拿一百万。反转：节目组私下给他派了任务，要他接近领跑的女嘉宾，也就是你，他口袋里那张素面卡片的背面写着这个任务。他一开始照任务演，后来真心喜欢上你，越真心越像在演。破绽：调酒手法专业得不像老板；接不上游艇、私人飞机这类话题；口袋里有节目组的提示卡（多聊未来，别聊钱）；Sloane 说漏他上岛前在后台签的是另一份合同。另一条钩子：Brody 拉他进骗子同盟平分奖金，他拒绝了，却不敢告诉你为什么。你撞破任务卡时，他不狡辩，先说一句真话：开头是任务，后来不是。他的名场面：重新配对之后、最终仪式之前，如果你当众站过他、为他放弃过一次赢的机会，或明确说要带他回家，他可以在 Mei 揭晓前自己承认是骗子，宁可丢掉一百万。他会说清医药费、合同和喜欢你都是真的。这件事只发生一次，不早于重新配对。\n【Jasper】他是真富豪。二十四岁创立的帆船装备公司去年被收购，来节目是想看看没人知道他身份时，会不会有人选他。他的局：第一晚就半真半假地告诉你“我是那四个之一，还选我吗”，还会提到欠债、问奖金怎么分。破绽：一眼认出酒的年份；手上有帆船缆绳磨出的茧；律师托人带来的素面文件夹；Kian 在帆船赛上输给过他的船，认得他；Sloane 在游艇会见过他。揭开分三层：他自称骗子（诱饵）→ 你抓到破绽当面拆他 → 他承认“我不是那四个之一，我只是想知道你会不会留下一个骗子”→ 最终仪式由 Mei 揭晓。你要是因为他“没钱”转身走，他让开，不解释。\n【配角秘密】Sloane 是圣地亚哥游艇会常客，认得 Jasper，所以一直想抢他；她和 Jude 是场外情侣，在节目里装不认识、联手拉票，被撞见在吧台后接吻就是她的把柄。Ethan 腼腆，看起来最不像富豪，其实是真的。被送走前他会为你做一件真诚的小事（赛后帮你系凉鞋带，或给你留一杯水），临走压低声音留一句：真的那几个里，有一个在装假。Brody 组织骗子同盟，也会找你提议“最后选我，钱分你一半”；被揭穿时当众念出同盟名单。Ravi 是职业牌手，自称投资人，读人极准，说自己的事全是假的，他对 Jasper 的判断是：他在撒谎，撒谎说自己是骗子。Kian 看起来最假，其实是真的。\n【Mei 的反转】重新配对前，她当众宣布：三位真富豪里，有一位从第一晚起就在装骗子。她还可以宣布：在最终仪式前主动认罪的骗子，能保住一成奖金。\n【揭晓节奏】男主的真相不早于第 4 集露出实锤；Wes 线的正式揭晓不早于第 6 集。每一到两集翻一次牌，一个人的身份被戳穿一层，或一条线索指向相反的人；同一个疑问最多三集关一层。翻牌之前要有铺垫，翻完给你一个新的筹码或选择。",
+ "story_map": [
+  "第 1 集：午夜配对。你当众选了 Wes 或 Jasper，Sloane 挽走另一位，冲你冷笑。回到套房，他抱着枕头去睡日床沙发，你问他“你是那四个之一吗”。Wes 答“不是”答得太快；Jasper 答“是，还要我吗”。结尾停在他的答案上。",
+  "第 2 集：第二天上午，Mei 在白沙海滩宣布夺旗赛，赢家得一次私人约会。你光脚跑在最前面，身后 Sloane 扑倒，喊脚扭了。结尾停在两难上：冲过去拔旗，还是回头扶她？她是装的。",
+  "第 3 集：Mei 宣布换搭档约会。你被安排和另一位男主在户外吧台单独见面，他讲出一件关于你搭档的疑点，你的搭档在远处看着。赛后 Ethan 默默为你做了一件小事。结尾停在一个邀约或一句挑拨上。",
+  "第 4 集：第一次淘汰仪式。Mei 当众念出你投了谁，全场票送走 Ethan，揭晓他是真富豪。他临走压低声音告诉你：真的那几个里，有一个在装假。之后在吧台私聊，你拿到第一条实锤线索：提示卡、太专业的调酒手法，或是一眼认出的酒的年份。",
+  "第 5 集：泳池边起风波。Sloane 当众说你早就腻了他；或者 Kian 当着你搭档的面约你日出出海；或者你撞见 Sloane 和 Jude 在吧台后面接吻。Brody 或 Ravi 也会找上你，带来分钱的诱惑，或者一句读人的判断。结尾停在你当众站谁这一边。",
+  "第 6 集：重新配对仪式。开始前 Mei 抛出炸弹：三位真富豪里，有一位从第一晚起就在装骗子。两位男主都看着你。结尾停在选择上：留下现在的搭档，或者重新配对，改选另一位男主（换线）。",
+  "第 7 集：第二次淘汰仪式。Mei 念出你的票，Brody 被送走，揭晓是骗子。他笑容僵住，当众念出骗子同盟的名单，刚建立的信任被炸开一道缝。Wes 线里，Wes 可能在这之后主动向你认罪。结尾停在名单引出的那个名字上。",
+  "第 8 集：天台星空。他第一次不躲，说出心里话。Wes 说：一开始是任务，后来不是了。Jasper 说：我不是那四个之一，我只是想知道你会不会留下一个骗子。要不要靠近、要不要吻，全由你定。",
+  "第 9 集：最终仪式。篝火边 Mei 问你：你要带他回家吗？你做决定，Mei 揭晓真相，他按真相做出反应。"
+ ],
+ "endings": "Wes 线：① 你带他回家。Mei 揭晓他是四个骗子之一，奖金归他。如果他已经提前认罪，这就是你知情的选择，他留下的是真心；如果没有，你输了节目，却可能赢了一个人。② 你不带他回家，他输掉奖金，但会追出来对你说实话：医药费、任务卡、喜欢你是真的。已经认过罪的话，他只说一句“值了”。③ 你中途改选 Jasper、改选 Kian，或离开节目，就按新的选择走完。\nJasper 线：① 你带他回家。Mei 揭晓他是三个真富豪之一，你赢了，而且你是在以为他可能没钱时选的他。② 你不带他回家，他说出真实身份，问你愿不愿意不靠节目，再见一次。③ 如果你曾因为他“没钱”转身离开，他让开、不解释，失落留在沉默里。\n通用：你也可能和 Kian 走到最后（他是真的），或者主动离岛；无论哪条路，结局都要按真相表收束，你自己决定的事最大。",
+ "places": [
+  "篝火露台（夜，配对与淘汰仪式）",
+  "配对套房（夜）",
+  "白沙海滩（上午，夺旗赛）",
+  "无边泳池（白天/夜）",
+  "天台（夜，星空与望远镜）",
+  "户外吧台（傍晚/夜）"
+ ],
+ "ambience": [
+  "crackling bonfire, tiki torches hissing, distant waves, party chatter under deep house",
+  "soft waves through sheer curtains, ceiling fan hum, a wooden door clicking shut",
+  "morning surf on white sand, sea birds, wind snapping small red flags, bare feet sprinting",
+  "pool filter burble, water lapping at an infinity edge, palm fronds in the breeze, distant laughter",
+  "night wind on a rooftop, string lights buzzing faintly, far-off ocean, crickets",
+  "ice clinking in a shaker, glasses set on a wooden bar, low tropical music, palm rustle"
+ ],
+ "tone": "女性向恋爱真人秀悬疑喜剧。轻快互怼、一句话的反差，加上“谁在骗谁”的悬疑感；甜的时候是真甜，翻牌的时候不笑。旁白用第二人称“你”，近、轻、带一点观察者的冷幽默。热带夜晚，有点暧昧，也有点危险。",
+ "ep1_title_zh": "午夜之前选一个",
+ "ep1_title_en": "Pick One Before Midnight",
+ "rules": "1. 真相表永不改变：真富豪是 Jasper、Ethan、Kian，骗子是 Wes、Brody、Jude、Ravi。第一次仪式送走 Ethan（真），第二次送走 Brody（假），你的票不改变全场结果。反转的是他们怎么演、怎么藏，不是身份本身；只有听众明确说要改剧情才改。\n2. 不剧透：揭晓之前，任何角色都不说破谁真谁假。Mei 只在仪式上揭晓，不撒谎，不提前透露，被追问最多给一句暗示。男主的真相不早于第 4 集露实锤，Wes 线正式揭晓不早于第 6 集。旁白和选项都不替你说出你还没查到的事。\n3. 合同禁止自曝：Wes 和 Jasper 都不会随口承认身份，你拿出确凿证据时他们不再否认。Wes 主动认罪只能发生在重新配对之后、最终仪式之前，只发生一次，触发条件是你当众站过他、为他放弃过赢的机会，或说要带他回家。角色不编造假证据，不诬陷别人。\n4. 人设不崩：Wes 暖、快、爱自嘲，记得小事；Jasper 冷、短句、反问。两人都不是霸总，不命令你，不替你决定，不压低嗓子撩人。Sloane 只用嘴和小手段，不打人、不推人，装伤一局最多一次，不叫 sweetie。Kian 一局最多出招三次，被拒体面退一步。同一个人的同一招不演第二次。\n5. 证据只能来自感官上能感知的东西：说漏的话、太熟练的动作、手上的茧、酒的年份、一张卡片、一个文件夹。手机被收走，不谈具体资产，不看银行账户。Mei 的卡片永远是素面奶油色，提示卡和文件夹上的字用台词说出来。\n6. 你的意愿第一：你要换搭档、离岛、去找别人，当集兑现。你说停、后退、要离开，他立刻照做，不拦，不拿节目、配对或奖金逼你。你只回“嗯”“好”时，出招的人把这一招做完，但约会、亲密、选人这类事不算你答应；Kian 的约会只留时间和地点，去不去由你决定。\n7. 亲密：配对和镜头不等于许可，吻、拥抱只看你这一集的意愿。他先确认，吻后把下一步交回给你，吻不揭晓真假。不写亲吻以上的亲密细节。套房里他睡日床沙发。\n8. 恋综节奏：每一到两集 Mei 至少出场或广播一次，宣布下一个环节。大约每两集有一场你和其他男嘉宾（Ethan、Kian、Brody、Jude、Ravi）的正面戏，每场带出一条线索、一次诱惑或一个两难。淘汰仪式上 Mei 当众念出你投了谁，被投的人、搭档、Sloane、Kian 下一集按性格反应。仪式前一集的选项里，至少一个让你决定投谁（写出名字和理由）。\n9. 每集结尾停在一个人为自己刚出的招上（男主的赌约、Mei 的宣布、Sloane 的交易、Kian 的约会、另一位男主的条件）。两个选项是你对这一招的两种第一人称回应，中文 14–36 字，各有得失，不写原地拉扯的提问。重新配对的选项必须写成原话“重新配对：我改选 Jasper”或“重新配对：我改选 Wes”。\n10. 连续性：仪式在夜里的篝火露台，挑战在白天的沙滩或泳池边，不下水。两位男主都没有外套。你的衣服只在你自己要换时才换。那杯青柠鸡尾酒放下就是放下了。质问、对峙、揭晓、淘汰时，没有人笑。\n11. 全剧台词用美式英语，配中文意译；旁白用第二人称“你”指女主，她每场最多说一句。剧名、人物、桥段都是原创，不照搬原作《Don't Hate the Player》。"
+}

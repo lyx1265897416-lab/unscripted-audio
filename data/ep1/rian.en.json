@@ -1,0 +1,167 @@
+{
+ "title": "My Future Bride",
+ "amb": "waves crashing on rocks at dawn with gulls, then calm cave water lapping on marble steps with dripping echoes, then quiet marble hall with soft footsteps and muffled ocean hum",
+ "lines": [
+  {
+   "who": "NARR",
+   "text": "Beneath Saltpoint Coast, behind the Tidal Gate, lies a kingdom of the sea."
+  },
+  {
+   "who": "NARR",
+   "text": "By its oldest law, the prince cannot be crowned until he takes a bride. The council has already chosen one for him. Prince Rian has refused her."
+  },
+  {
+   "who": "NARR",
+   "text": "And when the gate glows, any human who finds it is kept... and made to forget."
+  },
+  {
+   "who": "NARR",
+   "text": "Saltpoint Coast. Six twelve in the morning. Cold wind, wet rock under your boots, gulls fighting overhead."
+  },
+  {
+   "who": "Mila",
+   "text": "[urgent] Look! The water's glowing! Hold on, I need this shot!"
+  },
+  {
+   "who": "NARR",
+   "text": "She crouches at the edge of the tide pool, camera up, her mustard hood flapping. Below the surface, blue light pulses like a heartbeat. Then the rock under her heel gives way."
+  },
+  {
+   "who": "NARR",
+   "text": "A wave folds over her. The yellow jacket is gone."
+  },
+  {
+   "who": "NARR",
+   "text": "You shout her name. You don't think. You dive."
+  },
+  {
+   "who": "NARR",
+   "text": "The cold hits your chest hard. Salt burns your nose. The roar fills your ears. You kick toward the light until your lungs start to ache."
+  },
+  {
+   "who": "NARR",
+   "text": "Something wraps around your waist. It's strong and steady. A long silver-blue tail flashes past your legs, and the sea pulls you somewhere else."
+  },
+  {
+   "who": "NARR",
+   "text": "Air. You're coughing on marble steps. Water laps behind you. Drops echo from a cave ceiling."
+  },
+  {
+   "who": "Rian",
+   "text": "[softly] Easy. You're breathing. Good. Keep doing that."
+  },
+  {
+   "who": "NARR",
+   "text": "His voice is young, close, a little amused. When you turn, he's already stepping back to give you room. He's on two legs now, in a coat of deep-sea blue that's still dripping."
+  },
+  {
+   "who": "NARR",
+   "text": "You ask him where you are."
+  },
+  {
+   "who": "Rian",
+   "text": "The Tidal Gate. Right under your coast. You dove after someone, didn't you?"
+  },
+  {
+   "who": "NARR",
+   "text": "You grab his sleeve. My friend. Yellow jacket. Where is she?"
+  },
+  {
+   "who": "Rian",
+   "text": "Inside. Come on. Stay close."
+  },
+  {
+   "who": "NARR",
+   "text": "He leads you up into a long marble hall. Pillars. Soft footsteps. The ocean hums through the walls. Your wet socks squeak with every step."
+  },
+  {
+   "who": "NARR",
+   "text": "At the end of the hall, a woman is waiting. She has silver at her temples and a dark blue book open in her hands."
+  },
+  {
+   "who": "Vessa",
+   "text": "Rian. You know this wing is closed."
+  },
+  {
+   "who": "NARR",
+   "text": "Her eyes move to you. Calm. Measuring."
+  },
+  {
+   "who": "Vessa",
+   "text": "Your friend is safe. She is resting, and she is being looked after. You, however, are not registered."
+  },
+  {
+   "who": "Vessa",
+   "text": "Unregistered visitors are held, and their memory of this place is sealed. That is the law. I keep it."
+  },
+  {
+   "who": "NARR",
+   "text": "Sealed. Your mouth goes dry. Mila, this morning, this whole hall. All of it, gone?"
+  },
+  {
+   "who": "NARR",
+   "text": "You step toward her. You tell her you are not leaving without your friend."
+  },
+  {
+   "who": "Vessa",
+   "text": "Then you will be held until the registry decides. Guards."
+  },
+  {
+   "who": "NARR",
+   "text": "Footsteps close in behind you. Metal rings on marble."
+  },
+  {
+   "who": "Rian",
+   "text": "No need."
+  },
+  {
+   "who": "NARR",
+   "text": "He moves to your side. Not in front of you. Beside you, his shoulder almost touching yours."
+  },
+  {
+   "who": "Rian",
+   "text": "She is with me."
+  },
+  {
+   "who": "NARR",
+   "text": "The whole hall seems to hold its breath."
+  },
+  {
+   "who": "Rian",
+   "text": "My future bride."
+  },
+  {
+   "who": "NARR",
+   "text": "You stare at him. He doesn't look back. He's smiling at the regent as if this were the easiest thing in the world."
+  },
+  {
+   "who": "Rian",
+   "text": "[low] Play along. I'll take you to her."
+  },
+  {
+   "who": "NARR",
+   "text": "Only you hear it. Near his ear, something glints faint blue, then fades."
+  },
+  {
+   "who": "Vessa",
+   "text": "A bride. The council chose your match months ago, and you refused her. Now you bring me a stranger from the tide."
+  },
+  {
+   "who": "NARR",
+   "text": "Her pen hovers over the page. Then she looks straight at you."
+  },
+  {
+   "who": "Vessa",
+   "text": "Is that true?"
+  },
+  {
+   "who": "NARR",
+   "text": "The guards wait. The prince waits. Somewhere past these walls, Mila is waiting too."
+  }
+ ],
+ "prompt": "The regent's pen hovers over her book, and the whole hall is waiting for your answer. Do you play along with the prince, or call him out right here?",
+ "choices": [
+  "\"Yes. I'm his future bride.\" I take his arm.",
+  "\"Your bride? Since when am I your bride?\""
+ ]
+}

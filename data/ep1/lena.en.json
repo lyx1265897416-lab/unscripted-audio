@@ -1,0 +1,159 @@
+{
+ "title": "Don't Trust the Me Who's Talking",
+ "amb": "quiet desk at night, laptop fan hum, faint rain on a window; on the line: dead concrete room, buzzing red emergency light, muffled pounding on a steel door",
+ "lines": [
+  {
+   "who": "NARR",
+   "text": "Eleven twenty-four. Your laptop fan hums. Rain ticks against the window."
+  },
+  {
+   "who": "NARR",
+   "text": "Your phone buzzes once. A voice memo from Lena. Four seconds long."
+  },
+  {
+   "who": "Lena",
+   "text": "[whispering] Don't trust the me who's talking."
+  },
+  {
+   "who": "NARR",
+   "text": "That's all. You've never seen her face. But you know this voice. You'd know it anywhere."
+  },
+  {
+   "who": "NARR",
+   "text": "On your second screen, the Meridian building feed is open. A woman's voice comes through, bright and easy."
+  },
+  {
+   "who": "Lena",
+   "text": "I'm fine. Everything's fine down here. Don't send anyone."
+  },
+  {
+   "who": "NARR",
+   "text": "A paper cup scrapes across a desk. Short. Dry."
+  },
+  {
+   "who": "NARR",
+   "text": "Under the feed sits an anonymous message. It came before any of this. Midnight. Gas. Six years ago, the same night."
+  },
+  {
+   "who": "NARR",
+   "text": "The feed rolls on. Then you hear the same breath again, and the same little laugh."
+  },
+  {
+   "who": "Lena",
+   "text": "I'm fine. Everything's fine down here. Don't send anyone."
+  },
+  {
+   "who": "NARR",
+   "text": "The same scrape of the cup follows. It's word for word. Even the hiss underneath matches."
+  },
+  {
+   "who": "NARR",
+   "text": "You open the direct line. It rings once."
+  },
+  {
+   "who": "Lena",
+   "text": "[low] You got it. Good. Keep your voice down."
+  },
+  {
+   "who": "NARR",
+   "text": "Her breathing is right against your ear. Behind her, a red light buzzes like a trapped insect."
+  },
+  {
+   "who": "Lena",
+   "text": "I'm in the screening room. Sub-level two. The door's locked."
+  },
+  {
+   "who": "Lena",
+   "text": "Power's dead. It locked about seven minutes ago. I didn't touch it."
+  },
+  {
+   "who": "NARR",
+   "text": "You tell her the building feed is playing her voice. It keeps saying she's fine."
+  },
+  {
+   "who": "Lena",
+   "text": "I heard it through the hall speaker. That's not me. What do you see on yours?"
+  },
+  {
+   "who": "NARR",
+   "text": "You tell her what you hear. The same sentence, played twice. Every sound is identical."
+  },
+  {
+   "who": "NARR",
+   "text": "Then a bang. Steel shudders through the line. A second bang follows."
+  },
+  {
+   "who": "NARR",
+   "text": "Someone is on the other side of her door."
+  },
+  {
+   "who": "Lena",
+   "text": "Okay. Someone's out there. Those are fists. Nobody's knocking."
+  },
+  {
+   "who": "NARR",
+   "text": "The pounding stops. The silence afterward is worse."
+  },
+  {
+   "who": "NARR",
+   "text": "A cold thought settles in. The feed sounded like her too. So how do you know this one is real?"
+  },
+  {
+   "who": "NARR",
+   "text": "You tell her you need proof. It has to be something no recording could know."
+  },
+  {
+   "who": "Lena",
+   "text": "[tense] Fair. Ask me. Fast."
+  },
+  {
+   "who": "NARR",
+   "text": "You pick two words neither of you has ever said. Blue umbrella."
+  },
+  {
+   "who": "NARR",
+   "text": "Her breath catches. Then she answers."
+  },
+  {
+   "who": "Lena",
+   "text": "Blue umbrella. Want a knock too?"
+  },
+  {
+   "who": "NARR",
+   "text": "Two soft taps land right on the mic. They're live and close. It's her."
+  },
+  {
+   "who": "NARR",
+   "text": "On your other screen, the feed is still cheerful. I'm fine. Scrape."
+  },
+  {
+   "who": "Lena",
+   "text": "So. You believe me now?"
+  },
+  {
+   "who": "NARR",
+   "text": "Before you can answer, you hear something small and metal."
+  },
+  {
+   "who": "NARR",
+   "text": "It's the door handle. Someone is turning it slowly from outside."
+  },
+  {
+   "who": "Lena",
+   "text": "[whispering] The handle's moving. Someone's trying it."
+  },
+  {
+   "who": "Lena",
+   "text": "There's a latch by the frame. Or I hide. Tell me which."
+  },
+  {
+   "who": "NARR",
+   "text": "Eleven twenty-seven. The handle stops halfway. Then it holds there, waiting."
+  }
+ ],
+ "prompt": "The handle is half-turned and someone is on the other side. Lena is waiting for you to tell her what to do right now.",
+ "choices": [
+  "Lena, throw the latch now. Lean on it and don't make a sound.",
+  "Lena, leave the door. Get behind the projector, kill your light, and wait."
+ ]
+}

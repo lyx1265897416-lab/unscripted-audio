@@ -1,0 +1,155 @@
+{
+ "_说明": "每部剧的配音表。zh 用 ElevenLabs 声音库原生中文声（voice_id），en 用 Eleven 预置声（名字）。模型一律 elevenlabs/eleven-v4。lead=true 的角色台词句首加 [quietly]（11-05 她认可的低声感）。 11-06 抽查后改：旁白 Siqi Liu 其实是男声→Susan；Chloe Chan 说粤语→Mila 用 Xiaoxi、Sloane 用 Karo Yang；Nora 改 Jane（避免和旁白同声）。",
+ "NARR": {
+  "zh": "kAIqZ7fZv234ClKXwzDx",
+  "zh_name": "Susan",
+  "en": "Sarah"
+ },
+ "magnus": {
+  "Magnus": {
+   "zh": "MQkiCZS3mnl44caDtxkJ",
+   "zh_name": "Guan Tang Bao",
+   "en": "Brian",
+   "lead": true
+  },
+  "Luca": {
+   "zh": "BrbEfHMQu0fyclQR7lfh",
+   "zh_name": "Kevin Tu",
+   "en": "Eric"
+  },
+  "Selene": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Charlotte"
+  },
+  "Harland": {
+   "zh": "hZTuv9Zqrq4yHYrEmF1r",
+   "zh_name": "Adam Li",
+   "en": "George"
+  }
+ },
+ "rafael": {
+  "Rafael": {
+   "zh": "4VZIsMPtgggwNg7OXbPY",
+   "zh_name": "James Gao",
+   "en": "Chris",
+   "lead": true
+  },
+  "Maya": {
+   "zh": "YxbjaPemDJV2xlfvkiIG",
+   "zh_name": "Yun",
+   "en": "Laura"
+  },
+  "Cole": {
+   "zh": "hZTuv9Zqrq4yHYrEmF1r",
+   "zh_name": "Adam Li",
+   "en": "Roger"
+  },
+  "Ryan": {
+   "zh": "OjkyUe8dIihIFvOisuvM",
+   "zh_name": "Tung Wong",
+   "en": "Harry"
+  },
+  "Evan": {
+   "zh": "WkcRFJo38X9XEP8kGExm",
+   "zh_name": "Vincent",
+   "en": "Liam"
+  }
+ },
+ "rowan": {
+  "Rowan": {
+   "zh": "qV41hPnIn6kbvO8hMtPG",
+   "zh_name": "Devon",
+   "en": "Will",
+   "lead": true
+  },
+  "Nora": {
+   "zh": "0Aj540a9UWvQPWdx9Zq4",
+   "zh_name": "Jane",
+   "en": "Laura"
+  }
+ },
+ "rian": {
+  "Rian": {
+   "zh": "tSv4yoTPFFmCMaJpNf0A",
+   "zh_name": "Ian",
+   "en": "Liam",
+   "lead": true
+  },
+  "Vessa": {
+   "zh": "Iqi0ix5WGtiSXX9VDZB4",
+   "zh_name": "Helen Sun",
+   "en": "Alice"
+  },
+  "Mila": {
+   "zh": "9DMBSOAnMDPiFAsz1ZGK",
+   "zh_name": "Xiaoxi",
+   "en": "Aria"
+  },
+  "Sera": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Matilda"
+  }
+ },
+ "island": {
+  "Wes": {
+   "zh": "MI36FIkp9wRP7cpWKPTl",
+   "zh_name": "Evan Zhao",
+   "en": "Charlie",
+   "lead": true
+  },
+  "Jasper": {
+   "zh": "z1etx2H6NQWq1LH6oqJA",
+   "zh_name": "Wilson",
+   "en": "Eric",
+   "lead": true
+  },
+  "Kian": {
+   "zh": "auoHciLZJwKTwYUoRTYz",
+   "zh_name": "Neil Chuang",
+   "en": "Bill"
+  },
+  "Mei": {
+   "zh": "Iqi0ix5WGtiSXX9VDZB4",
+   "zh_name": "Helen Sun",
+   "en": "Alice"
+  },
+  "Sloane": {
+   "zh": "5mZxJZhSmJTjL7GoYfYI",
+   "zh_name": "Karo Yang",
+   "en": "Jessica"
+  }
+ },
+ "lena": {
+  "Lena": {
+   "zh": "r6qgCCGI7RWKXCagm158",
+   "zh_name": "Anna Su",
+   "en": "Jessica",
+   "lead": true
+  },
+  "Voss": {
+   "zh": "M0TrFmFeBJS9H4xzdk8Z",
+   "zh_name": "Steven Gor",
+   "en": "Daniel"
+  },
+  "Hollis": {
+   "zh": "WuLq5z7nEcrhppO0ZQJw",
+   "zh_name": "Martin Li",
+   "en": "Roger"
+  }
+ },
+ "mii": {
+  "Mii": {
+   "zh": "hkfHEbBvdQFNX4uWHqRF",
+   "zh_name": "Stacy",
+   "en": "Lily",
+   "lead": true
+  },
+  "Store Clerk": {
+   "zh": "tOuLUAIdXShmWH7PEUrU",
+   "zh_name": "Julia",
+   "en": "Sarah"
+  }
+ }
+}

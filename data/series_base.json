@@ -1,0 +1,303 @@
+[
+ {
+  "id": "magnus",
+  "pack": "magnus",
+  "title": {
+   "zh": "与狼为伍",
+   "en": "Running with Wolves"
+  },
+  "lead": {
+   "zh": "Magnus · 狼人 Alpha",
+   "en": "Magnus · Werewolf Alpha"
+  },
+  "hook": {
+   "zh": "十分钟后他就要订婚了，却在车库扣住了你的手腕。之后每一幕，都由你说的话实时生成。",
+   "en": "He gets engaged in ten minutes, yet he's holding your wrist in the garage. Every scene after this is generated live from what you say."
+  },
+  "tags": [
+   {
+    "zh": "狼人",
+    "en": "Werewolf"
+   },
+   {
+    "zh": "命定之番",
+    "en": "Fated mate"
+   },
+   {
+    "zh": "订婚前夜",
+    "en": "Engagement night"
+   },
+   {
+    "zh": "第一视角",
+    "en": "First person"
+   }
+  ],
+  "genres": [
+   "Werewolf",
+   "Billionaire",
+   "Fated mates"
+  ],
+  "accent": "#c9a227",
+  "cover": "covers/magnus.jpg",
+  "avatar": "avatars/magnus.jpg",
+  "name": "Magnus"
+ },
+ {
+  "id": "rafael",
+  "pack": "rafael",
+  "title": {
+   "zh": "这次，不是演的",
+   "en": "Not Pretending This Time"
+  },
+  "lead": {
+   "zh": "Rafael Ortega · 摩托车店老板",
+   "en": "Rafael Ortega · Motorcycle shop owner"
+  },
+  "hook": {
+   "zh": "朋友六年，室友三年。昨晚他替你挡前任，假扮了一次男朋友，还有一个吻。今天早上他承认：临时的是身份，不是心意。你怎么回答，由你决定。",
+   "en": "Friends for six years, roommates for three. Last night he played your boyfriend to get your ex off your back, and there was a kiss. This morning he admits the role was temporary, the feeling isn't. How you answer is up to you."
+  },
+  "tags": [
+   {
+    "zh": "室友",
+    "en": "Roommates"
+   },
+   {
+    "zh": "假扮情侣",
+    "en": "Fake dating"
+   },
+   {
+    "zh": "告白",
+    "en": "Confession"
+   },
+   {
+    "zh": "第三视角",
+    "en": "Third person"
+   }
+  ],
+  "genres": [
+   "Romance",
+   "Friends to lovers",
+   "Fake dating"
+  ],
+  "accent": "#c8743c",
+  "cover": "covers/rafael.jpg",
+  "avatar": "avatars/rafael.jpg",
+  "name": "Rafael"
+ },
+ {
+  "id": "rowan",
+  "pack": "rowan",
+  "title": {
+   "zh": "今天，再喜欢我一次",
+   "en": "Meet Me, Again"
+  },
+  "lead": {
+   "zh": "Rowan · 修理工",
+   "en": "Rowan · Repairman"
+  },
+  "hook": {
+   "zh": "海边温室的女主人隔着院门，拦下一个来修招牌的陌生人。他叫得出你的习惯，像早就认识你。他到底是谁、要不要让他进门，由你决定。",
+   "en": "Across the garden gate of her seaside greenhouse, she stops a stranger who came to fix the sign. He knows your habits, as if he has known you for a long time. Who he is, and whether he gets in, is up to you."
+  },
+  "tags": [
+   {
+    "zh": "海边温室",
+    "en": "Seaside greenhouse"
+   },
+   {
+    "zh": "治愈",
+    "en": "Healing"
+   },
+   {
+    "zh": "悬念",
+    "en": "Mystery"
+   },
+   {
+    "zh": "第三视角",
+    "en": "Third person"
+   }
+  ],
+  "genres": [
+   "Romance",
+   "Healing",
+   "Mystery"
+  ],
+  "accent": "#8aa36b",
+  "cover": "covers/rowan.jpg",
+  "avatar": "avatars/rowan.jpg",
+  "name": "Rowan"
+ },
+ {
+  "id": "rian",
+  "pack": "rian",
+  "title": {
+   "zh": "人鱼王子的假新娘",
+   "en": "The Sea Prince's Almost Bride"
+  },
+  "lead": {
+   "zh": "Rian Thalys · 人鱼王子",
+   "en": "Rian Thalys · Merman prince"
+  },
+  "hook": {
+   "zh": "为了找回被潮水卷走的好友，你跟着跳进海里，被人鱼王子救进海下王宫。守门的摄政官不放外人进来，他当众说你是“我未来的新娘”。接不接这出戏，由你决定。",
+   "en": "You dive after your best friend when the tide takes her, and a merman prince pulls you into his palace beneath the sea. When the regent won't let an outsider in, he tells the whole hall you're his future bride. Whether you play along is up to you."
+  },
+  "tags": [
+   {
+    "zh": "人鱼",
+    "en": "Merman"
+   },
+   {
+    "zh": "假婚约",
+    "en": "Fake engagement"
+   },
+   {
+    "zh": "海下王宫",
+    "en": "Undersea palace"
+   },
+   {
+    "zh": "第三视角",
+    "en": "Third person"
+   }
+  ],
+  "genres": [
+   "Fantasy",
+   "Merman",
+   "Fake engagement"
+  ],
+  "accent": "#6f8fd6",
+  "cover": "covers/rian.jpg",
+  "avatar": "avatars/rian.jpg",
+  "name": "Rian"
+ },
+ {
+  "id": "island",
+  "pack": "island-liars",
+  "title": {
+   "zh": "三真四假",
+   "en": "Four Liars, One Island"
+  },
+  "lead": {
+   "zh": "Wes / Jasper · 七位男嘉宾",
+   "en": "Wes / Jasper · Seven bachelors"
+  },
+  "hook": {
+   "zh": "海岛恋综，七个男嘉宾：三个是真千万富翁，四个是装富豪来骗奖金的。你选一个配对，一边心动一边验真假。最后谁是真的，看你怎么查。",
+   "en": "An island dating show with seven bachelors: three are real millionaires, four are faking it for the prize money. Pair up, fall for someone, and find out who's lying. What you uncover is up to you."
+  },
+  "tags": [
+   {
+    "zh": "恋综",
+    "en": "Dating show"
+   },
+   {
+    "zh": "真假富豪",
+    "en": "Real or fake"
+   },
+   {
+    "zh": "选男主",
+    "en": "Pick your guy"
+   },
+   {
+    "zh": "第三视角",
+    "en": "Third person"
+   }
+  ],
+  "genres": [
+   "Reality show",
+   "Billionaire",
+   "Mystery"
+  ],
+  "accent": "#d9a85c",
+  "cover": "covers/island.jpg",
+  "avatar": "avatars/island.jpg",
+  "name": "Jasper"
+ },
+ {
+  "id": "lena",
+  "pack": "lena",
+  "title": {
+   "zh": "别信这段直播",
+   "en": "Don't Trust This Feed"
+  },
+  "lead": {
+   "zh": "Lena Hart · 失联的档案员",
+   "en": "Lena Hart · Missing archivist"
+  },
+  "hook": {
+   "zh": "今晚 00:00，Lena 被锁的那层会放气。有人提前告诉了你，她自己还不知道。转播里的她一直说没事，那是昨晚录的。隔着手机带她出来，带上证据。赶不上，三分钟后“她”会打给你。",
+   "en": "At 00:00 tonight, gas fires on the floor where Lena is locked in. Someone told you. She doesn't know. On the feed she keeps saying she's fine, but that was recorded last night. Get her out, with proof. Miss it, and three minutes later \"she\" will call you."
+  },
+  "tags": [
+   {
+    "zh": "悬疑解谜",
+    "en": "Mystery"
+   },
+   {
+    "zh": "午夜倒计时",
+    "en": "Countdown"
+   },
+   {
+    "zh": "6 个结局",
+    "en": "6 endings"
+   },
+   {
+    "zh": "失败可重来",
+    "en": "Retry with memory"
+   }
+  ],
+  "genres": [
+   "Thriller",
+   "Mystery",
+   "Countdown"
+  ],
+  "accent": "#7f8fa6",
+  "cover": "covers/lena.jpg",
+  "avatar": "avatars/lena.jpg",
+  "name": "Lena"
+ },
+ {
+  "id": "mii",
+  "pack": "mii",
+  "title": {
+   "zh": "今天不要上班，咪养你",
+   "en": "No Work Today, Mii's Got You"
+  },
+  "lead": {
+   "zh": "咪 · 三个月大的小奶猫",
+   "en": "Mii · a 3-month-old kitten"
+  },
+  "hook": {
+   "zh": "休假日的早上，小奶猫咪决定今天由它来照顾你。去厨房、去公园、去电影院，你说去哪就去哪。",
+   "en": "On your day off, little Mii decides it's taking care of you today. Kitchen, park, cinema: wherever you say."
+  },
+  "tags": [
+   {
+    "zh": "治愈",
+    "en": "Cozy"
+   },
+   {
+    "zh": "小奶猫",
+    "en": "Kitten"
+   },
+   {
+    "zh": "日常",
+    "en": "Slice of life"
+   },
+   {
+    "zh": "主人视角",
+    "en": "Owner POV"
+   }
+  ],
+  "genres": [
+   "Cozy",
+   "Pets",
+   "Slice of life"
+  ],
+  "accent": "#e8a25a",
+  "cover": "covers/mii.jpg",
+  "avatar": "avatars/mii.jpg",
+  "name": "Mii"
+ }
+]

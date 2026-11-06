@@ -1,0 +1,159 @@
+{
+ "title": "Pick One Before Midnight",
+ "amb": "crackling bonfire, tiki torches hissing, distant waves, party chatter under deep house; later night wind on a rooftop, string lights buzzing faintly, crickets",
+ "lines": [
+  {
+   "who": "Mei",
+   "text": "Seven gorgeous men. Three of them are millionaires looking for a wife."
+  },
+  {
+   "who": "NARR",
+   "text": "The bonfire cracks. Sparks drift past your face. The clock above the bar says eleven fifty-five."
+  },
+  {
+   "who": "Mei",
+   "text": "The other four are broke... and faking it for a million dollars."
+  },
+  {
+   "who": "Mei",
+   "text": "Fall for a fake, and he's the one you fly home with."
+  },
+  {
+   "who": "NARR",
+   "text": "She lifts a blank cream card and turns it slowly, so everyone can see there's nothing on it."
+  },
+  {
+   "who": "Mei",
+   "text": "At midnight, ladies, you couple up. Same suite. Same team. And when you vote, everyone hears it."
+  },
+  {
+   "who": "NARR",
+   "text": "Heels click on stone right behind you. Perfume, sweet and sharp."
+  },
+  {
+   "who": "Sloane",
+   "text": "Champagne dress, night one? Bold. Shame you won't make it to Friday."
+  },
+  {
+   "who": "NARR",
+   "text": "\"Then I'd better work fast,\" you tell her."
+  },
+  {
+   "who": "Sloane",
+   "text": "Fast. Cute. I'll try to remember you."
+  },
+  {
+   "who": "NARR",
+   "text": "Ice rattles in a shaker. A glass lands beside your hand, cold against your knuckles."
+  },
+  {
+   "who": "Wes",
+   "text": "Ignore her. I'm Wes. This one's yours. Lime, no sugar, no tiny umbrella."
+  },
+  {
+   "who": "NARR",
+   "text": "Earlier you told a stranger at check-in that you hate sweet drinks. You never told him."
+  },
+  {
+   "who": "Wes",
+   "text": "I listen. Also, the girl at check-in talks a lot. Mostly the first one, though."
+  },
+  {
+   "who": "NARR",
+   "text": "You ask him straight out whether he's real or fake."
+  },
+  {
+   "who": "Wes",
+   "text": "Ask me again in a week. I'll still be here."
+  },
+  {
+   "who": "Wes",
+   "text": "[chuckles softly] That came out fast, didn't it? I practiced it in the mirror. Kidding. Mostly."
+  },
+  {
+   "who": "NARR",
+   "text": "Before he made the drink, he flicked the shaker, caught it, and poured, all in one easy motion. You remember that."
+  },
+  {
+   "who": "NARR",
+   "text": "Up on the stairs, someone isn't drinking or smiling. He's just watching you."
+  },
+  {
+   "who": "Jasper",
+   "text": "You want a straight answer? Not down there."
+  },
+  {
+   "who": "NARR",
+   "text": "You set the glass down on the bar and leave it there. The wooden steps creak under your bare feet."
+  },
+  {
+   "who": "NARR",
+   "text": "On the roof the wind is cooler. String lights hum, the ocean is a long way off, and the crickets are loud. He leans on the rail and doesn't turn around."
+  },
+  {
+   "who": "Jasper",
+   "text": "Everyone down there's selling something. Even the ones who don't need to."
+  },
+  {
+   "who": "NARR",
+   "text": "You ask him what he's selling."
+  },
+  {
+   "who": "Jasper",
+   "text": "Nothing. Would you believe me either way?"
+  },
+  {
+   "who": "Jasper",
+   "text": "[quietly] Ask me a better question. Why'd you come here?"
+  },
+  {
+   "who": "NARR",
+   "text": "You tell him you came for a real one, not a check."
+  },
+  {
+   "who": "NARR",
+   "text": "For a second, the corner of his mouth moves."
+  },
+  {
+   "who": "Jasper",
+   "text": "Huh. That's not what they usually say."
+  },
+  {
+   "who": "NARR",
+   "text": "Down below, a gong. The music cuts out. In the quiet, all you can hear is the torches hissing."
+  },
+  {
+   "who": "Mei",
+   "text": "Midnight, everyone. Ladies, step up. And our front-runner goes first."
+  },
+  {
+   "who": "NARR",
+   "text": "Back by the fire, every face turns toward you. Wes stands by the bar, his grin a little too ready. Jasper stays at the edge of the light with his arms folded."
+  },
+  {
+   "who": "Sloane",
+   "text": "[softly] Choose carefully. Whoever you don't take... is mine."
+  },
+  {
+   "who": "NARR",
+   "text": "She means it. Her fingers are already drifting toward both of them."
+  },
+  {
+   "who": "Wes",
+   "text": "No pressure. I'm just the guy who already knows how you take your coffee. Black, right?"
+  },
+  {
+   "who": "Jasper",
+   "text": "Pick for a reason. Not a face."
+  },
+  {
+   "who": "Mei",
+   "text": "One choice. Two men. And the whole island watching. So. Who's it going to be?"
+  }
+ ],
+ "prompt": "午夜钟声刚落，Mei 等你开口，Sloane 等着把剩下那个挽走。你走向谁？",
+ "choices": [
+  "我穿过篝火，牵起 Wes 的手：就你了",
+  "我走到火光边的 Jasper 面前：我选你"
+ ]
+}
