@@ -27,6 +27,27 @@ BASE = {s['id']: s for s in json.load(open(DATA / 'series_base.json'))}
 VOICES = json.load(open(DATA / 'voices.json'))
 WORLD = {sid: json.load(open(DATA / 'world' / f'{sid}.json')) for sid in BASE}
 MOTION = json.load(open(DATA / 'motion.json')) if (DATA / 'motion.json').exists() else {}  # 播放器动态封面（build_motion.py）
+VIS = {sid: json.load(open(DATA / 'visuals' / f'{sid}.json')) for sid in BASE if (DATA / 'visuals' / f'{sid}.json').exists()}  # 画面库（build_visuals.py）
+
+
+def vis_card(sid):
+    v = VIS.get(sid)
+    return {'clips': {c['id']: c['src'] for c in v['clips']}, 'pool': v['pool']} if v else None
+
+
+def ep1_with_visuals(ep, series, lang):
+    """第 1 集按逐句字幕时间配画面（build_ep1_visuals.py 的逐句映射），相邻同一片段合并成一段"""
+    f = DATA / 'ep1_visuals' / f'{series}.{lang}.json'
+    if not ep or not f.exists(): return ep
+    m = {x['line']: x['clip'] for x in json.load(open(f))}; tl = []
+    for i, c in enumerate(ep.get('cues') or []):
+        clip = m.get(i)
+        if not clip: continue
+        if tl and tl[-1]['clip'] == clip: tl[-1]['e'] = c['e']
+        else: tl.append({'s': c['s'] if tl else 0.0, 'e': c['e'], 'clip': clip})
+    for a, b in zip(tl, tl[1:]): a['e'] = b['s']  # 时间轴连续，句间停顿不黑屏
+    if tl: tl[-1]['e'] = max(tl[-1]['e'], ep.get('dur') or 0)
+    return dict(ep, visuals=tl)
 STATS = {'magnus': ('2.4M', 4.9), 'rafael': ('1.1M', 4.8), 'rowan': ('640K', 4.7), 'rian': ('890K', 4.8), 'island': ('1.6M', 4.7), 'lena': ('720K', 4.8), 'mii': ('530K', 4.9)}  # 展示用
 MODEL_TTS = 'elevenlabs/eleven-v4'
 FALLBACK = os.environ.get('WRITER_FALLBACK', 'z-ai/glm-5.3-prime')
@@ -203,7 +224,7 @@ RULES = {
 
 FORMAT = '''OUTPUT FORMAT — plain lines only, in this order, nothing else:
 TITLE: <episode title{t}>
-<Speaker>: <line>        (Speaker is NARR or one of: {cast})
+<Speaker>: <line> {clip-id}        (Speaker is NARR or one of: {cast}; end every line with the id of the best-matching clip from the CLIP LIBRARY in curly braces, e.g. {c12}; if nothing fits use a still {s00} or {idle}; the same clip at most 3 lines in a row)
 ... 9–13 lines ...
 PROMPT: <one line above the choice: the situation, addressed to "you"/“你”>
 C1: <her possible reply/action, first person, short>
@@ -218,7 +239,14 @@ def system_prompt(sess):
             'You are the writer of a women-focused serialized audio drama (Pocket FM style), writing the next episode live for one listener.')
     return '\n\n'.join([head, '世界卡（内部资料，真相按节奏揭晓，不提前剧透）：\n' + json.dumps(w, ensure_ascii=False),
                         RULES[lang].replace('{name}', sess['name']),
+                        clip_library(s),
                         FORMAT.replace('{cast}', ', '.join(cast)).replace('{t}', '，6–10 字' if lang == 'zh' else ', 2–5 words')])
+
+
+def clip_library(sid):
+    v = VIS.get(sid)
+    if not v: return ''
+    return 'CLIP LIBRARY（画面库：播放器在这句台词播放时显示的静音画面，按画面内容挑）：\n' + '\n'.join(f"{c['id']}: {c['cap'][:110]}" for c in v['clips'])
 
 
 def story_so_far(sess):
@@ -301,8 +329,11 @@ def run_episode(job, sess, user_msg):
         if k == 'END': ep['ending'] = v.lower().startswith('y'); return
         who = 'NARR' if k.upper() == 'NARR' else (k if k in cast else None)
         if not who or not v: return
+        m = re.search(r'\s*\{([A-Za-z0-9_]+)\}\s*$', v); clip = None
+        if m:
+            v = v[:m.start()].strip(); clip = m.group(1) if VIS.get(series) and m.group(1) in {c['id'] for c in VIS[series]['clips']} else None
         if len(ep['lines']) >= 16: return
-        i = len(ep['lines']); ep['lines'].append({'who': who, 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None})
+        i = len(ep['lines']); ep['lines'].append({'who': who, 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None, 'clip': clip})
         job['status'] = 'voicing'; sess['_got_lines'] = True
         job['t'].setdefault('first_line', round(time.time() - t0, 2))
         th = threading.Thread(target=synth, args=(i, who, v), daemon=True); th.start(); ths.append(th)
@@ -319,7 +350,7 @@ def run_episode(job, sess, user_msg):
             if l['url'] is None: l['url'] = ''
         sess['eps'].append({'n': n, 'title': ep['title'], 'lines': [{'who': l['who'], 'text': l['text']} for l in ep['lines']], 'prompt': ep['prompt'], 'choices': ep['choices']})
         job['status'] = 'done'
-        log(sess['sid'], {'ep': n, 'writer': sess.get('writer'), 't': job['t'], 'ep_out': {k: v for k, v in ep.items() if k != 'lines'}, 'lines': [{k: l[k] for k in ('who', 'text', 'url')} for l in ep['lines']], 'at': time.strftime('%F %T')})
+        log(sess['sid'], {'ep': n, 'writer': sess.get('writer'), 't': job['t'], 'ep_out': {k: v for k, v in ep.items() if k != 'lines'}, 'lines': [{k: l[k] for k in ('who', 'text', 'url', 'clip')} for l in ep['lines']], 'at': time.strftime('%F %T')})
     except Exception as e:
         job['status'] = 'error'; job['error'] = str(e)[:300]
         log(sess['sid'], {'ep': n, 'error': traceback.format_exc()[-800:]})
@@ -449,7 +480,7 @@ def start_job(fn, *a):
 
 def ep1_job(job, series, lang):
     try:
-        job['status'] = 'voicing'; job['ep'] = produce_ep1(series, lang, job); job['status'] = 'done'
+        job['status'] = 'voicing'; job['ep'] = ep1_with_visuals(produce_ep1(series, lang, job), series, lang); job['status'] = 'done'
     except Exception as e:
         job['status'] = 'error'; job['error'] = str(e)[:300]; traceback.print_exc()
 
@@ -459,7 +490,7 @@ def series_card(sid, lang):
     b, w = BASE[sid], WORLD[sid]; c = ep1_cached(sid, lang)
     pl, ra = STATS.get(sid, ('100K', 4.7))
     return {'id': sid, 'title': b['title'][lang], 'lead': (b.get('lead') or {}).get(lang, ''), 'hook': b['hook'][lang],
-            'tags': [t[lang] for t in b.get('tags', [])], 'genres': b['genres'], 'accent': b['accent'], 'cover': b['cover'], 'avatar': b['avatar'], 'motion': MOTION.get(sid),
+            'tags': [t[lang] for t in b.get('tags', [])], 'genres': b['genres'], 'accent': b['accent'], 'cover': b['cover'], 'avatar': b['avatar'], 'motion': MOTION.get(sid), 'visuals': vis_card(sid),
             'callers': [{'key': x['key'], 'name': x['name'] if lang == 'en' else x['name_zh'], 'role': x['role_en'] if lang == 'en' else x['role_zh']} for x in callers(sid)],
             'stats': {'plays': pl, 'rating': ra}, 'ep1': {'title': w[f'ep1_title_{lang}'], 'dur': c['dur'] if c else None, 'ready': bool(c)}}
 
@@ -534,7 +565,7 @@ class H(BaseHTTPRequestHandler):
                                 'eps': [{'n': 1, 'title': sc['title'], 'lines': [{'who': l['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', l['text'])} for l in sc['lines']], 'prompt': sc['prompt'], 'choices': sc['choices']}]}
             log(sid, {'start': True, 'series': series, 'lang': lang, 'name': name, 'at': time.strftime('%F %T')})
             c = ep1_cached(series, lang)
-            return self._send(200, {'sid': sid, 'ep': c} if c else {'sid': sid, 'job': start_job(ep1_job, series, lang)})
+            return self._send(200, {'sid': sid, 'ep': ep1_with_visuals(c, series, lang)} if c else {'sid': sid, 'job': start_job(ep1_job, series, lang)})
         if u.path == '/api/call/start':
             series = body.get('series')
             if series not in BASE: return self._send(404, {'error': 'no series'})

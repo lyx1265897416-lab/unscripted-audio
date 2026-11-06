@@ -2258,7 +2258,7 @@ function renderPlayer() {
         <button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>
       </header>
       <div class="pl-body">
-        <div class="pl-art-wrap"><div class="pl-art"><img id="pl-art" alt=""><video id="pl-vid" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video><span class="pl-badge" id="pl-badge" hidden></span></div></div>
+        <div class="pl-art-wrap"><div class="pl-art"><img id="pl-art" alt=""><video id="pl-vid" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video><video id="pl-vid2" muted loop playsinline preload="auto" aria-hidden="true"></video><span class="pl-badge" id="pl-badge" hidden></span></div></div>
         <div class="pl-titles"><div class="tt"><h2 id="pl-title"></h2><p id="pl-ep"></p></div>
           <button class="icon-btn" data-act="pl-save" id="pl-save" aria-label="Add to Library">${ic('plus')}</button></div>
         <div class="pl-sub" id="pl-sub" aria-live="polite"></div>
@@ -2288,7 +2288,8 @@ function renderPlayer() {
   const art = $('#pl-art'); if (art.getAttribute('src') !== coverOf(s)) art.src = coverOf(s);
   // 动态封面（Pocket FM 式）：静音循环短片盖在封面上，能播了才淡入；没有短片就只显示封面
   const vid = $('#pl-vid'), mo = motionOf(s);
-  if (!mo) { vid.removeAttribute('src'); vid.classList.remove('on'); }
+  if (s.visuals) { renderVisual(true); }  // 有画面库：按台词切剧情画面（renderVisual），不用单一动态封面
+  else if (!mo) { vid.removeAttribute('src'); vid.classList.remove('on'); }
   else if (vid.dataset.src !== mo) {
     vid.dataset.src = mo; vid.classList.remove('on'); vid.src = mo;
     vid.oncanplay = () => { vid.classList.add('on'); vid.play().catch(() => {}); };
@@ -2297,6 +2298,39 @@ function renderPlayer() {
   $('#pl-share').dataset.id = s.id;
   updatePlayerUI();
 }
+/* 剧情画面：播放器封面区跟着音频切静音循环片段（服务器给的画面库 s.visuals = {clips:{id:src}, pool:[id…]}）。
+ * 第 1 集按 ep.visuals 时间轴 [{s,e,clip}]；实时集按当前这句的 line.clip；没有对应画面（等待、选择点、没标）就在 pool 里每 7 秒轮播
+ * 万能 live / 剧照。两个 <video> 交替淡入，片段能播了才切。 */
+const VS = { url: null };
+function visualClipId(s) {
+  const V = s.visuals, ep = P.ep;
+  if (!V) return null;
+  let id = null;
+  if (ep && !P.needChoice) {
+    if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; const v = ep.visuals.find(x => t >= x.s && t < x.e) || ep.visuals[ep.visuals.length - 1]; id = v && v.clip; }
+    else if (ep.kind === 'live') { const ln = (ep.lines || [])[P.idx]; id = ln && ln.clip; }
+  }
+  if (!id || !V.clips[id]) { const pool = (V.pool || []).filter(x => V.clips[x]); if (!pool.length) return null; id = pool[Math.floor(Date.now() / 7000) % pool.length]; }
+  return id;
+}
+function renderVisual(force) {
+  const s = byId(P.id); if (!s || !s.visuals) return;
+  const a = $('#pl-vid'), b = $('#pl-vid2'); if (!a || !b) return;
+  const id = visualClipId(s); if (!id) return;
+  const url = s.visuals.clips[id];
+  if (url === VS.url && !force) return;
+  if (url === VS.url) { const f = a.classList.contains('on') ? a : b; if (f.paused) f.play().catch(() => {}); return; }
+  VS.url = url;
+  const front = a.classList.contains('on') ? a : (b.classList.contains('on') ? b : null), back = front === a ? b : a;
+  back.src = url; back.load();
+  back.oncanplay = () => {
+    back.oncanplay = null;
+    if (VS.url !== url) return;
+    back.currentTime = 0; back.play().catch(() => {}); back.classList.add('on');
+    if (front) { front.classList.remove('on'); setTimeout(() => { if (!front.classList.contains('on')) front.pause(); }, 700); }
+  };
+}
+setInterval(() => { const pl = $('#player'); if (pl && pl.dataset.built && P.id) renderVisual(); }, 1000);
 let lastSubKey = '';
 function updatePlayerUI(force) {
   renderMiniLight();
@@ -2366,6 +2400,7 @@ function renderMiniLight() {
   if (m.dataset.sig !== miniSig()) renderMini();
 }
 function renderSubtitle(force) {
+  renderVisual();
   const sub = $('#pl-sub'); const ep = P.ep;
   if (!ep) { sub.innerHTML = ''; return; }
   const s = byId(P.id);
