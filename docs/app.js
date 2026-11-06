@@ -9,6 +9,8 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/** strip TTS performance tags like [softly] from on-screen captions */
+const cleanText = (t) => String(t == null ? '' : t).replace(/\[(?:[a-z]+(?:\s[a-z]+)*)\]\s*/gi, '').trim();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -139,6 +141,16 @@ const MX = {
     cast: [['Mii', { en: 'A 3-month-old kitten', zh: '三个月大的小奶猫' }, { en: 'Lily', zh: 'Tang Tang' }], ['Narrator', { en: 'Narrator', zh: '旁白' }, { en: 'Aria', zh: 'Xiao Yu' }]],
   },
 };
+const MOCK_CALLERS = {
+  magnus: [['Magnus', { en: 'Magnus Thorne', zh: '马格努斯·索恩' }]],
+  rafael: [['Rafael', { en: 'Rafael Ortega', zh: '拉斐尔·奥尔特加' }]],
+  rowan: [['Rowan', { en: 'Rowan', zh: '洛温' }]],
+  rian: [['Rian', { en: 'Rian Thalys', zh: '雷恩·瑟里斯' }]],
+  island: [['Wes', { en: 'Wes', zh: '韦斯' }, { en: 'Bachelor A · says he runs a surf bar in San Diego', zh: '男嘉宾，男主 A，自称在圣地亚哥开冲浪酒吧' }],
+    ['Jasper', { en: 'Jasper', zh: '贾斯珀' }, { en: 'Bachelor B · quiet, changes the subject when money comes up', zh: '男嘉宾，男主 B，话少冷淡，被问到钱就转开话题' }]],
+  lena: [['Lena', { en: 'Lena Hart', zh: 'Lena' }]],
+  mii: [['Mii', { en: 'Mii', zh: '咪' }]],
+};
 const MOCK_SYN_TAIL = {
   en: 'Episode 1 is a fully produced audio drama. From Episode 2 on, every episode is written and voiced live from the choice you make at the end of the last one, and the characters call you by your name.',
   zh: '第 1 集是完整制作的有声剧。从第 2 集起，每一集都按你在上一集结尾的选择实时写出、实时配音，角色会叫你的名字。',
@@ -160,6 +172,7 @@ const DEF = () => ({
   checkin: { last: null, streak: 0 },
   tasks: { date: null, listen: 0, newSeries: 0, choices: 0, share: 0, claimed: {} },
   ledger: [], unlocks: {}, saved: [], progress: {}, hist: [], played: [], waitFree: {}, sleep: null,
+  calls: [], callsUsed: {}, inDay: {}, callSpeed: 1,
 });
 let S = Object.assign(DEF(), store.get('ua.state', {}) || {});
 let SESS = store.get('ua.sess', {}) || {};
@@ -177,7 +190,7 @@ const getSess = (id) => SESS[skey(id)] || null;
 
 function ensureToday() {
   const t = dayStr();
-  if (S.tasks.date !== t) S.tasks = { date: t, listen: 0, newSeries: 0, choices: 0, share: 0, claimed: {} };
+  if (S.tasks.date !== t) S.tasks = { date: t, listen: 0, newSeries: 0, choices: 0, share: 0, call: 0, claimed: {} };
 }
 function addCoins(delta, label) {
   S.coins = Math.max(0, (S.coins || 0) + delta);
@@ -194,18 +207,53 @@ function markUnlocked(id, n) { (S.unlocks[id] = S.unlocks[id] || []).push(n); sa
 /* =========================================================================
  * 4. APIs: real (contract) + mock
  * ========================================================================= */
+/* API base: GitHub Pages serves the app statically and puts relay.json ({"base": tunnel URL}) next to it.
+ * No relay.json → same origin (the local relay serves the page itself). */
+let API_BASE = '';
+async function loadRelay() {
+  try {
+    const r = await fetch('relay.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) { API_BASE = ''; return false; }
+    const j = await r.json();
+    API_BASE = j && j.base ? String(j.base).trim().replace(/\/+$/, '') : '';
+    return !!API_BASE;
+  } catch (e) { API_BASE = ''; return false; }
+}
+let relayP = null;
+function reconnect() {
+  if (!relayP) {
+    toast('Reconnecting…');
+    relayP = loadRelay();
+    relayP.finally(() => setTimeout(() => { relayP = null; }, 4000));
+  }
+  return relayP;
+}
+const apiUrl = (path) => (API_BASE ? API_BASE + '/' + path.replace(/^\//, '') : new URL(path, location.href).toString());
+/** Server-relative media URLs ("/x.mp3") must hit the API host when the page is on Pages. */
+const absUrl = (u) => (u && API_BASE && u[0] === '/' && u[1] !== '/' ? API_BASE + u : u);
+/** fetch with one retry after re-reading relay.json when the tunnel may have rotated (network error only). */
+async function apiFetch(build, init) {
+  try { return await fetch(build(), init); } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    await reconnect();
+    return fetch(build(), init);
+  }
+}
 const RealAPI = {
   async get(path, params, withLang) {
-    const u = new URL(path, location.href);
-    if (withLang) u.searchParams.set('lang', LANG);
-    u.searchParams.set('k', TOKEN);
-    Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
-    const r = await fetch(u.toString(), { cache: 'no-store' });
+    const build = () => {
+      const u = new URL(apiUrl(path));
+      if (withLang) u.searchParams.set('lang', LANG);
+      u.searchParams.set('k', TOKEN);
+      Object.entries(params || {}).forEach(([k, v]) => { if (v != null) u.searchParams.set(k, v); });
+      return u.toString();
+    };
+    const r = await apiFetch(build, { cache: 'no-store' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   },
   async post(path, body) {
-    const r = await fetch(new URL(path, location.href).toString(), {
+    const r = await apiFetch(() => apiUrl(path), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ k: TOKEN }, body)),
     });
     if (!r.ok) {
@@ -220,6 +268,10 @@ const RealAPI = {
   play({ series, name }) { return this.post('api/play', { series, lang: LANG, name }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
   job(id) { return this.get('api/job', { id }, false); },
+  fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
+  callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction }); },
+  callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
+  callEnd({ cid, seconds }) { return this.post('api/call/end', { cid, seconds }); },
 };
 
 const MockAPI = {
@@ -230,7 +282,49 @@ const MockAPI = {
       id: b.id, title: L(b.title), lead: L(b.lead), hook: L(b.hook), tags: (b.tags || []).map(L), genres: b.genres,
       accent: b.accent, cover: b.cover, avatar: b.avatar, name: b.name,
       stats: x.stats || { plays: '100K', rating: 4.5 }, ep1: { title: L(x.ep1) || 'Episode 1', dur: 8.9, ready: true },
+      callers: (MOCK_CALLERS[b.id] || [[b.name, { en: b.name, zh: b.name }]]).map(([key, nm, role]) => ({ key, name: L(nm), role: role ? L(role) : L(b.lead) })),
     };
+  },
+  calls: new Map(),
+  async fillers() { await sleep(300); return { urls: ['mock/line_c.mp3'] }; },
+  async callStart({ series, who, direction }) {
+    await sleep(200);
+    const cid = 'mc' + (++this.seq);
+    this.calls.set(cid, { series, who, direction, n: 0, name: S.name || '' });
+    return { cid, who, job: this.mockCallJob(cid, '', 'start') };
+  },
+  async callTurn({ cid, text, via }) {
+    await sleep(200);
+    if (!this.calls.has(cid)) throw new Error('call ended');
+    return { job: this.mockCallJob(cid, text, via) };
+  },
+  async callEnd({ cid }) { this.calls.delete(cid); return { ok: true }; },
+  mockCallJob(cid, text, via) {
+    const c = this.calls.get(cid);
+    c.n += 1;
+    const zh = LANG === 'zh', nm = c.name || (zh ? '你' : 'you');
+    const t = (text || '').trim().replace(/[。！？.!?]+$/, '');
+    let lines;
+    if (c.n === 1) {
+      lines = c.direction === 'incoming'
+        ? (zh ? [`${nm}？……是我。`, '我知道很晚了。就是想听听你的声音。', '你现在方便说话吗？'] : [`${nm}? …It's me.`, "I know it's late. I just wanted to hear your voice.", 'Can you talk right now?'])
+        : (zh ? ['你打来了。', '我刚还在想，要不要先打给你。'] : ['You called.', 'I was just deciding whether to call you first.']);
+    } else {
+      const first = via === 'silence' || !t ? (zh ? '你不说话，我也听得见你在呼吸。' : "You're quiet. I can still hear you breathing.") : (zh ? `“${t}”……我记住了。` : `"${t}"… I'll remember that.`);
+      const pool = zh ? [`${nm}，你那边现在在下雨吗？`, '下次见面，我想当面跟你说完这句话。', '别挂，再陪我一会儿。', '我有件事一直没告诉你。'] : [`${nm}, is it raining where you are?`, 'Next time I see you, I want to finish this sentence in person.', "Don't hang up. Stay a little longer.", "There's something I never told you."];
+      lines = [first, pool[(c.n - 2) % pool.length]];
+      if (c.n % 2 === 1) lines.push(pool[(c.n - 1) % pool.length]);
+    }
+    const hangup = c.n >= 6;
+    if (hangup) lines = lines.slice(0, 1).concat([zh ? '我得挂了。明天，等我电话。' : "I have to go. Tomorrow — wait for my call."]);
+    const files = ['mock/line_c.mp3', 'mock/line_b.mp3', 'mock/line_a.mp3'];
+    const t0 = 1.0 + Math.random() * 0.6;
+    const pc = zh ? [['我也想你了。', '你怎么这么晚还不睡？'], ['那你现在说。', '我在听。'], ['你在哪？', '别挂。'], ['明天见？', '晚安。']]
+      : [['I missed you too.', 'Why are you still awake?'], ['Then tell me now.', "I'm listening."], ['Where are you?', "Don't hang up."], ['See you tomorrow?', 'Good night.']];
+    const id = 'mj' + (++this.seq);
+    this.jobs.set(id, { kind: 'call', t0: Date.now(), writeT: 0.5, times: lines.map((_, i) => t0 + i * 0.7), call: {
+      lines: lines.map((x, i) => ({ who: c.who, text: x, url: files[i % 3] })), choices: hangup ? [] : pc[(c.n - 1) % pc.length], hangup } });
+    return id;
   },
   async series() { await sleep(120); return SERIES_BASE.map((b) => this.shape(b)); },
   async seriesDetail(id) {
@@ -315,6 +409,13 @@ const MockAPI = {
     await sleep(40);
     const j = this.jobs.get(id); if (!j) return { status: 'error', error: 'unknown job', ep: null };
     const el = (Date.now() - j.t0) / 1000;
+    if (j.kind === 'call') {
+      if (el < j.writeT) return { status: 'writing', error: null, call: { lines: [], choices: [], hangup: false } };
+      const done = j.times.every((t) => el >= t);
+      return { status: done ? 'done' : 'voicing', error: null, call: {
+        lines: j.call.lines.map((ln, i) => ({ who: ln.who, text: ln.text, url: el >= j.times[i] ? ln.url : null })),
+        choices: done ? j.call.choices : [], hangup: done ? j.call.hangup : false } };
+    }
     if (j.kind === 'play') return el < 1.4 ? { status: 'voicing', error: null, ep: null } : { status: 'done', error: null, ep: clone(j.ep) };
     if (el < j.writeT) return { status: 'writing', error: null, ep: null };
     const done = j.times.every((t) => el >= t);
@@ -369,6 +470,8 @@ const ICON = {
   restart: '<path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M4.5 4v4.5H9"/>',
   pen: '<path d="M4 20l1-4.2L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.2 19z"/><path d="M13.5 7.3l3.2 3.2"/>',
   bag: '<path d="M5.5 8h13l-1 12.5h-11z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+  phone: '<path d="M6.6 3.5h2.6l1.6 4.3-2.1 1.4a11.5 11.5 0 0 0 6.1 6.1l1.4-2.1 4.3 1.6v2.6a1.6 1.6 0 0 1-1.7 1.6A16.6 16.6 0 0 1 5 5.2a1.6 1.6 0 0 1 1.6-1.7z"/>',
+  phoneDown: '<g transform="rotate(135 12 12)"><path d="M6.6 3.5h2.6l1.6 4.3-2.1 1.4a11.5 11.5 0 0 0 6.1 6.1l1.4-2.1 4.3 1.6v2.6a1.6 1.6 0 0 1-1.7 1.6A16.6 16.6 0 0 1 5 5.2a1.6 1.6 0 0 1 1.6-1.7z"/></g>',
   sparkles: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/>',
 };
 const ic = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] || ''}</svg>`;
@@ -492,7 +595,7 @@ document.addEventListener('pointerdown', () => primeAudio(), { capture: true, on
 
 function loadSrc(url, at) {
   P.cur = url;
-  audio.src = url;
+  audio.src = absUrl(url);
   setAudioRate();
   if (at) {
     const seek = () => { try { audio.currentTime = at; } catch (e) { /* ignore */ } audio.removeEventListener('loadedmetadata', seek); };
@@ -500,6 +603,7 @@ function loadSrc(url, at) {
   }
 }
 function doPlay() {
+  if (callActive()) { P.want = false; updatePlayerUI(); toast('On a call'); return; }
   P.want = true;
   const p = audio.play();
   if (p && p.catch) p.catch((err) => {
@@ -571,7 +675,7 @@ function preloadNext() {
   if (!u) return;
   try {
     if (!preloader) { preloader = new Audio(); preloader.preload = 'auto'; preloader.muted = true; }
-    if (preloader.dataset.u !== u) { preloader.dataset.u = u; preloader.src = u; preloader.load(); }
+    if (preloader.dataset.u !== u) { preloader.dataset.u = u; preloader.src = absUrl(u); preloader.load(); }
   } catch (e) { /* ignore */ }
 }
 
@@ -796,7 +900,7 @@ function onEpisodeEnd() {
   P.needChoice = true;
   saveProgress();
   updatePlayerUI(); renderMini();
-  if (!sleepEoe) openChoiceSheet();
+  if (!sleepEoe) { openChoiceSheet(); maybeIncomingCall(); }
   else toast('Sleep timer: stopped at end of episode');
 }
 function saveProgressDone() {
@@ -1035,43 +1139,46 @@ function openEndingSheet() {
  * 10. Unlock / store / ad / sleep / speed / episodes / profile sheets
  * ========================================================================= */
 let wfTimer = 0;
-function openUnlockSheet(id, n, onDone) {
+function openUnlockSheet(id, n, onDone, opts = {}) {
   const s = byId(id);
-  const k = `${id}:${n}`;
+  const isCall = !!opts.call;
+  const price = isCall ? CALL_PRICE : PRICE;
+  const caller = isCall ? callerOf(s, opts.who) : null;
+  const k = isCall ? `call:${id}` : `${id}:${n}`;
   if (!S.waitFree[k]) { S.waitFree[k] = Date.now() + 24 * 3600 * 1000; save(); }
   const body = () => {
-    const enough = S.coins >= PRICE;
+    const enough = S.coins >= price;
     return `
     <div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="ul-head" style="margin-top:-30px">
-      <div class="ul-art"><img src="${esc(coverOf(s))}" alt=""><div class="lk">${ic('lock', 'lg')}</div></div>
-      <h3>Unlock Episode ${n}</h3>
-      <p>${esc(s.title)} · written live from your choice</p>
+      <div class="ul-art ${isCall ? 'round' : ''}"><img src="${esc(isCall ? avatarOf(s) : coverOf(s))}" alt=""><div class="lk">${ic(isCall ? 'phone' : 'lock', 'lg')}</div></div>
+      <h3>${isCall ? `Call ${esc(shortName(caller))}` : `Unlock Episode ${n}`}</h3>
+      <p>${isCall ? `${esc(s.title)} · your first call was free` : `${esc(s.title)} · written live from your choice`}</p>
     </div>
-    <div class="ul-price"><span>Price</span><b>${coinIc()} ${PRICE} coins</b></div>
+    <div class="ul-price"><span>Price</span><b>${coinIc()} ${price} coins${isCall ? ' / call' : ''}</b></div>
     <div class="ul-price"><span>Your balance</span><b><span class="coins-n">${S.coins}</span> coins</b></div>
     <div class="ul-btns">
       ${enough
-        ? `<button class="btn btn-grad" data-act="ul-coins">${coinIc()} Unlock with ${PRICE} coins</button>`
+        ? `<button class="btn btn-grad" data-act="ul-coins">${coinIc()} ${isCall ? 'Call' : 'Unlock'} with ${price} coins</button>`
         : `<button class="btn btn-grad" data-act="store">${coinIc()} Not enough coins · Get more</button>`}
-      <button class="btn btn-ghost" data-act="ul-ad">${ic('tv', 'sm')} Watch an ad to unlock</button>
-      <div class="wait-free" aria-disabled="true">${ic('hourglass', 'sm')} Wait-free in <span id="wf-t">${fmtWait(S.waitFree[k])}</span></div>
-      ${enough ? `<button class="link-btn" data-act="store">Get more coins</button>` : ''}
+      <button class="btn btn-ghost" data-act="ul-ad">${ic('tv', 'sm')} Watch an ad to ${isCall ? 'call free' : 'unlock'}</button>
+      ${isCall ? '' : `<div class="wait-free" aria-disabled="true">${ic('hourglass', 'sm')} Wait-free in <span id="wf-t">${fmtWait(S.waitFree[k])}</span></div>`}
+      ${isCall ? `<button class="link-btn" data-act="vip-from-call">${ic('crown', 'xs')} VIP calls are free</button>` : enough ? `<button class="link-btn" data-act="store">Get more coins</button>` : ''}
     </div>
-    <div class="toggle-row">
+    ${isCall ? '' : `<div class="toggle-row">
       <span>Auto-unlock next episodes<small>Use coins automatically when you make a choice</small></span>
       <button class="switch ${S.autoUnlock ? 'on' : ''}" data-act="auto-unlock" role="switch" aria-checked="${S.autoUnlock}" aria-label="Auto-unlock"></button>
-    </div>`;
+    </div>`}`;
   };
-  const entry = openSheet(body(), { kind: 'unlock', id, n, onDone, onClose: () => clearInterval(wfTimer) });
+  const entry = openSheet(body(), { kind: 'unlock', id, n, onDone, call: isCall, price, who: opts.who, onClose: () => clearInterval(wfTimer) });
   entry.refresh = () => { entry.el.innerHTML = '<div class="grab"></div>' + body(); };
   clearInterval(wfTimer);
   wfTimer = setInterval(() => { const t = $('#wf-t'); if (t) t.textContent = fmtWait(S.waitFree[k]); }, 1000);
 }
 const fmtWait = (until) => { const s = Math.max(0, Math.floor((until - Date.now()) / 1000)); return `${pad2(Math.floor(s / 3600))}:${pad2(Math.floor((s % 3600) / 60))}:${pad2(s % 60)}`; };
 function finishUnlock(entry, how) {
-  markUnlocked(entry.id, entry.n);
-  toast(`${ic('unlock', 'sm')} Episode ${entry.n} unlocked${how ? ' · ' + how : ''}`);
+  if (entry.call) toast(`${ic('phone', 'sm')} Calling${how ? ' · ' + how : ''}`);
+  else { markUnlocked(entry.id, entry.n); toast(`${ic('unlock', 'sm')} Episode ${entry.n} unlocked${how ? ' · ' + how : ''}`); }
   const cb = entry.onDone;
   closeSheet(entry);
   if (isDetailOpen(entry.id)) renderDetailEpisodes();
@@ -1177,6 +1284,498 @@ function langUrl(l) {
   const q = new URLSearchParams(location.search); q.set('lang', l); q.delete('k');
   if (MOCK) q.set('mock', '1');
   return location.pathname + '?' + q.toString() + location.hash.replace('#/player', '#/home');
+}
+
+/* =========================================================================
+ * 10b. Voice calls with the lead (incoming / outgoing / in-call / ended)
+ * ========================================================================= */
+const CALL_PRICE = 20;
+const callAudio = new Audio();
+callAudio.preload = 'auto';
+callAudio.setAttribute('playsinline', '');
+let callPre = null;
+let C = null;            // current call
+let callSeq = 0;
+let callRecog = null;
+const callActive = () => !!(C && C.phase !== 'ended');
+
+/* WebAudio: unlocked on the first gesture so the ring can play later without one */
+let actx = null;
+function unlockCtx() {
+  try {
+    if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+    if (actx && actx.state === 'suspended') actx.resume().catch(() => {});
+  } catch (e) { actx = null; }
+}
+document.addEventListener('pointerdown', unlockCtx, { capture: true, passive: true });
+function tone(t, f, dur, peak, type) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || 'sine'; o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(actx.destination);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+function ringOnce() {
+  if (!actx || actx.state !== 'running') return;
+  const t = actx.currentTime + 0.03;
+  [[0, 659.25], [0.17, 830.61], [0.34, 987.77], [1.0, 659.25], [1.17, 830.61], [1.34, 987.77]].forEach(([d, f]) => {
+    tone(t + d, f, 1.1, 0.12); tone(t + d, f * 2, 0.5, 0.025);
+  });
+}
+function startRing() { unlockCtx(); stopRing(); ringOnce(); if (C) C.ringT = setInterval(ringOnce, 3200); }
+function stopRing() { if (C && C.ringT) { clearInterval(C.ringT); C.ringT = 0; } }
+function hangupTone() {
+  unlockCtx();
+  if (!actx || actx.state !== 'running') return;
+  const t = actx.currentTime + 0.02;
+  [0, 0.28, 0.56].forEach((d) => tone(t + d, 480, 0.18, 0.09, 'triangle'));
+}
+
+/* call audio element (iOS: primed inside the Accept / Call tap) */
+function primeCallAudio() {
+  try {
+    if (callAudio.dataset.primed) return;
+    callAudio.dataset.primed = '1';
+    callAudio.src = SILENT;
+    const p = callAudio.play();
+    if (p && p.catch) p.catch(() => { delete callAudio.dataset.primed; });
+  } catch (e) { /* ignore */ }
+}
+function playCallSrc(url) {
+  callAudio.src = absUrl(url);
+  try { callAudio.defaultPlaybackRate = S.callSpeed || 1; callAudio.playbackRate = S.callSpeed || 1; callAudio.preservesPitch = true; callAudio.webkitPreservesPitch = true; } catch (e) { /* ignore */ }
+  const p = callAudio.play();
+  if (p && p.catch) p.catch((err) => { if (err && err.name === 'NotAllowedError' && C) { C.blocked = true; renderCallUI(); } });
+}
+callAudio.addEventListener('ended', onCallAudioDone);
+callAudio.addEventListener('error', () => { if (!callAudio.src.startsWith('data:')) onCallAudioDone(); });
+function onCallAudioDone() {
+  if (!C || callAudio.src.startsWith('data:')) return;
+  if (C.fillerPlaying) C.fillerPlaying = false;
+  else if (C.playing) { C.playing = false; C.idx += 1; }
+  else return;
+  renderCallUI();
+  setTimeout(callAdvance, 120);
+}
+
+function callersOf(s) {
+  if (!s) return [];
+  if (Array.isArray(s.callers) && s.callers.length) return s.callers;
+  return [{ key: s.name || s.id, name: s.name || s.id, role: s.lead || '' }];
+}
+const callerOf = (s, key) => callersOf(s).find((c) => c.key === key) || callersOf(s)[0];
+const shortName = (c) => String((c && (c.name || c.key)) || '').split(/\s*[·•]\s*/)[0].trim();
+const callCost = (id) => (S.vip || !(S.callsUsed || {})[id] ? 0 : CALL_PRICE);
+
+/** Outgoing entry point (detail / player / library / call again). */
+function requestCall(id, opts = {}) {
+  const s = byId(id); if (!s || callActive()) return;
+  const cs = callersOf(s);
+  if (!opts.who && cs.length > 1) { openCallerChooser(id, opts); return; }
+  const who = opts.who || cs[0].key;
+  primeCallAudio(); unlockCtx();
+  const sid = opts.sid || (getSess(id) || {}).sid || null;
+  const go = () => startCall(id, who, { direction: 'outgoing', sid });
+  if (callCost(id) > 0) { openUnlockSheet(id, 0, go, { call: true, who }); return; }
+  go();
+}
+function openCallerChooser(id, opts) {
+  const s = byId(id);
+  const cost = callCost(id);
+  openSheet(`
+    <div class="sh-h"><div><h3>Who do you want to call?</h3><p>${esc(s.title)} · ${cost ? `${coinIc('sm')} ${cost} coins per call` : 'First call is free'}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="sh-list">
+      ${callersOf(s).map((c) => `
+        <button class="caller-row" data-act="call-who" data-id="${esc(id)}" data-who="${esc(c.key)}">
+          <img src="${esc(avatarOf(s))}" alt="">
+          <span class="ct"><b>${esc(c.name || c.key)}</b><span>${esc(c.role || '')}</span></span>
+          <span class="call-go">${ic('phone')}</span>
+        </button>`).join('')}
+    </div>`, { kind: 'chooser', opts });
+}
+
+function newCall(id, who, direction, sid) {
+  const s = byId(id);
+  stopCallPoll();
+  C = {
+    seq: ++callSeq, id, who, caller: callerOf(s, who), direction, sid: sid || null, cid: null,
+    phase: direction === 'incoming' ? 'incoming' : 'connecting',
+    lines: [], idx: 0, jobDone: false, hangup: false, choices: [], logged: new Set(),
+    transcript: [], t0: 0, secs: 0, timer: 0, ringT: 0, turn: 0, fillers: [], fillerPlaying: false, playing: false,
+    waiting: false, startP: null, accepted: direction !== 'incoming',
+  };
+  if (P.cur && !audio.paused) doPause(); else P.want = false;
+  return C;
+}
+/** Begin the server-side call (POST /api/call/start). Called on accept (incoming, pre-started while ringing) or on outgoing. */
+function beginCallRequest(call) {
+  if (call.startP) return call.startP;
+  call.startP = (async () => {
+    try {
+      const r = await API.callStart({ series: call.id, who: call.who, sid: call.sid, direction: call.direction });
+      if (C !== call) { if (r && r.cid) API.callEnd({ cid: r.cid, seconds: 0 }).catch(() => {}); return; }
+      call.cid = r.cid; if (r.who) call.who = r.who;
+      pollCall(r.job, call.turn);
+    } catch (e) {
+      if (C !== call) return;
+      toast(`Call failed: ${esc(e.message || 'error')}`);
+      endCall('error');
+    }
+  })();
+  return call.startP;
+}
+function prefetchFillers(call) {
+  API.fillers({ series: call.id, who: call.who }).then((r) => { if (C === call) call.fillers = (r && r.urls) || []; }).catch(() => {});
+}
+function startCall(id, who, o) {
+  closeAllSheets();
+  const call = newCall(id, who, 'outgoing', o.sid);
+  S.callsUsed = S.callsUsed || {}; S.callsUsed[id] = true;
+  ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save();
+  renderCall();
+  prefetchFillers(call);
+  beginCallRequest(call);
+}
+/** He calls you: shows the ringing screen; generation of his first line starts while it rings. */
+function showIncoming(id, who, sid) {
+  if (callActive()) return;
+  const call = newCall(id, who, 'incoming', sid);
+  renderCall();
+  startRing();
+  prefetchFillers(call);
+  beginCallRequest(call);
+}
+function acceptCall() {
+  if (!C || C.phase !== 'incoming') return;
+  primeCallAudio(); unlockCtx();
+  stopRing();
+  C.accepted = true; C.phase = 'connecting';
+  ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save();
+  renderCall();
+  callAdvance(); // lines may already be ready
+}
+function declineCall() {
+  if (!C) return;
+  stopRing();
+  const call = C;
+  if (call.cid) API.callEnd({ cid: call.cid, seconds: 0 }).catch(() => {});
+  logCall(call, 'declined');
+  C = null; stopCallPoll();
+  hideCall();
+  if (P.needChoice && !(topSheet() && topSheet().kind === 'choice')) openChoiceSheet();
+}
+
+let callPollT = 0;
+function stopCallPoll() { clearTimeout(callPollT); callPollT = 0; }
+function pollCall(jobId, turn) {
+  const call = C;
+  const tick = async () => {
+    if (C !== call || call.turn !== turn || call.phase === 'ended') return;
+    let j = null;
+    try { j = await API.job(jobId); } catch (e) { j = null; }
+    if (C !== call || call.turn !== turn || call.phase === 'ended') return;
+    if (!j) { callPollT = setTimeout(tick, 1200); return; }
+    if (j.status === 'error') { toast(`Call dropped: ${esc(j.error || 'error')}`); endCall('error'); return; }
+    if (j.call) {
+      call.lines = (j.call.lines || []).map((l) => ({ who: l.who, text: cleanText(l.text), url: l.url }));
+      if (j.status === 'done') { call.jobDone = true; call.choices = (j.call.choices || []).slice(0, 2); call.hangup = !!j.call.hangup; }
+    } else if (j.status === 'done') call.jobDone = true;
+    if (!call.playing && !call.fillerPlaying) callAdvance(); else preloadCallNext();
+    renderCallUI();
+    if (j.status !== 'done') callPollT = setTimeout(tick, 600);
+  };
+  tick();
+}
+function callAdvance() {
+  const call = C;
+  if (!call || !call.accepted || call.phase === 'ended' || call.phase === 'incoming' || call.phase === 'hanging') return;
+  if (call.playing || call.fillerPlaying) return;
+  const L = call.lines;
+  while (call.idx < L.length && L[call.idx].url === '') call.idx++;
+  if (call.idx >= L.length) {
+    if (call.jobDone && L.length) { turnDone(); return; }
+    call.waiting = true; renderCallUI(); return;
+  }
+  const ln = L[call.idx];
+  if (!ln.url) { call.waiting = true; renderCallUI(); return; }
+  call.waiting = false;
+  if (!call.t0) { call.t0 = Date.now(); call.timer = setInterval(updateCallTimer, 1000); }
+  call.phase = 'talking';
+  if (!call.logged.has(call.idx)) { call.logged.add(call.idx); call.transcript.push({ who: call.who, text: ln.text }); }
+  call.caption = ln;
+  call.playing = true;
+  playCallSrc(ln.url);
+  preloadCallNext();
+  renderCallUI();
+}
+function preloadCallNext() {
+  if (!C) return;
+  let j = C.idx + 1;
+  while (j < C.lines.length && C.lines[j].url === '') j++;
+  const u = C.lines[j] && C.lines[j].url; if (!u) return;
+  try {
+    if (!callPre) { callPre = new Audio(); callPre.preload = 'auto'; callPre.muted = true; }
+    if (callPre.dataset.u !== u) { callPre.dataset.u = u; callPre.src = absUrl(u); callPre.load(); }
+  } catch (e) { /* ignore */ }
+}
+function turnDone() {
+  const call = C;
+  if (call.hangup) {
+    call.phase = 'hanging';
+    renderCallUI();
+    hangupTone();
+    setTimeout(() => { if (C === call) endCall('his'); }, 1300);
+    return;
+  }
+  call.phase = 'your-turn';
+  renderCallUI();
+}
+function playFiller() {
+  const call = C; if (!call || !call.fillers.length) return;
+  call.fillerPlaying = true;
+  playCallSrc(call.fillers[Math.floor(Math.random() * call.fillers.length)]);
+}
+async function sendCallTurn(text, via) {
+  const call = C;
+  if (!call || call.phase !== 'your-turn' || !call.cid) return;
+  stopCallMic();
+  primeCallAudio();
+  const silent = via === 'silence';
+  call.transcript.push({ who: 'you', text: silent ? '' : text, silent });
+  call.turn += 1;
+  const turn = call.turn;
+  Object.assign(call, { lines: [], idx: 0, jobDone: false, choices: [], logged: new Set(), caption: null, phase: 'thinking', waiting: true });
+  playFiller();
+  renderCall();
+  try {
+    const r = await API.callTurn({ cid: call.cid, text: silent ? '' : text, via });
+    if (C !== call || call.turn !== turn) return;
+    pollCall(r.job, turn);
+  } catch (e) {
+    if (C !== call) return;
+    toast(`Couldn't reach ${esc(shortName(call.caller))}: ${esc(e.message || 'error')}`);
+    call.transcript.pop(); call.turn -= 1; call.phase = 'your-turn';
+    renderCall();
+  }
+}
+function hangUp() {
+  if (!C) return;
+  if (C.phase === 'incoming') { declineCall(); return; }
+  hangupTone();
+  endCall('you');
+}
+function endCall(reason) {
+  const call = C;
+  if (!call || call.phase === 'ended') return;
+  stopRing(); stopCallPoll(); stopCallMic();
+  try { callAudio.pause(); } catch (e) { /* ignore */ }
+  clearInterval(call.timer);
+  call.secs = call.t0 ? Math.round((Date.now() - call.t0) / 1000) : 0;
+  call.phase = 'ended'; call.endReason = reason;
+  if (call.cid) API.callEnd({ cid: call.cid, seconds: call.secs }).catch(() => {});
+  logCall(call, reason === 'error' && !call.t0 ? 'failed' : 'done');
+  renderCall();
+}
+function logCall(call, status) {
+  S.calls = S.calls || [];
+  const s = byId(call.id);
+  S.calls.unshift({
+    at: Date.now(), id: call.id, who: call.who, name: (call.caller && call.caller.name) || call.who, lang: LANG, mode: MOCK ? 'm' : 'r',
+    dir: call.direction, secs: call.secs || 0, status, title: s ? s.title : '', transcript: call.transcript.slice(0, 80),
+  });
+  S.calls = S.calls.slice(0, 50);
+  save();
+  if (curTab === 'library' && libTab === 'calls') renderLibrary();
+}
+function closeCallScreen() {
+  C = null; stopCallPoll();
+  hideCall();
+  if (P.needChoice && playerOpen && !(topSheet() && topSheet().kind === 'choice')) openChoiceSheet();
+}
+function cycleCallSpeed() {
+  const i = SPEEDS.indexOf(S.callSpeed || 1);
+  S.callSpeed = SPEEDS[(i + 1) % SPEEDS.length];
+  try { callAudio.playbackRate = S.callSpeed; } catch (e) { /* ignore */ }
+  save(); renderCallUI();
+}
+
+/* hold-to-talk */
+function startCallMic(btn) {
+  if (!SR || !C || C.phase !== 'your-turn' || callRecog) return;
+  const inp = $('#cl-text');
+  try {
+    callRecog = new SR();
+    callRecog.lang = LANG === 'zh' ? 'zh-CN' : 'en-US';
+    callRecog.interimResults = true;
+    let txt = '';
+    callRecog.onresult = (ev) => { txt = ''; for (let i = 0; i < ev.results.length; i++) txt += ev.results[i][0].transcript; if (inp) { inp.value = txt; inp.dispatchEvent(new Event('input')); } };
+    callRecog.onerror = (ev) => { if (ev.error === 'not-allowed') toast('Microphone permission denied'); };
+    callRecog.onend = () => {
+      btn.classList.remove('rec'); callRecog = null;
+      const t = (txt || (inp && inp.value) || '').trim();
+      if (t && C && C.phase === 'your-turn') sendCallTurn(t, 'voice');
+    };
+    btn.classList.add('rec');
+    if (inp) inp.placeholder = 'Listening… release to send';
+    callRecog.start();
+  } catch (e) { callRecog = null; btn.classList.remove('rec'); toast('Voice input unavailable'); }
+}
+function releaseCallMic() { if (callRecog) { try { callRecog.stop(); } catch (e) { /* ignore */ } } }
+function stopCallMic() { if (callRecog) { try { callRecog.abort(); } catch (e) { /* ignore */ } callRecog = null; } }
+
+/* ---------- call screens ---------- */
+function hideCall() {
+  const el = $('#call');
+  el.classList.remove('on');
+  setTimeout(() => { if (!C) { el.hidden = true; el.innerHTML = ''; el.dataset.key = ''; } }, 320);
+}
+function renderCall() {
+  const el = $('#call'); const call = C; if (!call) return;
+  const s = byId(call.id);
+  const mo = motionOf(s);
+  const name = (call.caller && call.caller.name) || call.who;
+  el.hidden = false;
+  el.style.setProperty('--accent', s.accent || '#FF8448');
+  const shellKey = `${call.seq}:${call.phase === 'ended' ? 'end' : 'live'}`;
+  if (el.dataset.key !== shellKey) {
+    el.dataset.key = shellKey;
+    const circle = `<div class="cl-circle"><img src="${esc(avatarOf(s))}" alt="">${mo && !reduceMotion() ? `<video src="${esc(absUrl(mo))}" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video>` : ''}</div>`;
+    if (call.phase === 'ended') {
+      el.className = 'call on ph-ended';
+      el.innerHTML = `
+        <div class="cl-bgw"><div class="cl-bg" style="background-image:url('${esc(coverOf(s))}')"></div></div>
+        <div class="cl-end">
+          <div class="cl-av sm">${circle}</div>
+          <h2 class="cl-name">${esc(name)}</h2>
+          <p class="cl-status">${call.endReason === 'error' && !call.t0 ? 'Call failed' : 'Call ended'} · <span class="tnum">${fmtTime(call.secs)}</span></p>
+          <div class="cl-end-btns">
+            <button class="btn btn-grad" data-act="call-again">${ic('phone', 'sm')} Call again</button>
+            <button class="btn btn-ghost" data-act="call-close">Done</button>
+          </div>
+          <h4 class="cl-tr-h">Transcript</h4>
+          <div class="cl-tr">${transcriptHtml(call.transcript, name)}</div>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <div class="cl-bgw"><div class="cl-bg" style="background-image:url('${esc(coverOf(s))}')"></div></div>
+        <div class="cl-top"><span>${ic('phone', 'xs')} ${esc(s.title)}</span></div>
+        <div class="cl-hero">
+          <div class="cl-av" id="cl-av"><i class="cl-pulse"></i><i class="cl-pulse p2"></i><i class="cl-pulse p3"></i>${circle}</div>
+          <h2 class="cl-name">${esc(name)}</h2>
+          <p class="cl-status" id="cl-status"></p>
+        </div>
+        <div class="cl-cap" id="cl-cap"></div>
+        <div class="cl-bottom" id="cl-bottom"></div>`;
+      const v = $('video', el); if (v) { v.addEventListener('canplay', () => { v.classList.add('on'); v.play().catch(() => {}); }); }
+    }
+    requestAnimationFrame(() => el.classList.add('on'));
+  }
+  renderCallUI(true);
+}
+function transcriptHtml(tr, name) {
+  if (!tr || !tr.length) return '<p class="cl-tr-empty">No conversation yet.</p>';
+  return tr.map((t) => t.who === 'you'
+    ? `<div class="tr-row you"><span>You</span><p>${t.silent ? '<em>(stayed silent)</em>' : esc(t.text)}</p></div>`
+    : `<div class="tr-row"><span>${esc(shortName({ name }))}</span><p>${esc(t.text)}</p></div>`).join('');
+}
+function updateCallTimer() {
+  const st = $('#cl-status'); if (!st || !C || !C.t0) return;
+  if (C.phase === 'talking' || C.phase === 'your-turn' || C.phase === 'thinking') st.textContent = fmtTime((Date.now() - C.t0) / 1000);
+}
+function renderCallUI(force) {
+  const call = C; const el = $('#call');
+  if (!call || el.hidden || call.phase === 'ended') return;
+  const name = shortName(call.caller) || call.who;
+  el.className = `call on ph-${call.phase}${call.playing ? ' speaking' : ''}`;
+  const st = $('#cl-status');
+  if (st) {
+    st.textContent = call.phase === 'incoming' ? 'Incoming call…'
+      : call.phase === 'hanging' ? 'Hanging up…'
+      : !call.t0 ? (call.direction === 'outgoing' ? 'Calling…' : 'Connecting…')
+      : fmtTime((Date.now() - call.t0) / 1000);
+  }
+  const cap = $('#cl-cap');
+  if (cap) {
+    let key, html;
+    if (call.phase === 'incoming') { key = 'in'; html = `<p class="cl-hint">${esc(call.caller && call.caller.role ? call.caller.role : '')}</p>`; }
+    else if (call.phase === 'thinking' || (call.waiting && !call.playing && call.phase !== 'your-turn')) {
+      key = 'think' + call.turn;
+      html = `<div class="cl-think">${!call.t0 ? 'Connecting' : `${esc(name)} is thinking`}<span class="dots-pulse"><i></i><i></i><i></i></span></div>`;
+    } else if (call.caption) {
+      key = 'cap' + call.turn + ':' + call.idx + (call.phase === 'your-turn' ? 'y' : '');
+      html = `<span class="who">${esc(name)}</span><p class="txt fade ${call.phase === 'your-turn' ? 'dim' : ''}">${esc(call.caption.text)}</p>`;
+    } else { key = 'empty'; html = ''; }
+    if (cap.dataset.k !== key || force) { cap.dataset.k = key; cap.innerHTML = html; }
+  }
+  const bot = $('#cl-bottom');
+  if (bot) {
+    const key = call.phase === 'incoming' ? 'in' : call.phase === 'your-turn' ? 'turn' + call.turn : 'live' + (S.callSpeed || 1) + (call.blocked ? 'b' : '');
+    if (bot.dataset.k !== key || force) {
+      bot.dataset.k = key;
+      if (call.phase === 'incoming') {
+        bot.innerHTML = `
+          <div class="cl-answer">
+            <div><button class="cl-btn red" data-act="call-decline" aria-label="Decline">${ic('phoneDown', 'lg')}</button><span>Decline</span></div>
+            <div><button class="cl-btn green" data-act="call-accept" aria-label="Accept">${ic('phone', 'lg')}</button><span>Accept</span></div>
+          </div>`;
+      } else {
+        const turn = call.phase === 'your-turn';
+        bot.innerHTML = `
+          ${call.blocked ? `<button class="btn btn-grad btn-block" data-act="call-resume" style="margin-bottom:12px">${ic('play', 'sm')} Tap to hear ${esc(name)}</button>` : ''}
+          ${turn ? `
+          <div class="cl-reply">
+            <p class="cl-turn">Your turn</p>
+            <div class="cl-chips">${call.choices.map((c, i) => `<button class="cl-chip" data-act="call-choice" data-i="${i}">${esc(c)}</button>`).join('')}</div>
+            <form class="cl-input" data-form="call" autocomplete="off">
+              <div class="fld"><input id="cl-text" type="text" maxlength="300" placeholder="Say it your way…" enterkeyhint="send" aria-label="Your reply"><button class="ch-send" type="submit" aria-label="Send" disabled>${ic('send')}</button></div>
+              ${SR ? `<button class="ch-mic" type="button" id="cl-mic" aria-label="Hold to talk">${ic('mic')}</button>` : ''}
+            </form>
+          </div>` : ''}
+          <div class="cl-ctrl">
+            <button class="tool" data-act="call-speed" aria-label="Call speed"><b>${S.callSpeed || 1}x</b>Speed</button>
+            <button class="cl-btn red" data-act="call-hangup" aria-label="Hang up">${ic('phoneDown', 'lg')}</button>
+            <button class="tool" data-act="call-silent" ${turn ? '' : 'disabled'} aria-label="Stay silent">${ic('quote')}<span>Stay silent</span></button>
+          </div>`;
+        if (turn) {
+          const inp = $('#cl-text', bot), send = $('.ch-send', bot);
+          inp.addEventListener('input', () => { send.disabled = !inp.value.trim(); });
+          const mic = $('#cl-mic', bot);
+          if (mic) {
+            mic.addEventListener('pointerdown', (e) => { e.preventDefault(); try { mic.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } startCallMic(mic); });
+            ['pointerup', 'pointercancel'].forEach((ev) => mic.addEventListener(ev, releaseCallMic));
+            mic.addEventListener('contextmenu', (e) => e.preventDefault());
+          }
+        }
+      }
+    }
+  }
+}
+
+/* he calls you at the choice point (Ep ≥ 2), once per series per day */
+function maybeIncomingCall() {
+  const id = P.id, ep = P.ep;
+  if (!ep || ep.n < 2 || callActive()) return;
+  S.inDay = S.inDay || {};
+  if (S.inDay[id] === dayStr()) return;
+  setTimeout(() => {
+    if (!P.needChoice || P.id !== id || !P.ep || P.ep.n !== ep.n || callActive() || P.gen) return;
+    if (topSheet() && topSheet().kind !== 'choice') return; // don't ring over the unlock / store sheets
+    if (!$('#ad').hidden) return;
+    S.inDay[id] = dayStr(); save();
+    const cs = callersOf(byId(id));
+    const c = cs[Math.floor(Math.random() * cs.length)];
+    showIncoming(id, c.key, (getSess(id) || {}).sid);
+  }, 2000);
+}
+
+function openTranscript(i) {
+  const h = (S.calls || [])[i]; if (!h) return;
+  openSheet(`
+    <div class="sh-h"><div><h3>${esc(h.name)}</h3><p>${esc(h.title)} · ${h.dir === 'incoming' ? 'Incoming' : 'Outgoing'} · ${fmtTime(h.secs)}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="cl-tr sheet-tr">${transcriptHtml(h.transcript, h.name)}</div>
+    <button class="btn btn-grad btn-block" data-act="call-back" data-id="${esc(h.id)}" data-who="${esc(h.who)}" style="margin-top:14px">${ic('phone', 'sm')} Call back</button>`);
 }
 
 /* =========================================================================
@@ -1387,6 +1986,19 @@ function renderLibrary() {
         <button class="rm" data-act="unsave" data-id="${esc(s.id)}" aria-label="Remove">${ic('trash', 'sm')}</button>
       </div>`;
     }).join('') : `<div class="empty">${ic('plus')}Tap “+ Library” on any series to save it here.</div>`;
+  } else if (libTab === 'calls') {
+    const all = (S.calls || []).map((h, i) => Object.assign({ i }, h)).filter((h) => h.mode === (MOCK ? 'm' : 'r') && byId(h.id));
+    rows = all.length ? all.map((h) => {
+      const s = byId(h.id);
+      const st = h.status === 'declined' ? 'Declined' : h.status === 'failed' ? 'Failed' : fmtTime(h.secs);
+      return `<div class="lib-row">
+        <button class="open" data-act="call-tr" data-i="${h.i}">
+          <span class="cv round"><img src="${esc(avatarOf(s))}" alt="" loading="lazy"></span>
+          <span class="lt"><b>${esc(h.name)}</b><span>${esc(s.title)}</span><span class="call-meta ${h.status === 'declined' ? 'miss' : ''}">${ic(h.dir === 'incoming' ? 'phone' : 'send', 'xs')} ${h.dir === 'incoming' ? 'Incoming' : 'Outgoing'} · ${new Date(h.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${st}</span></span>
+        </button>
+        <button class="rm call-back-btn" data-act="call-back" data-id="${esc(h.id)}" data-who="${esc(h.who)}" aria-label="Call back">${ic('phone', 'sm')}</button>
+      </div>`;
+    }).join('') : `<div class="empty">${ic('phone')}No calls yet.<br>Call a lead from any series page.</div>`;
   } else {
     const items = S.hist.filter((h) => h.k && h.k.endsWith(`:${LANG}`) && h.k.startsWith(`${MOCK ? 'm' : 'r'}:`) && byId(h.id));
     rows = items.length ? items.map((h, i) => {
@@ -1402,7 +2014,7 @@ function renderLibrary() {
   }
   el.innerHTML = `
     <h1 class="page-title">Library</h1>
-    <div class="seg">${[['listening', 'Listening'], ['saved', 'Saved'], ['history', 'History']].map(([k, l]) => `<button class="chip ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}</button>`).join('')}</div>
+    <div class="seg">${[['listening', 'Listening'], ['saved', 'Saved'], ['history', 'History'], ['calls', 'Calls']].map(([k, l]) => `<button class="chip ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}</button>`).join('')}</div>
     ${rows}`;
 }
 function timeAgo(t) {
@@ -1420,6 +2032,7 @@ const TASKS = [
   { k: 'newSeries', label: 'Play a new series', goal: 1, reward: 10, icon: 'sparkles', fmt: (v) => `${Math.min(1, v)}/1` },
   { k: 'choices', label: 'Make 3 choices', goal: 3, reward: 15, icon: 'pen', fmt: (v) => `${Math.min(3, v)}/3` },
   { k: 'share', label: 'Share a series', goal: 1, reward: 5, icon: 'share', fmt: (v) => `${Math.min(1, v)}/1` },
+  { k: 'call', label: 'Call your favorite', goal: 1, reward: 10, icon: 'phone', fmt: (v) => `${Math.min(1, v)}/1` },
 ];
 function checkinInfo() {
   const t = dayStr(), y = yesterdayStr();
@@ -1491,7 +2104,7 @@ function renderDetail() {
   const saved = S.saved.indexOf(s.id) >= 0;
   const nEps = ss ? ss.eps.length : 1;
   let cta = `${ic('play')} Play Episode 1`;
-  if (ss && pr) cta = pr.needChoice ? `${ic('spark')} Continue · Your move in Ep ${pr.ep}` : `${ic('play')} Continue Ep ${pr.ep}`;
+  if (ss && pr) cta = pr.needChoice ? `${ic('spark')} Your move · Ep ${pr.ep}` : `${ic('play')} Continue Ep ${pr.ep}`;
   else if (ss) cta = `${ic('play')} Continue Ep ${ss.eps[ss.eps.length - 1].n}`;
   const page = $('#detail');
   const keepScroll = page.classList.contains('on') ? page.scrollTop : 0;
@@ -1501,7 +2114,10 @@ function renderDetail() {
       <div class="dt-bg" style="background-image:url('${esc(coverOf(s))}')"></div>
       <div class="dt-top">
         <button class="icon-btn" data-act="back" aria-label="Back">${ic('back')}</button>
-        <button class="icon-btn" data-act="share" data-id="${esc(s.id)}" aria-label="Share">${ic('share', 'sm')}</button>
+        <span class="dt-top-r">
+          <button class="icon-btn ${saved ? 'on' : ''}" data-act="save" data-id="${esc(s.id)}" aria-label="${saved ? 'Saved to Library' : 'Add to Library'}">${ic(saved ? 'check' : 'plus', 'sm')}</button>
+          <button class="icon-btn" data-act="share" data-id="${esc(s.id)}" aria-label="Share">${ic('share', 'sm')}</button>
+        </span>
       </div>
       <div class="dt-main">
         <div class="dt-cover"><img src="${esc(coverOf(s))}" alt=""></div>
@@ -1515,8 +2131,9 @@ function renderDetail() {
         <div class="tags">${(s.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
         <div class="dt-cta">
           <button class="btn btn-grad" data-act="play-series" data-id="${esc(s.id)}">${cta}</button>
-          <button class="round-btn ${saved ? 'on' : ''}" data-act="save" data-id="${esc(s.id)}" aria-label="${saved ? 'Saved to Library' : 'Add to Library'}">${ic(saved ? 'check' : 'plus')}</button>
+          <button class="btn btn-ghost call-btn" data-act="call-lead" data-id="${esc(s.id)}" aria-label="Call">${ic('phone', 'sm')}<span>${callersOf(s).length > 1 ? 'Call' : `Call ${esc(shortName(callersOf(s)[0]).split(' ')[0])}`}</span></button>
         </div>
+        <p class="call-note">${ic('phone', 'xs')} ${callCost(s.id) ? `Voice call · ${CALL_PRICE} coins` : 'Voice call · first call free'} · he remembers your story</p>
         ${ss ? `<button class="restart" data-act="restart" data-id="${esc(s.id)}">${ic('restart')} Start a new story from Ep 1</button>` : ''}
       </div>
     </div>
@@ -1638,7 +2255,7 @@ function renderPlayer() {
       <header class="pl-top">
         <button class="icon-btn" data-act="close-player" aria-label="Close player">${ic('down')}</button>
         <div class="pl-top-t"><small>NOW PLAYING</small><b id="pl-series"></b></div>
-        <button class="icon-btn" data-act="pl-eps" aria-label="Episodes">${ic('list')}</button>
+        <button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>
       </header>
       <div class="pl-body">
         <div class="pl-art-wrap"><div class="pl-art"><img id="pl-art" alt=""><video id="pl-vid" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video><span class="pl-badge" id="pl-badge" hidden></span></div></div>
@@ -1791,7 +2408,7 @@ function renderSubtitle(force) {
   sub.dataset.k = key;
   const narr = !who || who === 'NARR';
   sub.style.setProperty('--accent-l', (s && s.accent) ? `color-mix(in srgb, ${s.accent} 70%, #fff)` : 'var(--b)');
-  sub.innerHTML = `${narr ? '' : `<span class="who">${esc(who)}</span>`}<p class="txt fade ${narr ? 'narr' : ''}">${esc(text)}</p>`;
+  sub.innerHTML = `${narr ? '' : `<span class="who">${esc(who)}</span>`}<p class="txt fade ${narr ? 'narr' : ''}">${esc(cleanText(text))}</p>`;
 }
 function tickUI() {
   const ep = P.ep;
@@ -1964,12 +2581,28 @@ document.addEventListener('click', (e) => {
     case 'mic': toggleMic(el); break;
     case 'ul-coins': {
       const t = topSheet(); if (!t || t.kind !== 'unlock') break;
-      if (S.coins < PRICE) { openStore(); break; }
-      addCoins(-PRICE, `Unlock Ep ${t.n} · ${byId(t.id).title}`);
-      finishUnlock(t, `−${PRICE} coins`);
+      const price = t.price || PRICE;
+      if (S.coins < price) { openStore(); break; }
+      addCoins(-price, t.call ? `Call ${shortName(callerOf(byId(t.id), t.who))} · ${byId(t.id).title}` : `Unlock Ep ${t.n} · ${byId(t.id).title}`);
+      finishUnlock(t, `−${price} coins`);
       break;
     }
-    case 'ul-ad': { const t = topSheet(); if (!t || t.kind !== 'unlock') break; playAd(() => { S.ledger.unshift({ t: Date.now(), d: 0, l: `Ad unlock Ep ${t.n} · ${byId(t.id).title}` }); finishUnlock(t, 'thanks for watching'); }); break; }
+    case 'ul-ad': { const t = topSheet(); if (!t || t.kind !== 'unlock') break; playAd(() => { S.ledger.unshift({ t: Date.now(), d: 0, l: t.call ? `Ad call · ${byId(t.id).title}` : `Ad unlock Ep ${t.n} · ${byId(t.id).title}` }); finishUnlock(t, 'thanks for watching'); }); break; }
+    case 'vip-from-call': { const t = topSheet(); if (!t) break; S.vip = true; save(); toast(`${ic('crown', 'sm')} VIP on — calls and episodes free`); refreshAfterWallet(); const cb = t.onDone; closeSheet(t); if (cb) cb(); break; }
+    case 'call-lead': requestCall(id); break;
+    case 'call-who': { const t = topSheet(); const o = (t && t.opts) || {}; closeSheet(); requestCall(id, Object.assign({}, o, { who: el.dataset.who })); break; }
+    case 'pl-call': if (P.id) requestCall(P.id, { sid: (getSess(P.id) || {}).sid }); break;
+    case 'call-accept': acceptCall(); break;
+    case 'call-decline': declineCall(); break;
+    case 'call-hangup': hangUp(); break;
+    case 'call-choice': { const c = C && C.choices[+el.dataset.i]; if (c) sendCallTurn(c, 'option'); break; }
+    case 'call-silent': sendCallTurn('', 'silence'); break;
+    case 'call-speed': cycleCallSpeed(); break;
+    case 'call-resume': if (C) { C.blocked = false; callAudio.play().catch(() => {}); renderCallUI(true); } break;
+    case 'call-close': closeCallScreen(); break;
+    case 'call-again': { const c0 = C; closeCallScreen(); if (c0) requestCall(c0.id, { who: c0.who, sid: c0.sid }); break; }
+    case 'call-tr': openTranscript(+el.dataset.i); break;
+    case 'call-back': closeAllSheets(); requestCall(id, { who: el.dataset.who }); break;
     case 'upnext-now': if (P.upNext) { const e2 = P.upNext.ep; cancelUpNext(); playEpisode(P.id, e2); } break;
     case 'upnext-cancel': cancelUpNext(); updatePlayerUI(); break;
     case 'ob-next': obNext(el.dataset.skip === '1'); break;
@@ -1990,6 +2623,8 @@ document.addEventListener('submit', (e) => {
     refreshSheets(); if (curTab === 'home') renderHome();
   } else if (f.dataset.form === 'search') {
     const q = $('#ex-q'); if (q) q.blur();
+  } else if (f.dataset.form === 'call') {
+    const t = (($('#cl-text') || {}).value || '').trim(); if (t) sendCallTurn(t, 'free');
   } else if (f.dataset.form === 'ob-name') {
     obNext();
   }
@@ -2120,6 +2755,7 @@ async function boot() {
   setAudioRate();
   try {
     if (MOCK) throw new Error('mock');
+    await loadRelay();
     const list = await RealAPI.series();
     if (!Array.isArray(list) || !list.length) throw new Error('empty');
     SERIES = list;

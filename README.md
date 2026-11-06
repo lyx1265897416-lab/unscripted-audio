@@ -13,6 +13,11 @@ Pocket FM 式的音频连载 App（2026-11-06 起），内容是我们 7 部实�
 - `data/motion.json` + `cache/motion/`：播放器动态封面（Pocket FM 式），`build_motion.py` 从即兴剧场 APP 的待机/开场片段剪方形静音循环（正放+倒放），传 CDN；mock 模式用 `app/motion/`。人鱼那部开场没有 Rian 正脸 → 11-06 按定装图出海下长廊关键帧，用 Kling v4 首尾同帧生成 5 秒无缝循环（data/motion_src/）；三真四假用七位男嘉宾合影。
 - `logs/sessions/*.jsonl`：每局每集的台词、耗时、音频地址。
 
+## 公开仓库和长期链接
+- 公开仓库 https://github.com/lyx1265897416-lab/unscripted-audio ，Pages 从 `docs/` 发布：https://lyx1265897416-lab.github.io/unscripted-audio/ （第一次打开带 `?k=<token>&lang=zh|en`，口令存在本机后地址栏会去掉；口令不进仓库）。
+- `docs/` 是 `app/` 的副本：改完前端跑 `./publish.sh "说明"`（rsync app/→docs/ 再推）。`docs/relay.json` 不覆盖，由 `relay_sync.py` 管。
+- `relay_sync.py`（launchd `com.vicky.realtime.unscripted-audio-sync`，日志 logs/sync.log）：每分钟探隧道，地址变了就写 `docs/relay.json` 并推送；连续 3 次连不上就重启隧道。前端读 relay.json 找中转，所以 Pages 链接长期不变。
+
 ## 运行
 - launchd：`com.vicky.realtime.unscripted-audio`（中转）、`com.vicky.realtime.unscripted-audio-tunnel`（公网隧道），入口在 `tools/realtime-relays/run.sh`。重启用 `launchctl kickstart -k gui/$(id -u)/com.vicky.realtime.unscripted-audio`。
 - 公网地址：`logs/tunnel-public.log` 最后一条 trycloudflare 地址 + `/?k=<token.txt>&lang=zh`（或 en）。隧道重启地址会变。
