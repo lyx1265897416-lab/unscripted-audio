@@ -12,7 +12,7 @@ Pocket FM 式的音频连载 App（2026-11-06 起），内容是我们 7 部实�
 - `cache/ep1/`：第 1 集成品（逐句分轨 parts/、拼好的 mp3、字幕 json）。第一次有人播某部剧某语言时生成（40–100 秒），之后直接用 CDN 地址。改了配音表要删对应 parts 和成品再生成。
 - `data/motion.json` + `cache/motion/`：播放器动态封面（Pocket FM 式），`build_motion.py` 从即兴剧场 APP 的待机/开场片段剪方形静音循环（正放+倒放），传 CDN；mock 模式用 `app/motion/`。人鱼那部开场没有 Rian 正脸 → 11-06 按定装图出海下长廊关键帧，用 Kling v4 首尾同帧生成 5 秒无缝循环（data/motion_src/）；三真四假用七位男嘉宾合影。
 - `data/visuals/<id>.json` + `app/v/<id>/`：播放器剧情画面库（`build_visuals.py`，不花额度）：开场按镜头切开（o*）、实时测试片段（c*，描述=导演层逐镜头 beat + 台词）、剧照缓推（s*）、待机动态（idle）；pool = 没有对应画面时每 7 秒轮播的万能 live/剧照。
-- `data/ep1_visuals/<id>.<lang>.json`：第 1 集逐句配画面（`build_ep1_visuals.py`，Opus），中转按字幕时间换成时间轴 `ep.visuals`。实时集由编剧在每句末尾标 `{clip-id}`（系统提示词里带画面库），返回 `line.clip`。
+- `data/ep1_visuals/<id>.<lang>.json`：第 1 集逐句配画面（`build_ep1_visuals.py`，Opus），中转按字幕时间换成时间轴 `ep.visuals`。实时集：编剧只写台词（11-06 试过让编剧顺手标画面，提示词变长后开播从 ~20 秒拖到 ~30 秒，已撤），每写出一批台词就交给快模型（CLIP_MAPPER，默认 deepseek/deepseek-v4.1-flash，约 4 秒）并行配画面，返回 `line.clip`，通常比那句的声音先到。
 - `logs/sessions/*.jsonl`：每局每集的台词、耗时、音频地址。
 
 ## 公开仓库和长期链接

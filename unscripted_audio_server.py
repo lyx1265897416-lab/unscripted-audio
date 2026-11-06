@@ -224,7 +224,7 @@ RULES = {
 
 FORMAT = '''OUTPUT FORMAT — plain lines only, in this order, nothing else:
 TITLE: <episode title{t}>
-<Speaker>: <line> {clip-id}        (Speaker is NARR or one of: {cast}; end every line with the id of the best-matching clip from the CLIP LIBRARY in curly braces, e.g. {c12}; if nothing fits use a still {s00} or {idle}; the same clip at most 3 lines in a row)
+<Speaker>: <line>        (Speaker is NARR or one of: {cast})
 ... 9–13 lines ...
 PROMPT: <one line above the choice: the situation, addressed to "you"/“你”>
 C1: <her possible reply/action, first person, short>
@@ -239,8 +239,25 @@ def system_prompt(sess):
             'You are the writer of a women-focused serialized audio drama (Pocket FM style), writing the next episode live for one listener.')
     return '\n\n'.join([head, '世界卡（内部资料，真相按节奏揭晓，不提前剧透）：\n' + json.dumps(w, ensure_ascii=False),
                         RULES[lang].replace('{name}', sess['name']),
-                        clip_library(s),
                         FORMAT.replace('{cast}', ', '.join(cast)).replace('{t}', '，6–10 字' if lang == 'zh' else ', 2–5 words')])
+
+
+MAPPER = os.environ.get('CLIP_MAPPER', 'deepseek/deepseek-v4.1-flash')  # 实测 3 句约 4 秒
+
+
+def map_clips(series, ctx, items):
+    """items=[(i, who, text)] → {i: clip}。编剧不再管画面（省掉画面库那几千字提示词），台词一出来就交给快模型配。"""
+    v = VIS.get(series)
+    if not v or not items: return {}
+    lib = '\n'.join(f"{c['id']}: {c['cap'][:90]}" for c in v['clips'])
+    prompt = (f'画面库（id：画面内容）：\n{lib}\n\n前情（最近几句）：\n{ctx}\n\n给下面每句台词挑最匹配的画面 id（按动作、地点、人物、情绪；没有合适的用 s 开头的剧照或 idle；'
+              f'同一片段不要连用超过 3 句）。只输出 JSON 对象，如 {{"3":"c12"}}：\n' + '\n'.join(f'{i} {w}: {t}' for i, w, t in items))
+    body = {'model': MAPPER, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': 300, 'temperature': 0, 'reasoning': {'enabled': False}}
+    req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
+                    headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
+    t = json.loads(op.open(req, timeout=30).read())['choices'][0]['message']['content']
+    j = json.loads(t[t.find('{'):t.rfind('}') + 1]); ids = {c['id'] for c in v['clips']}
+    return {int(k): c for k, c in j.items() if str(k).isdigit() and c in ids}
 
 
 def clip_library(sid):
@@ -312,6 +329,24 @@ def run_episode(job, sess, user_msg):
     cast = set(k for k in VOICES[series] if not k.startswith('_'))
     ep = {'n': n, 'title': '', 'kind': 'live', 'lines': [], 'prompt': '', 'choices': [], 'ending': False}
     job['ep'] = ep; job['t'] = {}; ths = []
+    mq = {'pending': [], 'done': False}; mev = threading.Event()
+
+    def mapper():
+        while True:
+            mev.wait(2); mev.clear()
+            time.sleep(0.35)  # 攒一小批再配（第一句单独先配，开播那句尽快有画面）
+            batch, mq['pending'] = mq['pending'], []
+            if batch:
+                ctx = '\n'.join(f"{l['who']}: {l['text']}" for l in ep['lines'][max(0, batch[0][0] - 3):batch[0][0]])
+                try:
+                    for i, c in map_clips(series, ctx, batch).items():
+                        if i < len(ep['lines']) and not ep['lines'][i].get('clip'): ep['lines'][i]['clip'] = c
+                    job['t'].setdefault('clip0', round(time.time() - t0, 2))
+                except Exception:
+                    traceback.print_exc()
+            elif mq['done']: return
+    if VIS.get(series): mth = threading.Thread(target=mapper, daemon=True); mth.start()
+    else: mth = None
 
     def synth(i, who, text):
         first = i == 0
@@ -337,21 +372,25 @@ def run_episode(job, sess, user_msg):
         job['status'] = 'voicing'; sess['_got_lines'] = True
         job['t'].setdefault('first_line', round(time.time() - t0, 2))
         th = threading.Thread(target=synth, args=(i, who, v), daemon=True); th.start(); ths.append(th)
+        if not clip: mq['pending'].append((i, who, ep['lines'][i]['text'])); mev.set()
     try:
         sess['_got_lines'] = False
         write_episode(sess, user_msg, on_line)
         job['t']['writer'] = round(time.time() - t0, 2)
+        mq['done'] = True; mev.set()
         if len(ep['lines']) < 3: raise RuntimeError('writer returned too few lines')
         if not ep['choices']: ep['choices'] = ['……', '……'] if lang == 'zh' else ['…', '…']
         if not ep['title']: ep['title'] = (f'第 {n} 集' if lang == 'zh' else f'Episode {n}')
         if n >= MAX_EPS: ep['ending'] = True
         [x.join(timeout=150) for x in ths]
+        if mth: mth.join(timeout=20)
         for l in ep['lines']:
             if l['url'] is None: l['url'] = ''
         sess['eps'].append({'n': n, 'title': ep['title'], 'lines': [{'who': l['who'], 'text': l['text']} for l in ep['lines']], 'prompt': ep['prompt'], 'choices': ep['choices']})
         job['status'] = 'done'
         log(sess['sid'], {'ep': n, 'writer': sess.get('writer'), 't': job['t'], 'ep_out': {k: v for k, v in ep.items() if k != 'lines'}, 'lines': [{k: l[k] for k in ('who', 'text', 'url', 'clip')} for l in ep['lines']], 'at': time.strftime('%F %T')})
     except Exception as e:
+        mq['done'] = True; mev.set()  # 别让配画面线程空转
         job['status'] = 'error'; job['error'] = str(e)[:300]
         log(sess['sid'], {'ep': n, 'error': traceback.format_exc()[-800:]})
 
