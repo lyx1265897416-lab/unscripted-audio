@@ -286,8 +286,26 @@ def her_said(text, via, lang):
 KEYS_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9 ._-]{0,24}|NARR|TITLE|PROMPT|C1|C2|END|LINE|HANGUP)\s*[:：]\s*(.+)$')
 
 
-def write_episode(sess, user_msg, on_line, sysm=None):
-    """逐行流式；on_line(key, value) 每写完一行回调一次。返回全文。sysm 不给就用剧集编剧的系统提示词（通话传自己的）。"""
+def openrouter_stream(model, sysm, user_msg, feed, max_tokens=1400, temperature=0.85, extra=None):
+    body = {'model': model, 'max_tokens': max_tokens, 'temperature': temperature, 'stream': True,
+            'messages': [{'role': 'system', 'content': sysm}, {'role': 'user', 'content': user_msg}], **(extra or {})}
+    req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
+                    headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
+    out = ''
+    with op.open(req, timeout=60) as r:
+        for line in r:
+            line = line.decode('utf8', 'ignore').strip()
+            if not line.startswith('data:') or line.endswith('[DONE]'): continue
+            try: c = json.loads(line[5:])['choices'][0]['delta'].get('content') or ''
+            except Exception: continue
+            out += c; feed(c)
+    feed('\n')
+    return out
+
+
+def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
+    """逐行流式；on_line(key, value) 每写完一行回调一次。返回全文。sysm 不给就用剧集编剧的系统提示词（通话传自己的）。
+    fast_model：先用这个 OpenRouter 快模型（通话第 2 轮起用，第一句约 3 秒），失败再走 Claude Code。"""
     sysm = sysm or system_prompt(sess)
     buf = {'b': ''}
 
@@ -297,6 +315,14 @@ def write_episode(sess, user_msg, on_line, sysm=None):
             ln, buf['b'] = buf['b'].split('\n', 1)
             m = KEYS_RE.match(ln)
             if m: on_line(m.group(1).strip(), m.group(2).strip())
+    if fast_model:
+        try:
+            txt = openrouter_stream(fast_model, sysm, user_msg, feed, max_tokens=500, temperature=0.8, extra={'reasoning': {'enabled': False}})
+            sess['writer'] = fast_model
+            return txt
+        except Exception:
+            traceback.print_exc(); buf['b'] = ''
+            if sess.get('_got_lines'): raise
     if CC and os.environ.get('DIRECTOR_CLI'):
         try:
             txt = CC.stream_text(sysm, user_msg, feed, timeout=120, effort='low')
@@ -399,6 +425,7 @@ def run_episode(job, sess, user_msg):
 CALLS = {}
 MAX_CALL_TURNS = 12
 FILLERS = {'zh': ['嗯。', '嗯，我在听。', '我在。', '嗯，我知道。'], 'en': ['Mm.', "I'm listening.", "I'm here.", 'Yeah. I know.']}
+THINKS = {'zh': ['让我想想。', '你这么问……', '嗯……我在想怎么跟你说。', '……这个问题。'], 'en': ['Let me think.', 'You asking me that…', "Mm… I'm figuring out how to say this.", '…That question.']}
 
 
 def callers(sid):
@@ -414,12 +441,19 @@ def callers(sid):
 def call_fillers(series, who, lang):
     """垫场声：她说完立刻播一句“嗯，我在听”，盖住他“想”的那几秒（11-05 她说这几句的音色最好）。第一次用时合成，之后缓存。"""
     f = CACHE / 'fillers' / f'{series}.{who}.{lang}.json'
-    if f.exists(): return json.load(open(f))
+    if f.exists():
+        d = json.load(open(f))
+        if isinstance(d, dict): return d
+        d = {'urls': d}  # 旧缓存只有垫场声，补上思考声
+    else: d = None
     f.parent.mkdir(parents=True, exist_ok=True)
     import concurrent.futures as cf
+    say = lambda t: tts(series, who, ('[quietly] ' + t) if lang == 'en' else t, lang)
     with cf.ThreadPoolExecutor(4) as ex:
-        urls = list(ex.map(lambda t: tts(series, who, ('[quietly] ' + t) if lang == 'en' else t, lang), FILLERS[lang]))
-    json.dump(urls, open(f, 'w')); return urls
+        urls = d['urls'] if d else list(ex.map(say, FILLERS[lang]))
+        think = list(ex.map(say, THINKS[lang]))
+    d = {'urls': urls, 'think': think}
+    json.dump(d, open(f, 'w')); return d
 
 
 CALL_RULES = {
@@ -448,9 +482,13 @@ C2: <a different short reply>
 HANGUP: no"""
 
 
-def call_system(c):
+CALL_FAST = os.environ.get('CALL_FAST_MODEL', 'deepseek/deepseek-v4.1-flash')  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
+
+
+def call_system(c, lite=False):
     s, lang, w = c['series'], c['lang'], WORLD[c['series']]
     ch = next((x for x in w['characters'] if x['name'].split()[0] == c['who'] or x['name'] == c['who']), w['characters'][0])
+    if lite: w = {k: w[k] for k in ('premise_zh', 'premise_en', 'her', 'truths', 'tone', 'rules') if k in w}  # 快模型用精简版，提示词短一半
     role = ch.get('role_zh' if lang == 'zh' else 'role_en') or ch.get('role_zh', '')
     head = (f'你是女性向互动音频剧的角色演员，现在在电话里演 {c["who"]}。' if lang == 'zh' else f'You are voicing {c["who"]} live on a phone call in a women-focused interactive audio drama.')
     return '\n\n'.join([head, '世界卡（内部资料）：\n' + json.dumps(w, ensure_ascii=False),
@@ -465,19 +503,24 @@ def call_context(c):
     return story, turns
 
 
-def run_call(job, c, her):
+def run_call(job, c, her, spec=None):
+    """一轮通话。spec={'base': 轮数}：预先生成（她还没选）——只合成第一句，不记进通话；她点了这条快捷回复（commit_spec）才补合成其余句并记进通话。"""
     t0 = time.time(); lang = c['lang']; n = len(c['turns']) + 1
-    out = {'lines': [], 'choices': [], 'hangup': False}; job['call'] = out; job['t'] = {}; ths = []
+    out = {'lines': [], 'choices': [], 'hangup': False}; job['call'] = out; job['t'] = {}; ths = []; raws = []
+    job['_raws'] = raws; job['_her'] = her; job['_n'] = n; job['_ths'] = ths; job['_started'] = set()
 
     def synth(i, text):
-        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, 3 if i == 0 else 1)
+        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, (2 if spec else 3) if i == 0 else 1)
         except Exception: out['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
+    job['_synth'] = synth
 
     def on_line(k, v):
         if k == 'LINE' and v and len(out['lines']) < 4:
-            i = len(out['lines']); out['lines'].append({'who': c['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None})
+            i = len(out['lines']); out['lines'].append({'who': c['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None}); raws.append(v)
             job['status'] = 'voicing'; job['t'].setdefault('first_line', round(time.time() - t0, 2))
+            if spec and i > 0 and not job.get('_committed'): return  # 预先生成只配第一句，其余等她真选了再配
+            job['_started'].add(i)
             th = threading.Thread(target=synth, args=(i, v), daemon=True); th.start(); ths.append(th)
         elif k in ('C1', 'C2') and v: out['choices'].append(v)
         elif k == 'HANGUP': out['hangup'] = v.lower().startswith('y')
@@ -495,20 +538,68 @@ def run_call(job, c, her):
            f'Story so far:\n{story}\n\nThis call so far:\n{turns or "(just connected)"}\n\nTurn {n}. {ask}{pace}')
     try:
         c['_got_lines'] = False
-        write_episode(c, msg, on_line, sysm=call_system(c))
-        job['t']['writer'] = round(time.time() - t0, 2)
+        fast = CALL_FAST if n > 1 else None  # 第 1 轮响铃时间够长，用 Opus 写开场；之后每轮用快模型
+        write_episode(c, msg, on_line, sysm=call_system(c, lite=bool(fast)), fast_model=fast)
+        job['t']['writer'] = round(time.time() - t0, 2); job['writer'] = c.get('writer')
         if not out['lines']: raise RuntimeError('writer returned no lines')
         if n >= MAX_CALL_TURNS: out['hangup'] = True
         if not out['choices']: out['choices'] = ['嗯。', '你继续说。'] if lang == 'zh' else ['Mm.', 'Keep talking.']
-        [x.join(timeout=150) for x in ths]
-        for l in out['lines']:
-            if l['url'] is None: l['url'] = ''
-        c['turns'].append({'her': her if n > 1 else '（接通）', 'lines': [l['text'] for l in out['lines']]})
-        job['status'] = 'done'
-        log('call-' + c['cid'], {'turn': n, 'her': her, 'writer': c.get('writer'), 't': job['t'], 'out': out, 'at': time.strftime('%F %T')})
+        job['_written'] = True
+        if spec:
+            with c.setdefault('_lock', threading.Lock()):
+                if not job.get('_committed'):
+                    [x.join(timeout=150) for x in ths]; job['status'] = 'ready'; return  # 等她选
+            finish_spec(job, c)  # 写的过程中她已经选了这条
+            return
+        finish_turn(job, c, ths)
     except Exception as e:
         job['status'] = 'error'; job['error'] = str(e)[:300]
         log('call-' + c['cid'], {'turn': n, 'error': traceback.format_exc()[-800:]})
+
+
+def finish_turn(job, c, ths):
+    out = job['call']
+    [x.join(timeout=150) for x in ths]
+    for l in out['lines']:
+        if l['url'] is None: l['url'] = ''
+    n = job['_n']; her = job['_her']
+    c['turns'].append({'her': her if n > 1 else '（接通）', 'lines': [l['text'] for l in out['lines']]})
+    job['status'] = 'done'
+    log('call-' + c['cid'], {'turn': n, 'her': her, 'writer': job.get('writer'), 'spec': bool(job.get('_committed')), 't': job['t'], 'out': out, 'at': time.strftime('%F %T')})
+    if not out['hangup'] and c['cid'] in CALLS: start_specs(c, out['choices'])
+
+
+def finish_spec(job, c):
+    """她点了预先生成的这条：补合成第一句以外的句子，记进通话"""
+    out = job['call']; ths = list(job['_ths'])
+    for i, raw in enumerate(job['_raws']):
+        if i not in job['_started']:
+            job['_started'].add(i)
+            th = threading.Thread(target=job['_synth'], args=(i, raw), daemon=True); th.start(); ths.append(th)
+    job['status'] = 'voicing'
+    finish_turn(job, c, ths)
+
+
+def start_specs(c, choices):
+    """他这轮说完、她还在听/读的时候，按两个快捷回复先把他下一轮写好、第一句配好音"""
+    c['spec'] = {}
+    for ch in choices[:2] + ['__silence__']:  # 两个快捷回复 + 沉默，都是能猜到的回应
+        jid = rid(); JOBS[jid] = {'id': jid, 'status': 'writing', 'error': None, '_spec': True}
+        c['spec'][ch] = {'job': jid, 'base': len(c['turns'])}
+        her = her_said('', 'silence', c['lang']) if ch == '__silence__' else her_said(ch, 'option', c['lang'])
+        threading.Thread(target=run_call, args=(JOBS[jid], c, her, {'base': len(c['turns'])}), daemon=True).start()
+
+
+def commit_spec(c, text):
+    """她点的快捷回复有预先生成的结果就直接用，返回 job id；没有返回 None"""
+    sp = (c.get('spec') or {}).get(text); c['spec'] = {}
+    if not sp or sp['base'] != len(c['turns']): return None
+    job = JOBS.get(sp['job'])
+    if not job or job['status'] == 'error': return None
+    with c.setdefault('_lock', threading.Lock()):
+        job['_committed'] = True; ready = job['status'] == 'ready'
+    if ready: threading.Thread(target=finish_spec, args=(job, c), daemon=True).start()
+    return sp['job']
 
 
 def start_job(fn, *a):
@@ -575,10 +666,12 @@ class H(BaseHTTPRequestHandler):
             if u.path == '/api/call/fillers':
                 sid, who = g('series'), g('who')
                 if sid not in BASE or who not in VOICES[sid]: return self._send(404, {'error': 'no caller'})
-                try: return self._send(200, {'urls': call_fillers(sid, who, lang)})
+                try: return self._send(200, call_fillers(sid, who, lang))
                 except Exception as e: return self._send(500, {'error': str(e)[:200]})
             if u.path == '/api/job':
-                j = JOBS.get(g('id')); return self._send(200 if j else 404, j or {'error': 'no job'})
+                j = JOBS.get(g('id'))
+                if j and j.get('status') == 'ready': j = dict(j, status='voicing')  # 预先生成好了但还没被选：对外当作还在合成
+                return self._send(200 if j else 404, {k: v for k, v in j.items() if not k.startswith('_')} if j else {'error': 'no job'})
             return self._send(404, {'error': 'not found'})
         p = u.path if u.path != '/' else '/index.html'
         f = (APP / p.lstrip('/')).resolve()
@@ -619,7 +712,10 @@ class H(BaseHTTPRequestHandler):
         if u.path == '/api/call/turn':
             c = CALLS.get(body.get('cid'))
             if not c: return self._send(404, {'error': 'call ended'})
-            return self._send(200, {'job': start_job(run_call, c, her_said((body.get('text') or '').strip()[:400], body.get('via') or 'free', c['lang']))})
+            text = (body.get('text') or '').strip()[:400]; via = body.get('via') or 'free'
+            jid = commit_spec(c, text) if via == 'option' else (commit_spec(c, '__silence__') if via == 'silence' or not text else None)
+            if not jid: c['spec'] = {}
+            return self._send(200, {'job': jid or start_job(run_call, c, her_said(text, via, c['lang']))})
         if u.path == '/api/call/end':
             c = CALLS.pop(body.get('cid'), None)
             if c: log('call-' + c['cid'], {'end': True, 'seconds': body.get('seconds'), 'turns': len(c['turns']), 'at': time.strftime('%F %T')})

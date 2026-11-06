@@ -286,7 +286,7 @@ const MockAPI = {
     };
   },
   calls: new Map(),
-  async fillers() { await sleep(300); return { urls: ['mock/line_c.mp3'] }; },
+  async fillers() { await sleep(300); return { urls: ['mock/line_c.mp3'], think: ['mock/line_a.mp3', 'mock/line_b.mp3'] }; },
   async callStart({ series, who, direction }) {
     await sleep(200);
     const cid = 'mc' + (++this.seq);
@@ -318,7 +318,7 @@ const MockAPI = {
     const hangup = c.n >= 6;
     if (hangup) lines = lines.slice(0, 1).concat([zh ? '我得挂了。明天，等我电话。' : "I have to go. Tomorrow — wait for my call."]);
     const files = ['mock/line_c.mp3', 'mock/line_b.mp3', 'mock/line_a.mp3'];
-    const t0 = 1.0 + Math.random() * 0.6;
+    const t0 = 1.0 + Math.random() * 0.6 + (c.n === 3 ? 8 : 0); // turn 3 is slow on purpose so the "let me think" clip plays
     const pc = zh ? [['我也想你了。', '你怎么这么晚还不睡？'], ['那你现在说。', '我在听。'], ['你在哪？', '别挂。'], ['明天见？', '晚安。']]
       : [['I missed you too.', 'Why are you still awake?'], ['Then tell me now.', "I'm listening."], ['Where are you?', "Don't hang up."], ['See you tomorrow?', 'Good night.']];
     const id = 'mj' + (++this.seq);
@@ -1353,8 +1353,11 @@ callAudio.addEventListener('ended', onCallAudioDone);
 callAudio.addEventListener('error', () => { if (!callAudio.src.startsWith('data:')) onCallAudioDone(); });
 function onCallAudioDone() {
   if (!C || callAudio.src.startsWith('data:')) return;
-  if (C.fillerPlaying) C.fillerPlaying = false;
-  else if (C.playing) { C.playing = false; C.idx += 1; }
+  if (C.fillerPlaying) {
+    const wasThink = C.thinkPlaying;
+    C.fillerPlaying = false; C.thinkPlaying = false;
+    if (!wasThink) scheduleThink(C, C.turn);
+  } else if (C.playing) { C.playing = false; C.idx += 1; }
   else return;
   renderCallUI();
   setTimeout(callAdvance, 120);
@@ -1406,6 +1409,7 @@ function newCall(id, who, direction, sid) {
     transcript: [], t0: 0, secs: 0, timer: 0, ringT: 0, turn: 0, fillers: [], fillerPlaying: false, playing: false,
     waiting: false, startP: null, accepted: direction !== 'incoming',
   };
+  C.rec = createCallRec(C);
   if (P.cur && !audio.paused) doPause(); else P.want = false;
   return C;
 }
@@ -1427,7 +1431,8 @@ function beginCallRequest(call) {
   return call.startP;
 }
 function prefetchFillers(call) {
-  API.fillers({ series: call.id, who: call.who }).then((r) => { if (C === call) call.fillers = (r && r.urls) || []; }).catch(() => {});
+  // {urls:[short fillers], think:["let me think" lines]} — older servers send only urls
+  API.fillers({ series: call.id, who: call.who }).then((r) => { if (C === call) { call.fillers = (r && r.urls) || []; call.thinks = (r && r.think) || []; } }).catch(() => {});
 }
 function startCall(id, who, o) {
   closeAllSheets();
@@ -1452,6 +1457,7 @@ function acceptCall() {
   primeCallAudio(); unlockCtx();
   stopRing();
   C.accepted = true; C.phase = 'connecting';
+  if (C.rec) { C.rec.status = 'live'; saveCalls(true); }
   ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save();
   renderCall();
   callAdvance(); // lines may already be ready
@@ -1461,7 +1467,7 @@ function declineCall() {
   stopRing();
   const call = C;
   if (call.cid) API.callEnd({ cid: call.cid, seconds: 0 }).catch(() => {});
-  logCall(call, 'declined');
+  recFinish(call, 'declined');
   C = null; stopCallPoll();
   hideCall();
   if (P.needChoice && !(topSheet() && topSheet().kind === 'choice')) openChoiceSheet();
@@ -1481,6 +1487,7 @@ function pollCall(jobId, turn) {
     if (j.call) {
       call.lines = (j.call.lines || []).map((l) => ({ who: l.who, text: cleanText(l.text), url: l.url }));
       if (j.status === 'done') { call.jobDone = true; call.choices = (j.call.choices || []).slice(0, 2); call.hangup = !!j.call.hangup; }
+      recSyncHim(call);
     } else if (j.status === 'done') call.jobDone = true;
     if (!call.playing && !call.fillerPlaying) callAdvance(); else preloadCallNext();
     renderCallUI();
@@ -1532,6 +1539,24 @@ function turnDone() {
   call.phase = 'your-turn';
   renderCallUI();
 }
+/** ~3.5 s after the filler, if his first line still has no audio: one "let me think" clip
+ *  (at most once per turn, never the same clip as last turn); skipped when his line is already there. */
+function scheduleThink(call, turn) {
+  clearTimeout(call.thinkT);
+  if (call.phase !== 'thinking' || !call.thinks || !call.thinks.length) return;
+  call.thinkT = setTimeout(() => {
+    if (C !== call || call.turn !== turn || call.phase !== 'thinking' || call.playing || call.fillerPlaying || call.thinkTurn === turn) return;
+    const L = call.lines; let i = call.idx;
+    while (i < L.length && L[i].url === '') i++;
+    if (L[i] && L[i].url) return;
+    const pool = call.thinks.filter((u) => u !== call.lastThink);
+    if (!pool.length) return;
+    const u = pool[Math.floor(Math.random() * pool.length)];
+    call.thinkTurn = turn; call.lastThink = u;
+    call.fillerPlaying = true; call.thinkPlaying = true;
+    playCallSrc(u);
+  }, 3500);
+}
 function playFiller() {
   const call = C; if (!call || !call.fillers.length) return;
   call.fillerPlaying = true;
@@ -1545,9 +1570,11 @@ async function sendCallTurn(text, via) {
   const silent = via === 'silence';
   call.transcript.push({ who: 'you', text: silent ? '' : text, silent });
   call.turn += 1;
+  recHer(call, text, via);
   const turn = call.turn;
   Object.assign(call, { lines: [], idx: 0, jobDone: false, choices: [], logged: new Set(), caption: null, phase: 'thinking', waiting: true });
   playFiller();
+  if (!call.fillerPlaying) scheduleThink(call, turn); // no filler available: count from the send
   renderCall();
   try {
     const r = await API.callTurn({ cid: call.cid, text: silent ? '' : text, via });
@@ -1556,7 +1583,7 @@ async function sendCallTurn(text, via) {
   } catch (e) {
     if (C !== call) return;
     toast(`Couldn't reach ${esc(shortName(call.caller))}: ${esc(e.message || 'error')}`);
-    call.transcript.pop(); call.turn -= 1; call.phase = 'your-turn';
+    call.transcript.pop(); if (call.rec) { call.rec.turns.splice(call.turn); saveCalls(true); } call.turn -= 1; call.phase = 'your-turn';
     renderCall();
   }
 }
@@ -1569,25 +1596,14 @@ function hangUp() {
 function endCall(reason) {
   const call = C;
   if (!call || call.phase === 'ended') return;
-  stopRing(); stopCallPoll(); stopCallMic();
+  stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT);
   try { callAudio.pause(); } catch (e) { /* ignore */ }
   clearInterval(call.timer);
   call.secs = call.t0 ? Math.round((Date.now() - call.t0) / 1000) : 0;
   call.phase = 'ended'; call.endReason = reason;
   if (call.cid) API.callEnd({ cid: call.cid, seconds: call.secs }).catch(() => {});
-  logCall(call, reason === 'error' && !call.t0 ? 'failed' : 'done');
+  recFinish(call, reason === 'error' && !call.t0 ? 'failed' : 'done');
   renderCall();
-}
-function logCall(call, status) {
-  S.calls = S.calls || [];
-  const s = byId(call.id);
-  S.calls.unshift({
-    at: Date.now(), id: call.id, who: call.who, name: (call.caller && call.caller.name) || call.who, lang: LANG, mode: MOCK ? 'm' : 'r',
-    dir: call.direction, secs: call.secs || 0, status, title: s ? s.title : '', transcript: call.transcript.slice(0, 80),
-  });
-  S.calls = S.calls.slice(0, 50);
-  save();
-  if (curTab === 'library' && libTab === 'calls') renderLibrary();
 }
 function closeCallScreen() {
   C = null; stopCallPoll();
@@ -1646,21 +1662,23 @@ function renderCall() {
       el.className = 'call on ph-ended';
       el.innerHTML = `
         <div class="cl-bgw"><div class="cl-bg" style="background-image:url('${esc(coverOf(s))}')"></div></div>
+        <div class="cl-end-top"><span></span><button class="icon-btn" data-act="go-calls" aria-label="Call history">${ic('clock')}</button></div>
         <div class="cl-end">
           <div class="cl-av sm">${circle}</div>
           <h2 class="cl-name">${esc(name)}</h2>
           <p class="cl-status">${call.endReason === 'error' && !call.t0 ? 'Call failed' : 'Call ended'} · <span class="tnum">${fmtTime(call.secs)}</span></p>
+          <button class="saved-chip" data-act="call-live-tr">${ic('check', 'xs')} Saved to Calls</button>
           <div class="cl-end-btns">
             <button class="btn btn-grad" data-act="call-again">${ic('phone', 'sm')} Call again</button>
             <button class="btn btn-ghost" data-act="call-close">Done</button>
           </div>
-          <h4 class="cl-tr-h">Transcript</h4>
-          <div class="cl-tr">${transcriptHtml(call.transcript, name)}</div>
+          <div class="cl-tr-h"><h4>Transcript</h4><button class="link-btn" data-act="call-live-tr">${ic('play', 'xs')} Replay lines</button></div>
+          <div class="cl-tr">${transcriptHtml(call.rec)}</div>
         </div>`;
     } else {
       el.innerHTML = `
         <div class="cl-bgw"><div class="cl-bg" style="background-image:url('${esc(coverOf(s))}')"></div></div>
-        <div class="cl-top"><span>${ic('phone', 'xs')} ${esc(s.title)}</span></div>
+        <div class="cl-top"><i class="cl-top-pad"></i><span>${ic('phone', 'xs')} ${esc(s.title)}</span><button class="icon-btn cl-hist" data-act="call-live-tr" aria-label="This call's transcript">${ic('clock')}</button></div>
         <div class="cl-hero">
           <div class="cl-av" id="cl-av"><i class="cl-pulse"></i><i class="cl-pulse p2"></i><i class="cl-pulse p3"></i>${circle}</div>
           <h2 class="cl-name">${esc(name)}</h2>
@@ -1674,13 +1692,8 @@ function renderCall() {
   }
   renderCallUI(true);
 }
-function transcriptHtml(tr, name) {
-  if (!tr || !tr.length) return '<p class="cl-tr-empty">No conversation yet.</p>';
-  return tr.map((t) => t.who === 'you'
-    ? `<div class="tr-row you"><span>You</span><p>${t.silent ? '<em>(stayed silent)</em>' : esc(t.text)}</p></div>`
-    : `<div class="tr-row"><span>${esc(shortName({ name }))}</span><p>${esc(t.text)}</p></div>`).join('');
-}
 function updateCallTimer() {
+  if (C && C.rec && C.t0 && callActive()) { const secs = Math.round((Date.now() - C.t0) / 1000); C.rec.dur = secs; if (secs % 5 === 0) saveCalls(); }
   const st = $('#cl-status'); if (!st || !C || !C.t0) return;
   if (C.phase === 'talking' || C.phase === 'your-turn' || C.phase === 'thinking') st.textContent = fmtTime((Date.now() - C.t0) / 1000);
 }
@@ -1770,12 +1783,292 @@ function maybeIncomingCall() {
   }, 2000);
 }
 
-function openTranscript(i) {
-  const h = (S.calls || [])[i]; if (!h) return;
-  openSheet(`
-    <div class="sh-h"><div><h3>${esc(h.name)}</h3><p>${esc(h.title)} · ${h.dir === 'incoming' ? 'Incoming' : 'Outgoing'} · ${fmtTime(h.secs)}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
-    <div class="cl-tr sheet-tr">${transcriptHtml(h.transcript, h.name)}</div>
-    <button class="btn btn-grad btn-block" data-act="call-back" data-id="${esc(h.id)}" data-who="${esc(h.who)}" style="margin-top:14px">${ic('phone', 'sm')} Call back</button>`);
+/* =========================================================================
+ * 10c. Call history — autosaved after every turn (localStorage `ua.calls`, newest first, max 200)
+ * record: {rid, series, who, name, title, lang, mode, direction, startedAt, endedAt, dur, status,
+ *          turns:[{her:{text,via,at}|null, him:[{text,url,at}]}]}
+ * status: live | ringing | done | declined | failed | interrupted | missed
+ * ========================================================================= */
+const CALLS_KEY = 'ua.calls';
+const CALLS_MAX = 200;
+let CALLS = store.get(CALLS_KEY, []) || [];
+if (!Array.isArray(CALLS)) CALLS = [];
+(function migrateCalls() {
+  // older builds kept calls in S.calls with a flat transcript
+  if (Array.isArray(S.calls) && S.calls.length) {
+    S.calls.forEach((h) => {
+      const turns = [{ her: null, him: [] }];
+      (h.transcript || []).forEach((t) => {
+        if (t.who === 'you') turns.push({ her: { text: t.text || '', via: t.silent ? 'silence' : 'free', at: h.at }, him: [] });
+        else turns[turns.length - 1].him.push({ text: t.text, url: null, at: h.at });
+      });
+      CALLS.push({ rid: 'm' + h.at + Math.random().toString(36).slice(2, 6), series: h.id, who: h.who, name: h.name, title: h.title, lang: h.lang || LANG,
+        mode: h.mode || 'm', direction: h.dir || 'outgoing', startedAt: h.at, endedAt: h.at, dur: h.secs || 0, status: h.status === 'declined' ? 'declined' : 'done', turns });
+    });
+    S.calls = []; save();
+    CALLS.sort((a, b) => b.startedAt - a.startedAt);
+  }
+  // a call that was live when the page closed is kept, marked interrupted
+  CALLS.forEach((r) => { if (r.status === 'live') r.status = 'interrupted'; else if (r.status === 'ringing') r.status = 'missed'; });
+})();
+let callsSaveT = 0;
+function saveCalls(now) {
+  clearTimeout(callsSaveT);
+  const f = () => { CALLS = CALLS.slice(0, CALLS_MAX); store.set(CALLS_KEY, CALLS); };
+  if (now) f(); else callsSaveT = setTimeout(f, 150);
+}
+saveCalls(true);
+window.addEventListener('pagehide', () => { if (C && C.rec && C.t0) C.rec.dur = Math.round((Date.now() - C.t0) / 1000); saveCalls(true); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { if (C && C.rec && C.t0) C.rec.dur = Math.round((Date.now() - C.t0) / 1000); saveCalls(true); } });
+
+function createCallRec(call) {
+  const s = byId(call.id);
+  const rec = {
+    rid: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    series: call.id, who: call.who, name: (call.caller && call.caller.name) || call.who, title: s ? s.title : '',
+    lang: LANG, mode: MOCK ? 'm' : 'r', direction: call.direction, startedAt: Date.now(), endedAt: null, dur: 0,
+    status: call.direction === 'incoming' ? 'ringing' : 'live', turns: [{ her: null, him: [] }],
+  };
+  CALLS.unshift(rec);
+  saveCalls(true);
+  return rec;
+}
+/** copy his lines for the current turn (text + permanent url) into the record; saves only on change */
+function recSyncHim(call) {
+  const rec = call.rec; if (!rec) return;
+  const t = rec.turns[call.turn] || (rec.turns[call.turn] = { her: null, him: [] });
+  const prev = JSON.stringify(t.him.map((h) => [h.text, h.url]));
+  const now = Date.now();
+  t.him = call.lines.map((l, i) => ({ text: l.text, url: l.url, at: (t.him[i] && t.him[i].at) || now }));
+  if (JSON.stringify(t.him.map((h) => [h.text, h.url])) !== prev) { saveCalls(); if (TR && TR.rid === rec.rid) renderTranscriptView(); }
+}
+function recHer(call, text, via) {
+  const rec = call.rec; if (!rec) return;
+  rec.turns[call.turn] = { her: { text: via === 'silence' ? '' : text, via, at: Date.now() }, him: [] };
+  rec.dur = call.t0 ? Math.round((Date.now() - call.t0) / 1000) : rec.dur;
+  saveCalls(true);
+  if (TR && TR.rid === rec.rid) renderTranscriptView();
+}
+function recFinish(call, status) {
+  const rec = call.rec; if (!rec) return;
+  rec.status = status; rec.endedAt = Date.now();
+  rec.dur = call.secs || rec.dur || 0;
+  rec.turns = rec.turns.filter((t, i) => i === 0 || t.her || t.him.length);
+  saveCalls(true);
+  refreshCallLists();
+  if (TR && TR.rid === rec.rid) renderTranscriptView();
+}
+function refreshCallLists() {
+  if (curTab === 'library' && libTab === 'calls' && $('#v-library').classList.contains('on')) renderLibrary();
+  if (isDetailOpen()) renderDetail();
+}
+const callsFor = (sid) => CALLS.filter((r) => r.mode === (MOCK ? 'm' : 'r') && (!sid || r.series === sid) && byId(r.series));
+const recById = (rid) => CALLS.find((r) => r.rid === rid);
+const recLines = (r) => r.turns.reduce((n, t) => n + t.him.length + (t.her ? 1 : 0), 0);
+const fmtWhen = (t) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function transcriptHtml(r) {
+  if (!r || !r.turns.some((t) => t.her || t.him.length)) return '<p class="cl-tr-empty">No conversation yet.</p>';
+  return r.turns.map((t) => (t.her ? `<div class="tr-row you"><span>You</span><p>${t.her.via === 'silence' || !t.her.text ? '<em>(stayed silent)</em>' : esc(t.her.text)}</p></div>` : '')
+    + t.him.map((h) => `<div class="tr-row"><span>${esc(shortName({ name: r.name }))}</span><p>${esc(cleanText(h.text))}</p></div>`).join('')).join('');
+}
+function recStatusLabel(r) {
+  return ({ declined: 'Declined', missed: 'Missed', failed: 'Failed', interrupted: `Interrupted · ${fmtTime(r.dur)}`, live: 'On call now', ringing: 'Ringing' })[r.status] || fmtTime(r.dur);
+}
+
+/** one swipeable history row (Library › Calls, detail sheet) */
+function callRowHtml(r) {
+  const s = byId(r.series);
+  const bad = ['declined', 'missed', 'failed'].indexOf(r.status) >= 0;
+  return `<div class="swipe-row" data-rid="${esc(r.rid)}">
+    <button class="swipe-del" data-act="call-del" data-rid="${esc(r.rid)}" aria-label="Delete call">${ic('trash', 'sm')}<span>Delete</span></button>
+    <div class="swipe-body lib-row">
+      <button class="open" data-act="call-tr" data-rid="${esc(r.rid)}">
+        <span class="cv round"><img src="${esc(avatarOf(s))}" alt="" loading="lazy"></span>
+        <span class="lt"><b>${esc(r.name)}</b><span>${esc(s.title)} · ${recLines(r)} line${recLines(r) === 1 ? '' : 's'}</span><span class="call-meta ${bad ? 'miss' : ''}">${ic(r.direction === 'incoming' ? 'phone' : 'send', 'xs')} ${r.direction === 'incoming' ? 'Incoming' : 'Outgoing'} · ${fmtWhen(r.startedAt)} · ${esc(recStatusLabel(r))}</span></span>
+      </button>
+      <button class="rm call-back-btn" data-act="call-back" data-id="${esc(r.series)}" data-who="${esc(r.who)}" aria-label="Call back">${ic('phone', 'sm')}</button>
+    </div>
+  </div>`;
+}
+/* swipe-left to reveal Delete */
+let swipeSt = null, swipeSuppress = 0;
+document.addEventListener('pointerdown', (e) => {
+  const row = e.target.closest('.swipe-row'); if (!row || e.target.closest('.swipe-del')) return;
+  $$('.swipe-row.open').forEach((r) => { if (r !== row) r.classList.remove('open'); });
+  swipeSt = { row, x: e.clientX, y: e.clientY, dx: 0, base: row.classList.contains('open') ? -88 : 0, moved: false };
+}, { passive: true });
+document.addEventListener('pointermove', (e) => {
+  if (!swipeSt) return;
+  const dx = e.clientX - swipeSt.x, dy = e.clientY - swipeSt.y;
+  if (!swipeSt.moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) swipeSt.moved = true;
+  if (!swipeSt.moved) return;
+  swipeSt.dx = dx;
+  const body = swipeSt.row.querySelector('.swipe-body');
+  body.style.transition = 'none';
+  body.style.transform = `translateX(${clamp(swipeSt.base + dx, -110, 0)}px)`;
+}, { passive: true });
+const endSwipe = () => {
+  if (!swipeSt) return;
+  const st = swipeSt; swipeSt = null;
+  const body = st.row.querySelector('.swipe-body');
+  body.style.transition = ''; body.style.transform = '';
+  if (st.moved) { swipeSuppress = Date.now(); st.row.classList.toggle('open', st.base + st.dx < -44); }
+};
+document.addEventListener('pointerup', endSwipe, { passive: true });
+document.addEventListener('pointercancel', endSwipe, { passive: true });
+document.addEventListener('click', (e) => { if (Date.now() - swipeSuppress < 300 && e.target.closest('.swipe-row')) { e.stopPropagation(); e.preventDefault(); } }, true);
+
+function deleteCallRec(rid) {
+  const i = CALLS.findIndex((r) => r.rid === rid); if (i < 0) return;
+  if (C && C.rec && C.rec.rid === rid && callActive()) { toast("Can't delete a call in progress"); return; }
+  if (TR && TR.rid === rid) closeTranscriptView();
+  CALLS.splice(i, 1); saveCalls(true);
+  toast('Call deleted');
+  refreshCallLists(); refreshSheets();
+}
+function confirmSheet(title, body, okLabel, onOk) {
+  const entry = openSheet(`
+    <div class="sh-h"><div><h3>${esc(title)}</h3><p>${esc(body)}</p></div></div>
+    <div class="ul-btns"><button class="btn btn-grad danger-btn" data-act="confirm-ok">${esc(okLabel)}</button><button class="btn btn-ghost" data-act="sheet-close">Cancel</button></div>`, { kind: 'confirm', onOk });
+  return entry;
+}
+function clearAllCalls() {
+  const n = callsFor().length; if (!n) return;
+  confirmSheet(`Clear all ${n} calls?`, 'Transcripts and replay links are removed from this device. This can’t be undone.', 'Clear all', () => {
+    const keep = C && C.rec && callActive() ? C.rec.rid : null;
+    const mode = MOCK ? 'm' : 'r';
+    CALLS = CALLS.filter((r) => r.mode !== mode || r.rid === keep);
+    saveCalls(true); toast('Call history cleared'); refreshCallLists();
+  });
+}
+function openSeriesCalls(id) {
+  const s = byId(id);
+  const entry = openSheet('', { kind: 'series-calls' });
+  entry.refresh = () => {
+    const list = callsFor(id);
+    entry.el.innerHTML = `<div class="grab"></div>
+      <div class="sh-h"><div><h3>Call history</h3><p>${esc(s.title)} · ${list.length} call${list.length === 1 ? '' : 's'}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+      <div class="calls-list">${list.length ? list.map(callRowHtml).join('') : `<div class="empty">${ic('phone')}No calls with ${esc(s.title)} yet.</div>`}</div>
+      <p class="swipe-hint">Swipe left on a call to delete</p>`;
+  };
+  entry.refresh();
+}
+
+/* ---------- transcript view: chat log + replay ---------- */
+const trAudio = new Audio();
+trAudio.preload = 'auto';
+trAudio.setAttribute('playsinline', '');
+let TR = null; // {rid, queue:[{t,i}], qi, whole, cur:'t:i'}
+function openTranscriptView(rid) {
+  const r = recById(rid); if (!r) return;
+  closeAllSheets();
+  stopTrPlayback();
+  TR = { rid, queue: [], qi: 0, whole: false, cur: '' };
+  const el = $('#trv');
+  el.hidden = false;
+  renderTranscriptView();
+  requestAnimationFrame(() => el.classList.add('on'));
+}
+function closeTranscriptView() {
+  stopTrPlayback();
+  TR = null;
+  const el = $('#trv');
+  el.classList.remove('on');
+  setTimeout(() => { if (!TR) { el.hidden = true; el.innerHTML = ''; } }, 300);
+}
+function renderTranscriptView() {
+  if (!TR) return;
+  const r = recById(TR.rid); if (!r) { closeTranscriptView(); return; }
+  const s = byId(r.series);
+  const el = $('#trv');
+  const live = C && C.rec === r && callActive();
+  const t0 = r.startedAt;
+  const rel = (t) => (t ? fmtTime(Math.max(0, (t - t0) / 1000)) : '');
+  const viaLbl = { option: 'Quick reply', free: 'Typed', voice: 'Spoke', silence: 'Stayed silent' };
+  const playable = r.turns.some((t) => t.him.some((h) => h.url));
+  const msgs = r.turns.map((t, ti) => {
+    let out = '';
+    if (t.her) out += `<div class="msg you"><div class="bub">${t.her.via === 'silence' || !t.her.text ? '<em>(stayed silent)</em>' : esc(t.her.text)}</div><span class="meta">${esc(viaLbl[t.her.via] || 'You')} · ${rel(t.her.at)}</span></div>`;
+    t.him.forEach((h, hi) => {
+      const key = `${ti}:${hi}`;
+      const can = !!h.url && !live;
+      const on = TR.cur === key;
+      out += `<div class="msg him ${on ? 'playing' : ''}" data-k="${key}">
+        <img class="av" src="${esc(avatarOf(s))}" alt="">
+        <div class="col"><span class="nm">${esc(shortName({ name: r.name }))}<i>${rel(h.at)}</i></span>
+          <div class="bub-row"><div class="bub">${esc(cleanText(h.text))}</div>
+          <button class="line-play" data-act="tr-line" data-k="${key}" ${can ? '' : 'disabled'} aria-label="${on ? 'Pause line' : 'Play line'}">${ic(on && !trAudio.paused ? 'pause' : 'play')}</button></div></div>
+      </div>`;
+    });
+    return out;
+  }).join('');
+  el.style.setProperty('--accent', s.accent || '#FF8448');
+  const oldBody = $('#trv-body'); const keep = oldBody ? oldBody.scrollTop : 0;
+  el.innerHTML = `
+    <header class="trv-top">
+      <button class="icon-btn" data-act="tr-close" aria-label="Back">${ic('back')}</button>
+      <div class="trv-who"><img src="${esc(avatarOf(s))}" alt=""><div><b>${esc(r.name)}</b><span>${esc(s.title)} · ${r.direction === 'incoming' ? 'Incoming' : 'Outgoing'} · ${fmtWhen(r.startedAt)} · ${esc(recStatusLabel(r))}</span></div></div>
+      <button class="icon-btn" data-act="tr-del" aria-label="Delete call" ${live ? 'disabled' : ''}>${ic('trash', 'sm')}</button>
+    </header>
+    ${live ? `<div class="trv-live"><span class="dot"></span> Live call — saved after every turn. Replay unlocks when it ends.</div>` : ''}
+    <div class="trv-body" id="trv-body">${msgs || '<p class="cl-tr-empty">Nothing was said in this call.</p>'}</div>
+    <footer class="trv-foot">
+      <button class="tool" data-act="tr-speed" aria-label="Replay speed"><b>${S.trSpeed || 1}x</b>Speed</button>
+      <button class="btn btn-grad" data-act="tr-whole" ${playable && !live ? '' : 'disabled'}>${ic(TR.whole && !trAudio.paused ? 'pause' : 'play', 'sm')} ${TR.whole && !trAudio.paused ? 'Pause' : 'Play whole call'}</button>
+      <button class="tool" data-act="call-back" data-id="${esc(r.series)}" data-who="${esc(r.who)}" ${live ? 'disabled' : ''} aria-label="Call back">${ic('phone')}<span>Call back</span></button>
+    </footer>
+    ${TR.confirmDel ? `<div class="trv-confirm" role="alertdialog"><p>Delete this call and its transcript?</p><div><button class="btn btn-ghost btn-sm" data-act="tr-del-cancel">Cancel</button><button class="btn btn-sm danger-btn" data-act="tr-del-ok">Delete</button></div></div>` : ''}`;
+  const nb = $('#trv-body'); if (nb) nb.scrollTop = keep;
+}
+function trLines(r) {
+  const q = [];
+  r.turns.forEach((t, ti) => t.him.forEach((h, hi) => { if (h.url) q.push({ key: `${ti}:${hi}`, url: h.url }); }));
+  return q; // null / "" urls are skipped, same rule as live playback
+}
+function trPlayKey(key, whole) {
+  const r = TR && recById(TR.rid); if (!r) return;
+  const q = trLines(r);
+  const i = q.findIndex((x) => x.key === key); if (i < 0) return;
+  TR.queue = whole ? q : [q[i]]; TR.qi = whole ? i : 0; TR.whole = whole;
+  trPlayCurrent();
+}
+function trPlayCurrent() {
+  const it = TR && TR.queue[TR.qi];
+  if (!it) { stopTrPlayback(); renderTranscriptView(); return; }
+  TR.cur = it.key;
+  trAudio.src = absUrl(it.url);
+  try { trAudio.defaultPlaybackRate = S.trSpeed || 1; trAudio.playbackRate = S.trSpeed || 1; trAudio.preservesPitch = true; trAudio.webkitPreservesPitch = true; } catch (e) { /* ignore */ }
+  trAudio.play().catch(() => {});
+  renderTranscriptView();
+  const m = $(`#trv .msg[data-k="${it.key}"]`); if (m) m.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+}
+function stopTrPlayback() {
+  try { trAudio.pause(); } catch (e) { /* ignore */ }
+  if (TR) { TR.cur = ''; TR.whole = false; TR.queue = []; }
+}
+trAudio.addEventListener('ended', () => { if (!TR) return; TR.qi += 1; setTimeout(trPlayCurrent, 120); });
+trAudio.addEventListener('error', () => { if (!TR || !TR.cur) return; TR.qi += 1; setTimeout(trPlayCurrent, 120); });
+trAudio.addEventListener('play', () => renderTranscriptView());
+trAudio.addEventListener('pause', () => { if (TR && !trAudio.ended) renderTranscriptView(); });
+function trToggleLine(key) {
+  if (!TR) return;
+  if (callActive()) { toast('Replay is available after the call'); return; }
+  if (TR.cur === key && !TR.whole) { if (trAudio.paused) trAudio.play().catch(() => {}); else trAudio.pause(); return; }
+  if (P.cur && !audio.paused) doPause();
+  trPlayKey(key, false);
+}
+function trToggleWhole() {
+  if (!TR) return;
+  if (TR.whole && TR.cur) { if (trAudio.paused) trAudio.play().catch(() => {}); else trAudio.pause(); return; }
+  const r = recById(TR.rid); const q = trLines(r); if (!q.length) return;
+  if (P.cur && !audio.paused) doPause();
+  trPlayKey(q[0].key, true);
+}
+function cycleTrSpeed() {
+  const i = SPEEDS.indexOf(S.trSpeed || 1);
+  S.trSpeed = SPEEDS[(i + 1) % SPEEDS.length];
+  try { trAudio.playbackRate = S.trSpeed; } catch (e) { /* ignore */ }
+  save(); renderTranscriptView();
 }
 
 /* =========================================================================
@@ -1987,18 +2280,10 @@ function renderLibrary() {
       </div>`;
     }).join('') : `<div class="empty">${ic('plus')}Tap “+ Library” on any series to save it here.</div>`;
   } else if (libTab === 'calls') {
-    const all = (S.calls || []).map((h, i) => Object.assign({ i }, h)).filter((h) => h.mode === (MOCK ? 'm' : 'r') && byId(h.id));
-    rows = all.length ? all.map((h) => {
-      const s = byId(h.id);
-      const st = h.status === 'declined' ? 'Declined' : h.status === 'failed' ? 'Failed' : fmtTime(h.secs);
-      return `<div class="lib-row">
-        <button class="open" data-act="call-tr" data-i="${h.i}">
-          <span class="cv round"><img src="${esc(avatarOf(s))}" alt="" loading="lazy"></span>
-          <span class="lt"><b>${esc(h.name)}</b><span>${esc(s.title)}</span><span class="call-meta ${h.status === 'declined' ? 'miss' : ''}">${ic(h.dir === 'incoming' ? 'phone' : 'send', 'xs')} ${h.dir === 'incoming' ? 'Incoming' : 'Outgoing'} · ${new Date(h.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${st}</span></span>
-        </button>
-        <button class="rm call-back-btn" data-act="call-back" data-id="${esc(h.id)}" data-who="${esc(h.who)}" aria-label="Call back">${ic('phone', 'sm')}</button>
-      </div>`;
-    }).join('') : `<div class="empty">${ic('phone')}No calls yet.<br>Call a lead from any series page.</div>`;
+    const all = callsFor();
+    rows = all.length ? `<div class="calls-head"><span>${all.length} call${all.length === 1 ? '' : 's'} · saved after every turn</span><button class="link-btn" data-act="calls-clear">Clear all</button></div>
+      <div class="calls-list">${all.map(callRowHtml).join('')}</div><p class="swipe-hint">Swipe left on a call to delete</p>`
+      : `<div class="empty">${ic('phone')}No calls yet.<br>Call a lead from any series page.</div>`;
   } else {
     const items = S.hist.filter((h) => h.k && h.k.endsWith(`:${LANG}`) && h.k.startsWith(`${MOCK ? 'm' : 'r'}:`) && byId(h.id));
     rows = items.length ? items.map((h, i) => {
@@ -2134,6 +2419,7 @@ function renderDetail() {
           <button class="btn btn-ghost call-btn" data-act="call-lead" data-id="${esc(s.id)}" aria-label="Call">${ic('phone', 'sm')}<span>${callersOf(s).length > 1 ? 'Call' : `Call ${esc(shortName(callersOf(s)[0]).split(' ')[0])}`}</span></button>
         </div>
         <p class="call-note">${ic('phone', 'xs')} ${callCost(s.id) ? `Voice call · ${CALL_PRICE} coins` : 'Voice call · first call free'} · he remembers your story</p>
+        ${(() => { const cl = callsFor(s.id); return cl.length ? `<button class="hist-btn" data-act="series-calls" data-id="${esc(s.id)}">${ic('clock', 'sm')}<span><b>Call history</b><small>${cl.length} call${cl.length === 1 ? '' : 's'} · latest ${fmtWhen(cl[0].startedAt)} · ${esc(recStatusLabel(cl[0]))}</small></span>${ic('chevR', 'sm')}</button>` : ''; })()}
         ${ss ? `<button class="restart" data-act="restart" data-id="${esc(s.id)}">${ic('restart')} Start a new story from Ep 1</button>` : ''}
       </div>
     </div>
@@ -2636,8 +2922,26 @@ document.addEventListener('click', (e) => {
     case 'call-resume': if (C) { C.blocked = false; callAudio.play().catch(() => {}); renderCallUI(true); } break;
     case 'call-close': closeCallScreen(); break;
     case 'call-again': { const c0 = C; closeCallScreen(); if (c0) requestCall(c0.id, { who: c0.who, sid: c0.sid }); break; }
-    case 'call-tr': openTranscript(+el.dataset.i); break;
-    case 'call-back': closeAllSheets(); requestCall(id, { who: el.dataset.who }); break;
+    case 'call-tr': openTranscriptView(el.dataset.rid); break;
+    case 'call-live-tr': if (C && C.rec) openTranscriptView(C.rec.rid); break;
+    case 'go-calls': {
+      closeCallScreen(); closeAllSheets(); libTab = 'calls';
+      const toLib = () => { if (location.hash === '#/library') { hideDetail(); showTab('library'); } else location.hash = '#/library'; };
+      if (playerOpen) { closePlayer(); setTimeout(toLib, 380); } else toLib();
+      break;
+    }
+    case 'series-calls': openSeriesCalls(id); break;
+    case 'call-del': deleteCallRec(el.dataset.rid); break;
+    case 'calls-clear': clearAllCalls(); break;
+    case 'confirm-ok': { const t = topSheet(); if (t && t.kind === 'confirm') { const f = t.onOk; closeSheet(t); if (f) f(); } break; }
+    case 'tr-close': closeTranscriptView(); break;
+    case 'tr-line': trToggleLine(el.dataset.k); break;
+    case 'tr-whole': trToggleWhole(); break;
+    case 'tr-speed': cycleTrSpeed(); break;
+    case 'tr-del': if (TR) { TR.confirmDel = true; renderTranscriptView(); } break;
+    case 'tr-del-cancel': if (TR) { TR.confirmDel = false; renderTranscriptView(); } break;
+    case 'tr-del-ok': if (TR) deleteCallRec(TR.rid); break;
+    case 'call-back': closeAllSheets(); if (TR) closeTranscriptView(); if (C && !callActive()) closeCallScreen(); requestCall(id, { who: el.dataset.who }); break;
     case 'upnext-now': if (P.upNext) { const e2 = P.upNext.ep; cancelUpNext(); playEpisode(P.id, e2); } break;
     case 'upnext-cancel': cancelUpNext(); updatePlayerUI(); break;
     case 'ob-next': obNext(el.dataset.skip === '1'); break;
@@ -2648,6 +2952,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.hero-slide')) { e.preventDefault(); e.target.click(); }
   if (e.key === 'Escape' && sheetStack.length) closeSheet();
+  else if (e.key === 'Escape' && TR) closeTranscriptView();
 });
 document.addEventListener('submit', (e) => {
   const f = e.target.closest('[data-form]'); if (!f) return;

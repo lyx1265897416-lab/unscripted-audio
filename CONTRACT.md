@@ -59,7 +59,7 @@ Series 字段 + `synopsis`（较长简介）+ `cast`：`[{"name":"Magnus","role"
 ## 和主角语音通话（2026-11-06 加，参考 Magnus 午夜来电）
 
 - `GET /api/series` 每项多一个 `callers`：`[{"key":"Magnus","name":"马格努斯·索恩","role":"…"}]`（三真四假有 Wes、Jasper 两个），`motion`：播放器动态封面 mp4。
-- `GET /api/call/fillers?series=&who=&lang=&k=` → `{"urls":[…4 条]}`：垫场声（“嗯。”“嗯，我在听。”“我在。”“嗯，我知道。”），她说完立刻随机播一条，盖住等待。第一次请求要合成，约 10 秒，之后秒回；通话开始时就预取。
+- `GET /api/call/fillers?series=&who=&lang=&k=` → `{"urls":[…4 条], "think":[…4 条“让我想想”]}`（11-06 加 think：她自由回复后，垫场声播完他还没开口就再播一条思考声）：垫场声（“嗯。”“嗯，我在听。”“我在。”“嗯，我知道。”），她说完立刻随机播一条，盖住等待。第一次请求要合成，约 10 秒，之后秒回；通话开始时就预取。
 - `POST /api/call/start {k, series, lang, name, who, sid, direction}` → `{"cid":"…","who":"Magnus","job":"…"}`。`direction` = `incoming`（他打来）| `outgoing`（她打给他）；`sid` 带上当前剧集会话，他就记得剧里发生过什么。他先开口。
 - `POST /api/call/turn {k, cid, text, via}` → `{"job":"…"}`；`via` 同 `/api/next`。
 - `POST /api/call/end {k, cid, seconds}`。
@@ -67,3 +67,7 @@ Series 字段 + `synopsis`（较长简介）+ `cast`：`[{"name":"Magnus","role"
 
 ## Pages 部署
 前端同时部署在 GitHub Pages（静态）。Pages 上同目录有 `relay.json`：`{"base":"https://xxx.trycloudflare.com","updated":"…"}`，由本机定时任务在隧道地址变化时自动更新并推送。前端所有 `/api/*` 请求前缀 `base`；没有 relay.json（本机中转直接提供页面时）就用同源。
+
+## 通话提速（2026-11-06）
+- 第 1 轮（响铃期间）用本机 Opus 写开场；第 2 轮起用快模型 `CALL_FAST_MODEL`（默认 deepseek/deepseek-v4.1-flash，第一句约 3 秒）+ 精简版世界卡。
+- 他每轮说完，服务器按两个快捷回复和“沉默”预先写好他的下一轮、第一句先配好音。她点快捷回复 / Stay silent 时 `/api/call/turn` 直接返回那个预先生成的 job，第一句马上能播；打字、说话的自由回复照常现写（实测约 12 秒，主要花在配音）。没被选中的预先生成丢弃（每条约 15 credits 的第一句配音）。
