@@ -1,0 +1,84 @@
+{
+ "clips": [
+  {
+   "id": "o00",
+   "kind": "open",
+   "cap": "开场镜头（台词：Elder: 敬我们的 Alpha，和他的未婚妻——Kael 和 Selene！ / You: 我是来倒香槟的。 / You: 订婚的那个人，不该看我。 / You: 没人说过，这些客人不是人。 / Kael: 你的气味……我找了它好多年。 / Kael: 你是谁？）",
+   "src": "v/kael/o00.mp4",
+   "dur": 11.96
+  },
+  {
+   "id": "c00",
+   "kind": "card",
+   "cap": "剧情片段：kael idle end",
+   "src": "v/kael/c00.mp4",
+   "dur": 9.96
+  },
+  {
+   "id": "c01",
+   "kind": "card",
+   "cap": "剧情片段：kael idle raw",
+   "src": "v/kael/c01.mp4",
+   "dur": 5.0
+  },
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：cover",
+   "src": "v/kael/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：hero",
+   "src": "v/kael/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：banquet",
+   "src": "v/kael/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：place jetty",
+   "src": "v/kael/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：place corridor",
+   "src": "v/kael/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：kael idle end first",
+   "src": "v/kael/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "idle",
+   "kind": "idle",
+   "cap": "男主待机动态",
+   "src": "v/kael/idle.mp4",
+   "dur": 7.96
+  }
+ ],
+ "pool": [
+  "idle",
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "o00"
+ ]
+}

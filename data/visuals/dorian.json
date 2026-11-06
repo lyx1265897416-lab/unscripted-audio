@@ -1,0 +1,138 @@
+{
+ "clips": [
+  {
+   "id": "o00",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/dorian/o00.mp4",
+   "dur": 3.25
+  },
+  {
+   "id": "o01",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 妈妈今晚再婚了。 / Father: 敬我的新娘—— / Father: 也敬我的儿子。 / You: 他的儿子。我的新继兄。）",
+   "src": "v/dorian/o01.mp4",
+   "dur": 8.38
+  },
+  {
+   "id": "o02",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 他的儿子。我的新继兄。）",
+   "src": "v/dorian/o02.mp4",
+   "dur": 1.96
+  },
+  {
+   "id": "o03",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/dorian/o03.mp4",
+   "dur": 1.38
+  },
+  {
+   "id": "o04",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/dorian/o04.mp4",
+   "dur": 1.42
+  },
+  {
+   "id": "o05",
+   "kind": "open",
+   "cap": "开场镜头（台词：Dorian: 这么晚还不睡……还是在等我？ / Guard: 先生—— / Dorian: 父亲老了，喜欢过家家。 / Dorian: 我不是他。）",
+   "src": "v/dorian/o05.mp4",
+   "dur": 12.0
+  },
+  {
+   "id": "o06",
+   "kind": "open",
+   "cap": "开场镜头（台词：Dorian: 你最好学会，怎么称呼真正决定你位置的人。 / Dorian: 看着我。）",
+   "src": "v/dorian/o06.mp4",
+   "dur": 8.0
+  },
+  {
+   "id": "c00",
+   "kind": "card",
+   "cap": "剧情片段：dorian idle",
+   "src": "v/dorian/c00.mp4",
+   "dur": 2.46
+  },
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：cover",
+   "src": "v/dorian/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：hero",
+   "src": "v/dorian/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：kitchen",
+   "src": "v/dorian/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：dining",
+   "src": "v/dorian/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：study",
+   "src": "v/dorian/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：terrace",
+   "src": "v/dorian/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s06",
+   "kind": "still",
+   "cap": "剧照：pool",
+   "src": "v/dorian/s06.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s07",
+   "kind": "still",
+   "cap": "剧照：corridor",
+   "src": "v/dorian/s07.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "idle",
+   "kind": "idle",
+   "cap": "男主待机动态",
+   "src": "v/dorian/idle.mp4",
+   "dur": 2.46
+  }
+ ],
+ "pool": [
+  "idle",
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "s06",
+  "s07",
+  "o00",
+  "o01",
+  "o02",
+  "o03"
+ ]
+}

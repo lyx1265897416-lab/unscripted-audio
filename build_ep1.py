@@ -31,7 +31,10 @@ def ask(sid, lang):
     if os.path.exists(out) and '--force' not in sys.argv: return sid, lang, 'skip'
     w = json.load(open(f'data/world/{sid}.json')); b = BASE[sid]
     cast = [k for k in V[sid] if not k.startswith('_')]
-    cues = CAT[CID[sid]].get('live', {}).get('open_cues') or []
+    if sid in CID: cues = CAT[CID[sid]].get('live', {}).get('open_cues') or []
+    else:  # perhaps-worlds 的世界：开场台词在原世界卡 intro.captions
+        pw = json.load(open(f'data/pw/{sid}.world.json'))
+        cues = [{'who': (c.get('who') or '').title(), 'en': c.get('text'), 'zh': c.get('zh') or c.get('text')} for c in (pw.get('intro') or {}).get('captions') or []]
     cue_txt = '\n'.join(f'{c.get("who","")}: {c.get(lang) or c.get("en")}' for c in cues)[:3000]
     sysm = '你是女性向有声连载剧的王牌编剧（Pocket FM 那一类：狼人、霸总、恋爱、悬疑）。只输出一个 JSON 对象。' if lang == 'zh' else 'You are the head writer of a women-focused serialized audio drama app (Pocket FM style). Output one JSON object only.'
     user = f'''剧名：{b["title"][lang]}
@@ -53,7 +56,8 @@ def ask(sid, lang):
     if bad: raise ValueError(f'{sid} {lang} unknown who {bad}')
     import re
     if lang == 'zh':
-        eng = [l['text'] for l in j['lines'] if len(re.findall(r'[A-Za-z]{3,}', re.sub(r'\[[^\]]*\]', '', l['text']))) >= 3]
+        names = {n for c in w['characters'] for n in c['name'].split()} | {'Alpha', 'Beta', 'Mate', 'Vicky'}  # 人名和称呼不算英文句子
+        eng = [l['text'] for l in j['lines'] if len([x for x in re.findall(r'[A-Za-z]{3,}', re.sub(r'\[[^\]]*\]', '', l['text'])) if x not in names]) >= 3]
         if eng: raise ValueError(f'{sid} zh 有英文句子 {eng[:2]}')
     json.dump(j, open(out, 'w'), ensure_ascii=False, indent=1)
     return sid, lang, len(j['lines']), sum(len(l['text']) for l in j['lines']), meta.get('sec')

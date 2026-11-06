@@ -15,6 +15,11 @@ Pocket FM 式的音频连载 App（2026-11-06 起），内容是我们 7 部实�
 - `data/ep1_visuals/<id>.<lang>.json`：第 1 集逐句配画面（`build_ep1_visuals.py`，Opus），中转按字幕时间换成时间轴 `ep.visuals`。实时集：编剧只写台词（11-06 试过让编剧顺手标画面，提示词变长后开播从 ~20 秒拖到 ~30 秒，已撤），每写出一批台词就交给快模型（CLIP_MAPPER，默认 deepseek/deepseek-v4.1-flash，约 4 秒）并行配画面，返回 `line.clip`，通常比那句的声音先到。
 - `logs/sessions/*.jsonl`：每局每集的台词、耗时、音频地址。
 
+## perhaps-worlds 的 6 部（2026-11-06 加）
+kael（订婚夜，他闻到了我）、villa（今晚十点，谁选你）、dorian（别叫我哥哥）、hear（离婚前，他听见我心声）、mask（午夜前别摘面具）、milo（男闺蜜今晚不对劲），来自私有仓库 balabalabalaja/perhaps-worlds（本机克隆 `external/perhaps-worlds`）。
+- `build_pw_world.py`：原世界卡（复制在 `data/pw/<id>.world.json`）→ 音频版世界卡；第 1 集剧本照常 `build_ep1.py`（开场台词取原卡 intro.captions）；画面库 `build_visuals.py` 的 PW 段（开场视频切镜头 + 待机/场景片段 + 场景图缓推）。
+- 原卡和改编出的世界卡、第 1 集剧本只留本机（.gitignore），公开仓库只有 App 播放必须的封面、头像、画面片段。
+
 ## 公开仓库和长期链接
 - 公开仓库 https://github.com/lyx1265897416-lab/unscripted-audio ，Pages 从 `docs/` 发布：https://lyx1265897416-lab.github.io/unscripted-audio/ （第一次打开带 `?k=<token>&lang=zh|en`，口令存在本机后地址栏会去掉；口令不进仓库）。
 - `docs/` 是 `app/` 的副本：改完前端跑 `./publish.sh "说明"`（rsync app/→docs/ 再推）。`docs/relay.json` 不覆盖，由 `relay_sync.py` 管。

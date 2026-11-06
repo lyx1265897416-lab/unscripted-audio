@@ -151,5 +151,131 @@
    "zh_name": "Julia",
    "en": "Sarah"
   }
+ },
+ "kael": {
+  "Kael": {
+   "zh": "DowyQ68vDpgFYdWVGjc3",
+   "zh_name": "Jason Chen",
+   "en": "Roger",
+   "lead": true
+  },
+  "Selene": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Charlotte"
+  },
+  "Elder": {
+   "zh": "hZTuv9Zqrq4yHYrEmF1r",
+   "zh_name": "Adam Li",
+   "en": "George"
+  }
+ },
+ "villa": {
+  "Jace": {
+   "zh": "DVE92KG0Yd4X7RoMqy8J",
+   "zh_name": "Zicai",
+   "en": "Liam",
+   "lead": true
+  },
+  "Theo": {
+   "zh": "ZQ45Xiky4ENZqOdRnyjs",
+   "zh_name": "Yi Min",
+   "en": "Brian",
+   "lead": true
+  },
+  "Kai": {
+   "zh": "UwT0JPexcCbH107hq7i5",
+   "zh_name": "James",
+   "en": "Charlie",
+   "lead": true
+  },
+  "Sloane": {
+   "zh": "5mZxJZhSmJTjL7GoYfYI",
+   "zh_name": "Karo Yang",
+   "en": "Jessica"
+  }
+ },
+ "dorian": {
+  "Dorian": {
+   "zh": "D9bZgM9Er0PhIxuW9Jqa",
+   "zh_name": "Xin",
+   "en": "Eric",
+   "lead": true
+  },
+  "Father": {
+   "zh": "WuLq5z7nEcrhppO0ZQJw",
+   "zh_name": "Martin Li",
+   "en": "Bill"
+  },
+  "Mom": {
+   "zh": "0Aj540a9UWvQPWdx9Zq4",
+   "zh_name": "Jane",
+   "en": "Sarah"
+  },
+  "Sebastian": {
+   "zh": "BrbEfHMQu0fyclQR7lfh",
+   "zh_name": "Kevin Tu",
+   "en": "Will"
+  },
+  "Guard": {
+   "zh": "z1etx2H6NQWq1LH6oqJA",
+   "zh_name": "Wilson",
+   "en": "Roger"
+  }
+ },
+ "hear": {
+  "Ray": {
+   "zh": "FS8UtxyDrvYcNCxVaziq",
+   "zh_name": "Hardy",
+   "en": "Chris",
+   "lead": true
+  },
+  "His Assistant": {
+   "zh": "Iqi0ix5WGtiSXX9VDZB4",
+   "zh_name": "Helen Sun",
+   "en": "Alice"
+  }
+ },
+ "mask": {
+  "Adrian": {
+   "zh": "BWN0mOtkGHghA3CYFzFK",
+   "zh_name": "Danyu Zhao",
+   "en": "Will",
+   "lead": true
+  },
+  "Night Raven": {
+   "zh": "cHDwXsKG0qHMNLIjOusN",
+   "zh_name": "Lucky Chan",
+   "en": "Callum",
+   "lead": true
+  },
+  "Victor": {
+   "zh": "auoHciLZJwKTwYUoRTYz",
+   "zh_name": "Neil Chuang",
+   "en": "George"
+  }
+ },
+ "milo": {
+  "Milo": {
+   "zh": "4aW8bNY2tSD8eaHmuXZ0",
+   "zh_name": "Chen",
+   "en": "Harry",
+   "lead": true
+  },
+  "Sacha": {
+   "zh": "OjkyUe8dIihIFvOisuvM",
+   "zh_name": "Tung Wong",
+   "en": "Charlie"
+  },
+  "Evren": {
+   "zh": "BrbEfHMQu0fyclQR7lfh",
+   "zh_name": "Kevin Tu",
+   "en": "Eric"
+  },
+  "Sienna": {
+   "zh": "Ca5bKgudqKJzq8YRFoAz",
+   "zh_name": "Coco Li",
+   "en": "Laura"
+  }
  }
 }

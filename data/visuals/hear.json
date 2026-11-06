@@ -1,0 +1,186 @@
+{
+ "clips": [
+  {
+   "id": "o00",
+   "kind": "open",
+   "cap": "开场镜头（台词：Ray: 咖啡。 / You: 谢谢。）",
+   "src": "v/hear/o00.mp4",
+   "dur": 2.75
+  },
+  {
+   "id": "o01",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 谢谢。 / You: 黑咖啡，黑衬衫，黑厨房。 / You: 谁会这么过日子？吸血鬼吗？）",
+   "src": "v/hear/o01.mp4",
+   "dur": 6.21
+  },
+  {
+   "id": "o02",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 谁会这么过日子？吸血鬼吗？ / Ray: 吸血鬼。 / Ray: 天哪，她嫌弃我的样子真可爱。）",
+   "src": "v/hear/o02.mp4",
+   "dur": 6.96
+  },
+  {
+   "id": "o03",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 这里……真漂亮。 / You: 这是个山洞，一个很贵的山洞。）",
+   "src": "v/hear/o03.mp4",
+   "dur": 4.96
+  },
+  {
+   "id": "o04",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 这是个山洞，一个很贵的山洞。）",
+   "src": "v/hear/o04.mp4",
+   "dur": 4.04
+  },
+  {
+   "id": "o05",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 不加糖，不加奶。）",
+   "src": "v/hear/o05.mp4",
+   "dur": 2.58
+  },
+  {
+   "id": "o06",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 不加糖，不加奶。 / You: 谁会这么喝？连环杀手吧。）",
+   "src": "v/hear/o06.mp4",
+   "dur": 2.25
+  },
+  {
+   "id": "o07",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 谁会这么喝？连环杀手吧。 / Ray: 两勺糖。）",
+   "src": "v/hear/o07.mp4",
+   "dur": 2.0
+  },
+  {
+   "id": "o08",
+   "kind": "open",
+   "cap": "开场镜头（台词：Ray: 两勺糖。 / Ray: 从认识她那天起，她就一直加两勺糖。）",
+   "src": "v/hear/o08.mp4",
+   "dur": 2.67
+  },
+  {
+   "id": "o09",
+   "kind": "open",
+   "cap": "开场镜头（台词：Ray: 从认识她那天起，她就一直加两勺糖。 / You: ……谢谢？）",
+   "src": "v/hear/o09.mp4",
+   "dur": 1.38
+  },
+  {
+   "id": "o10",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 周六早上八点，穿得整整齐齐。 / You: 一直这么完美，他不累吗？）",
+   "src": "v/hear/o10.mp4",
+   "dur": 4.58
+  },
+  {
+   "id": "o11",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 他是不是穿着这件衬衫睡觉？）",
+   "src": "v/hear/o11.mp4",
+   "dur": 3.42
+  },
+  {
+   "id": "o12",
+   "kind": "open",
+   "cap": "开场镜头（台词：Ray: 我不穿这件衬衫睡觉。）",
+   "src": "v/hear/o12.mp4",
+   "dur": 2.04
+  },
+  {
+   "id": "o13",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 我刚才说出来了吗？）",
+   "src": "v/hear/o13.mp4",
+   "dur": 2.54
+  },
+  {
+   "id": "o14",
+   "kind": "open",
+   "cap": "开场镜头（台词：Ray: 你刚才一直在看它。 / Ray: 我能听见我妻子在想什么。 / Ray: 只有她。）",
+   "src": "v/hear/o14.mp4",
+   "dur": 7.04
+  },
+  {
+   "id": "c00",
+   "kind": "card",
+   "cap": "剧情片段：ray idle",
+   "src": "v/hear/c00.mp4",
+   "dur": 5.38
+  },
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：cover",
+   "src": "v/hear/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：hero",
+   "src": "v/hear/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：look day",
+   "src": "v/hear/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：look night",
+   "src": "v/hear/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：loc hear car",
+   "src": "v/hear/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：loc hear terrace",
+   "src": "v/hear/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s06",
+   "kind": "still",
+   "cap": "剧照：loc hear mediation",
+   "src": "v/hear/s06.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "idle",
+   "kind": "idle",
+   "cap": "男主待机动态",
+   "src": "v/hear/idle.mp4",
+   "dur": 5.38
+  }
+ ],
+ "pool": [
+  "idle",
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "s06",
+  "o00",
+  "o03",
+  "o06",
+  "o09"
+ ]
+}

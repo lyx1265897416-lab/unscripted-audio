@@ -1,0 +1,138 @@
+[
+ {
+  "line": 0,
+  "clip": "s02"
+ },
+ {
+  "line": 1,
+  "clip": "o00"
+ },
+ {
+  "line": 2,
+  "clip": "o00"
+ },
+ {
+  "line": 3,
+  "clip": "o01"
+ },
+ {
+  "line": 4,
+  "clip": "o01"
+ },
+ {
+  "line": 5,
+  "clip": "o02"
+ },
+ {
+  "line": 6,
+  "clip": "o02"
+ },
+ {
+  "line": 7,
+  "clip": "o03"
+ },
+ {
+  "line": 8,
+  "clip": "o04"
+ },
+ {
+  "line": 9,
+  "clip": "o06"
+ },
+ {
+  "line": 10,
+  "clip": "o07"
+ },
+ {
+  "line": 11,
+  "clip": "o08"
+ },
+ {
+  "line": 12,
+  "clip": "o09"
+ },
+ {
+  "line": 13,
+  "clip": "o09"
+ },
+ {
+  "line": 14,
+  "clip": "o10"
+ },
+ {
+  "line": 15,
+  "clip": "o11"
+ },
+ {
+  "line": 16,
+  "clip": "o12"
+ },
+ {
+  "line": 17,
+  "clip": "o13"
+ },
+ {
+  "line": 18,
+  "clip": "o14"
+ },
+ {
+  "line": 19,
+  "clip": "o14"
+ },
+ {
+  "line": 20,
+  "clip": "idle"
+ },
+ {
+  "line": 21,
+  "clip": "c00"
+ },
+ {
+  "line": 22,
+  "clip": "s01"
+ },
+ {
+  "line": 23,
+  "clip": "c00"
+ },
+ {
+  "line": 24,
+  "clip": "s03"
+ },
+ {
+  "line": 25,
+  "clip": "idle"
+ },
+ {
+  "line": 26,
+  "clip": "c00"
+ },
+ {
+  "line": 27,
+  "clip": "s05"
+ },
+ {
+  "line": 28,
+  "clip": "s06"
+ },
+ {
+  "line": 29,
+  "clip": "idle"
+ },
+ {
+  "line": 30,
+  "clip": "o14"
+ },
+ {
+  "line": 31,
+  "clip": "s06"
+ },
+ {
+  "line": 32,
+  "clip": "s03"
+ },
+ {
+  "line": 33,
+  "clip": "c00"
+ }
+]

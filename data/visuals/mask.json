@@ -1,0 +1,235 @@
+{
+ "clips": [
+  {
+   "id": "o00",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/mask/o00.mp4",
+   "dur": 1.38
+  },
+  {
+   "id": "o01",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/mask/o01.mp4",
+   "dur": 2.58
+  },
+  {
+   "id": "o02",
+   "kind": "open",
+   "cap": "开场镜头（台词：Staff: 伊芙小姐？他们在等您了。）",
+   "src": "v/mask/o02.mp4",
+   "dur": 4.21
+  },
+  {
+   "id": "o03",
+   "kind": "open",
+   "cap": "开场镜头（台词：Staff: 伊芙小姐？他们在等您了。 / Adrian: 女士们，我订婚了。 / Adrian: 很遗憾，我知道。）",
+   "src": "v/mask/o03.mp4",
+   "dur": 2.96
+  },
+  {
+   "id": "o04",
+   "kind": "open",
+   "cap": "开场镜头（台词：Adrian: 笑一笑，未婚妻。维克托叔叔在看。）",
+   "src": "v/mask/o04.mp4",
+   "dur": 2.46
+  },
+  {
+   "id": "o05",
+   "kind": "open",
+   "cap": "开场镜头（台词：Adrian: 笑一笑，未婚妻。维克托叔叔在看。 / You: 明天九点，我父亲要出庭受审。）",
+   "src": "v/mask/o05.mp4",
+   "dur": 2.62
+  },
+  {
+   "id": "o06",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 明天九点，我父亲要出庭受审。 / You: 今晚，我要和一个我不爱的男人订婚——）",
+   "src": "v/mask/o06.mp4",
+   "dur": 2.0
+  },
+  {
+   "id": "o07",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 今晚，我要和一个我不爱的男人订婚—— / You: 因为只有他家握着唯一能洗清我父亲的东西。）",
+   "src": "v/mask/o07.mp4",
+   "dur": 2.0
+  },
+  {
+   "id": "o08",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 因为只有他家握着唯一能洗清我父亲的东西。）",
+   "src": "v/mask/o08.mp4",
+   "dur": 1.88
+  },
+  {
+   "id": "o09",
+   "kind": "open",
+   "cap": "开场镜头（台词：Victor: 我们家族会重建被一个人毁掉的信任。）",
+   "src": "v/mask/o09.mp4",
+   "dur": 3.42
+  },
+  {
+   "id": "o10",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 那是我爸爸。）",
+   "src": "v/mask/o10.mp4",
+   "dur": 1.71
+  },
+  {
+   "id": "o11",
+   "kind": "open",
+   "cap": "开场镜头（台词：Victor: 伊芙，亲爱的。）",
+   "src": "v/mask/o11.mp4",
+   "dur": 1.46
+  },
+  {
+   "id": "o12",
+   "kind": "open",
+   "cap": "开场镜头（台词：Victor: 伊芙，亲爱的。 / Victor: 不如你跟大家讲讲你父亲的事？）",
+   "src": "v/mask/o12.mp4",
+   "dur": 1.71
+  },
+  {
+   "id": "o13",
+   "kind": "open",
+   "cap": "开场镜头（台词：Victor: 不如你跟大家讲讲你父亲的事？ / Adrian: 她不想再说了。）",
+   "src": "v/mask/o13.mp4",
+   "dur": 1.46
+  },
+  {
+   "id": "o14",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/mask/o14.mp4",
+   "dur": 1.38
+  },
+  {
+   "id": "o15",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/mask/o15.mp4",
+   "dur": 2.17
+  },
+  {
+   "id": "o16",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/mask/o16.mp4",
+   "dur": 2.25
+  },
+  {
+   "id": "o17",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/mask/o17.mp4",
+   "dur": 2.58
+  },
+  {
+   "id": "o18",
+   "kind": "open",
+   "cap": "开场镜头（台词：Guest: 那是夜鸦吗？ / Adrian: 待在我身边。 / Night Raven: 跟我走。）",
+   "src": "v/mask/o18.mp4",
+   "dur": 12.0
+  },
+  {
+   "id": "c00",
+   "kind": "card",
+   "cap": "剧情片段：x4 called",
+   "src": "v/mask/c00.mp4",
+   "dur": 8.0
+  },
+  {
+   "id": "c01",
+   "kind": "card",
+   "cap": "剧情片段：r7b reach",
+   "src": "v/mask/c01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "c02",
+   "kind": "card",
+   "cap": "剧情片段：coldopen",
+   "src": "v/mask/c02.mp4",
+   "dur": 11.96
+  },
+  {
+   "id": "c03",
+   "kind": "card",
+   "cap": "剧情片段：mask w1 gala",
+   "src": "v/mask/c03.mp4",
+   "dur": 11.96
+  },
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：cover",
+   "src": "v/mask/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：hero",
+   "src": "v/mask/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：sc03-start",
+   "src": "v/mask/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：look-gallery-v1",
+   "src": "v/mask/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：champagne tower",
+   "src": "v/mask/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：rain window",
+   "src": "v/mask/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s06",
+   "kind": "still",
+   "cap": "剧照：service door",
+   "src": "v/mask/s06.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "idle",
+   "kind": "idle",
+   "cap": "男主待机动态",
+   "src": "v/mask/idle.mp4",
+   "dur": 7.96
+  }
+ ],
+ "pool": [
+  "idle",
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "s06",
+  "o00",
+  "o04",
+  "o08",
+  "o12"
+ ]
+}

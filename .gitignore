@@ -5,3 +5,17 @@ cache/
 __pycache__/
 .DS_Store
 data/motion_src/*.mp4
+# perhaps-worlds（balabalabalaja/perhaps-worlds 是私有仓库）：原世界卡和据此改编的世界卡、剧本只留本机给中转用，不进公开仓库
+data/pw/
+data/world/kael.json
+data/world/villa.json
+data/world/dorian.json
+data/world/hear.json
+data/world/mask.json
+data/world/milo.json
+data/ep1/kael.*
+data/ep1/villa.*
+data/ep1/dorian.*
+data/ep1/hear.*
+data/ep1/mask.*
+data/ep1/milo.*

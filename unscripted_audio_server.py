@@ -48,7 +48,8 @@ def ep1_with_visuals(ep, series, lang):
     for a, b in zip(tl, tl[1:]): a['e'] = b['s']  # 时间轴连续，句间停顿不黑屏
     if tl: tl[-1]['e'] = max(tl[-1]['e'], ep.get('dur') or 0)
     return dict(ep, visuals=tl)
-STATS = {'magnus': ('2.4M', 4.9), 'rafael': ('1.1M', 4.8), 'rowan': ('640K', 4.7), 'rian': ('890K', 4.8), 'island': ('1.6M', 4.7), 'lena': ('720K', 4.8), 'mii': ('530K', 4.9)}  # 展示用
+STATS = {'magnus': ('2.4M', 4.9), 'rafael': ('1.1M', 4.8), 'rowan': ('640K', 4.7), 'rian': ('890K', 4.8), 'island': ('1.6M', 4.7), 'lena': ('720K', 4.8), 'mii': ('530K', 4.9),
+         'kael': ('1.9M', 4.9), 'villa': ('1.4M', 4.8), 'dorian': ('2.1M', 4.9), 'hear': ('980K', 4.8), 'mask': ('760K', 4.7), 'milo': ('610K', 4.8)}  # perhaps-worlds 6 部  # 展示用
 MODEL_TTS = 'elevenlabs/eleven-v4'
 FALLBACK = os.environ.get('WRITER_FALLBACK', 'z-ai/glm-5.3-prime')
 MAX_EPS = 12

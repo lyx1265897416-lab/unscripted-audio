@@ -1,0 +1,157 @@
+{
+ "clips": [
+  {
+   "id": "o00",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/milo/o00.mp4",
+   "dur": 1.58
+  },
+  {
+   "id": "o01",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/milo/o01.mp4",
+   "dur": 1.54
+  },
+  {
+   "id": "o02",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/milo/o02.mp4",
+   "dur": 2.71
+  },
+  {
+   "id": "o03",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/milo/o03.mp4",
+   "dur": 3.29
+  },
+  {
+   "id": "o04",
+   "kind": "open",
+   "cap": "开场镜头（台词：Milo: 看吧？问题解决了。 / You: 六个人，五个座。 / You: Milo 从我们五岁起就是我最好的朋友。坐他腿上很正常。）",
+   "src": "v/milo/o04.mp4",
+   "dur": 8.42
+  },
+  {
+   "id": "o05",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: Milo 从我们五岁起就是我最好的朋友。坐他腿上很正常。 / Milo: ……哦。）",
+   "src": "v/milo/o05.mp4",
+   "dur": 1.46
+  },
+  {
+   "id": "o06",
+   "kind": "open",
+   "cap": "开场镜头（台词：Milo: 别动。）",
+   "src": "v/milo/o06.mp4",
+   "dur": 3.0
+  },
+  {
+   "id": "o07",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 怎么了？ / Milo: 没事。）",
+   "src": "v/milo/o07.mp4",
+   "dur": 1.62
+  },
+  {
+   "id": "o08",
+   "kind": "open",
+   "cap": "开场镜头（台词：Sacha: 后面还好吗，Milo？ / Milo: 嗯。很好。完美。梦想成真。）",
+   "src": "v/milo/o08.mp4",
+   "dur": 5.5
+  },
+  {
+   "id": "o09",
+   "kind": "open",
+   "cap": "开场镜头（台词：Milo: 嗯。很好。完美。梦想成真。 / Milo: ……操。）",
+   "src": "v/milo/o09.mp4",
+   "dur": 1.29
+  },
+  {
+   "id": "o10",
+   "kind": "open",
+   "cap": "开场镜头（台词：Milo: ……操。 / Sacha: 你怎么怪怪的？）",
+   "src": "v/milo/o10.mp4",
+   "dur": 2.08
+  },
+  {
+   "id": "o11",
+   "kind": "open",
+   "cap": "开场镜头（台词：Milo: 我没怪。是你怪。除了我所有人都怪。）",
+   "src": "v/milo/o11.mp4",
+   "dur": 3.88
+  },
+  {
+   "id": "o12",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 你怎么这么坐？ / Milo: 哪样？ / You: 你看着不舒服。 / Milo: 我在经历个人成长。）",
+   "src": "v/milo/o12.mp4",
+   "dur": 6.17
+  },
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：cover",
+   "src": "v/milo/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：hero",
+   "src": "v/milo/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：milo cabin",
+   "src": "v/milo/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：milo grin",
+   "src": "v/milo/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：loc milo party kitchen",
+   "src": "v/milo/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：loc milo porch",
+   "src": "v/milo/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s06",
+   "kind": "still",
+   "cap": "剧照：loc milo her place",
+   "src": "v/milo/s06.mp4",
+   "dur": 6.0
+  }
+ ],
+ "pool": [
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "s06",
+  "o00",
+  "o03",
+  "o06",
+  "o09"
+ ]
+}

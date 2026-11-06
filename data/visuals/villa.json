@@ -1,0 +1,208 @@
+{
+ "clips": [
+  {
+   "id": "o00",
+   "kind": "open",
+   "cap": "开场镜头（台词：Jace: 你相信我吗？ / You: 相信。）",
+   "src": "v/villa/o00.mp4",
+   "dur": 5.38
+  },
+  {
+   "id": "o01",
+   "kind": "open",
+   "cap": "开场镜头（台词：Producer: 给我回来！）",
+   "src": "v/villa/o01.mp4",
+   "dur": 4.79
+  },
+  {
+   "id": "o02",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 好吧，我是恋爱真人秀里新来的女生。）",
+   "src": "v/villa/o02.mp4",
+   "dur": 8.38
+  },
+  {
+   "id": "o03",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 好吧，我是恋爱真人秀里新来的女生。 / You: 三个男生，没人选的女生就得回家。）",
+   "src": "v/villa/o03.mp4",
+   "dur": 2.46
+  },
+  {
+   "id": "o04",
+   "kind": "open",
+   "cap": "开场镜头（台词：You: 三个男生，没人选的女生就得回家。）",
+   "src": "v/villa/o04.mp4",
+   "dur": 1.75
+  },
+  {
+   "id": "o05",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/villa/o05.mp4",
+   "dur": 2.17
+  },
+  {
+   "id": "o06",
+   "kind": "open",
+   "cap": "开场镜头（台词：Jace: 抱歉了，兄弟们。 / Jace: 是我先看见她的。）",
+   "src": "v/villa/o06.mp4",
+   "dur": 7.25
+  },
+  {
+   "id": "o07",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/villa/o07.mp4",
+   "dur": 2.42
+  },
+  {
+   "id": "o08",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/villa/o08.mp4",
+   "dur": 1.21
+  },
+  {
+   "id": "o09",
+   "kind": "open",
+   "cap": "开场镜头（台词：Theo: 他挺可爱的。 / Theo: 我是认真的。）",
+   "src": "v/villa/o09.mp4",
+   "dur": 5.96
+  },
+  {
+   "id": "o10",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/villa/o10.mp4",
+   "dur": 2.5
+  },
+  {
+   "id": "o11",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/villa/o11.mp4",
+   "dur": 1.75
+  },
+  {
+   "id": "o12",
+   "kind": "open",
+   "cap": "开场镜头（台词：Kai: 让他们吵去吧。 / Kai: 你跟我走。）",
+   "src": "v/villa/o12.mp4",
+   "dur": 7.79
+  },
+  {
+   "id": "o13",
+   "kind": "open",
+   "cap": "开场镜头（无台词，环境/动作镜头）",
+   "src": "v/villa/o13.mp4",
+   "dur": 3.42
+  },
+  {
+   "id": "c00",
+   "kind": "card",
+   "cap": "剧情片段：v4v jace d1",
+   "src": "v/villa/c00.mp4",
+   "dur": 4.0
+  },
+  {
+   "id": "c01",
+   "kind": "card",
+   "cap": "剧情片段：v4v kai d2",
+   "src": "v/villa/c01.mp4",
+   "dur": 4.0
+  },
+  {
+   "id": "c02",
+   "kind": "card",
+   "cap": "剧情片段：v4v theo d2",
+   "src": "v/villa/c02.mp4",
+   "dur": 4.0
+  },
+  {
+   "id": "c03",
+   "kind": "card",
+   "cap": "剧情片段：villa w1 jace",
+   "src": "v/villa/c03.mp4",
+   "dur": 11.96
+  },
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：cover",
+   "src": "v/villa/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：kf meet jace",
+   "src": "v/villa/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：kf bar2 jace",
+   "src": "v/villa/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：kf kitchen jace",
+   "src": "v/villa/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：kf terrace",
+   "src": "v/villa/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：night fire a",
+   "src": "v/villa/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s06",
+   "kind": "still",
+   "cap": "剧照：kf open",
+   "src": "v/villa/s06.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s07",
+   "kind": "still",
+   "cap": "剧照：kf roof",
+   "src": "v/villa/s07.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "idle",
+   "kind": "idle",
+   "cap": "男主待机动态",
+   "src": "v/villa/idle.mp4",
+   "dur": 4.0
+  }
+ ],
+ "pool": [
+  "idle",
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "s06",
+  "s07",
+  "o00",
+  "o03",
+  "o06",
+  "o09"
+ ]
+}

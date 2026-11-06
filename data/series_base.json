@@ -299,5 +299,245 @@
   "cover": "covers/mii.jpg",
   "avatar": "avatars/mii.jpg",
   "name": "Mii"
+ },
+ {
+  "id": "kael",
+  "pack": "perhaps:kael",
+  "source": "perhaps-worlds",
+  "title": {
+   "zh": "订婚夜，他闻到了我",
+   "en": "Engaged Tonight"
+  },
+  "lead": {
+   "zh": "Kael · Draven 狼群的头狼，今晚和 Selene 订婚，却被你的气味牵住了",
+   "en": "Kael · Alpha of the Draven pack, engaged tonight to someone else, and undone by your scent"
+  },
+  "hook": {
+   "zh": "今晚 Draven 狼群的头狼 Kael Draven（35 岁）在黑水中间的石平台上和 Selene 订婚。你是被雇来倒香槟的人类——全场唯一的人类。风一转，他闻到了你的气味：杯子在他手里炸开，他当着未婚妻和整个狼群走到你面前，把你圈在栏杆边，问你是谁。",
+   "en": "Tonight the Alpha of the Draven pack celebrates his engagement on a stone platform over black water. You're the only human there — hired to pour the champagne. Then the wind turns, and Kael Draven catches your scent."
+  },
+  "tags": [
+   {
+    "zh": "禁忌之恋",
+    "en": "Forbidden"
+   },
+   {
+    "zh": "头狼与人类",
+    "en": "Alpha & human"
+   },
+   {
+    "zh": "暗黑浪漫",
+    "en": "Dark romance"
+   }
+  ],
+  "genres": [
+   "Werewolf",
+   "Billionaire",
+   "Fated mates"
+  ],
+  "accent": "#C9A24A",
+  "cover": "covers/kael.jpg",
+  "avatar": "avatars/kael.jpg",
+  "name": "Kael"
+ },
+ {
+  "id": "villa",
+  "pack": "perhaps:villa",
+  "source": "perhaps-worlds",
+  "title": {
+   "zh": "今晚十点，谁选你",
+   "en": "The Villa"
+  },
+  "lead": {
+   "zh": "Jace / Kai / Theo · 阳光型男嘉宾，圣迭戈冲浪教练兼救生员，三周前进的别墅，一直和 Sloane 以朋友身份配对",
+   "en": "Jace / Kai / Theo · The sunny one: a 21-year-old San Diego surf instructor and lifeguard who has been paired with Sloane as friends since Day 1"
+  },
+  "hook": {
+   "zh": "第 12 天下午 4 点，你刚推开铁门。今晚男生重新配对，没人选的女生回家。Jace 早答应了 Sloane；Theo 在你开口之前就定了。",
+   "en": "Day 12, 4 PM. You just walked through the gate. Tonight the boys recouple and the girl nobody picks goes home. Jace already promised Sloane. Theo decided before you said a word."
+  },
+  "tags": [
+   {
+    "zh": "恋综",
+    "en": "Dating show"
+   },
+   {
+    "zh": "三角恋",
+    "en": "Love triangle"
+   },
+   {
+    "zh": "恋综",
+    "en": "Dating show"
+   }
+  ],
+  "genres": [
+   "Reality show",
+   "Romance",
+   "Love triangle"
+  ],
+  "accent": "#C8562F",
+  "cover": "covers/villa.jpg",
+  "avatar": "avatars/villa.jpg",
+  "name": "Jace"
+ },
+ {
+  "id": "dorian",
+  "pack": "perhaps:dorian",
+  "source": "perhaps-worlds",
+  "title": {
+   "zh": "别叫我哥哥",
+   "en": "House Rules"
+  },
+  "lead": {
+   "zh": "Dorian · 你新的继兄，老教父的长子，家族真正的掌权人",
+   "en": "Dorian · Your new stepbrother, the old don's eldest son, and the man who actually runs the family"
+  },
+  "hook": {
+   "zh": "今晚你妈嫁给了港城最让人怕的那个黑帮家族的老教父，把你也带了进来。都说老头温和大方；可他儿子 Dorian Vale（28 岁）一进门，所有人都会闭嘴——真正管家族命脉的是他。过了午夜，他在厨房把你困在中岛边：你得先学会这个家的规矩，学会怎么称呼真正决定你位置的人。",
+   "en": "Tonight your mother married the old don of the port city's most feared family, and brought you with her. Everyone says the old man is gentle. Everyone also goes quiet when his son walks in. Dorian Vale runs this family — and past midnight, in the kitchen, he wants you to learn whose house this is."
+  },
+  "tags": [
+   {
+    "zh": "继兄妹",
+    "en": "Stepbrother"
+   },
+   {
+    "zh": "禁忌之恋",
+    "en": "Forbidden"
+   },
+   {
+    "zh": "暗黑浪漫",
+    "en": "Dark romance"
+   }
+  ],
+  "genres": [
+   "Mafia",
+   "Dark romance",
+   "Stepbrother"
+  ],
+  "accent": "#B48A52",
+  "cover": "covers/dorian.jpg",
+  "avatar": "avatars/dorian.jpg",
+  "name": "Dorian"
+ },
+ {
+  "id": "hear",
+  "pack": "perhaps:hear",
+  "source": "perhaps-worlds",
+  "title": {
+   "zh": "离婚前，他听见我心声",
+   "en": "Open Book"
+  },
+  "lead": {
+   "zh": "Ray · 你的丈夫，年轻的集团继承人，听得见你心里每一句话，只听得见你的",
+   "en": "Ray · Your husband, heir to the family group. He hears every thought you have, and only yours."
+  },
+  "hook": {
+   "zh": "周六早上，顶层公寓。他听得见你想的一切——只有你。周一你去办离婚，因为你认定他从没爱过你。他从没说过相反的话，现在也不会说。",
+   "en": "Saturday morning in the penthouse. He can hear everything you think — only you. Monday you file for divorce, because you're sure he never loved you. He has never said otherwise. He isn't going to start now."
+  },
+  "tags": [
+   {
+    "zh": "联姻",
+    "en": "Arranged marriage"
+   },
+   {
+    "zh": "破镜重圆",
+    "en": "Second chance"
+   },
+   {
+    "zh": "恋爱",
+    "en": "Romance"
+   }
+  ],
+  "genres": [
+   "Romance",
+   "Billionaire",
+   "Second chance"
+  ],
+  "accent": "#C9A24A",
+  "cover": "covers/hear.jpg",
+  "avatar": "avatars/hear.jpg",
+  "name": "Ray"
+ },
+ {
+  "id": "mask",
+  "pack": "perhaps:mask",
+  "source": "perhaps-worlds",
+  "title": {
+   "zh": "午夜前别摘面具",
+   "en": "Before the Mask"
+  },
+  "lead": {
+   "zh": "Adrian / Night Raven · 维克托的侄子，你公开的未婚夫，人人眼里一出事就先走的纨绔继承人",
+   "en": "Adrian / Night Raven · Victor's nephew and your public fiancé, a playboy heir known for vanishing when things go wrong"
+  },
+  "hook": {
+   "zh": "21:40，晚宴。能为她父亲翻案的那张纸午夜就烧掉；一年没露过脸的那个人今晚会来。你在宾客名单上。",
+   "en": "21:40. The gala. The one paper that can clear her father burns at midnight, and the man who could stop it hasn't shown his face in a year. You're on the guest list tonight."
+  },
+  "tags": [
+   {
+    "zh": "假订婚",
+    "en": "Fake engagement"
+   },
+   {
+    "zh": "秘密身份",
+    "en": "Secret identity"
+   },
+   {
+    "zh": "悬疑",
+    "en": "Suspense"
+   }
+  ],
+  "genres": [
+   "Mystery",
+   "Thriller",
+   "Masked man"
+  ],
+  "accent": "#C9A24A",
+  "cover": "covers/mask.jpg",
+  "avatar": "avatars/mask.jpg",
+  "name": "Adrian"
+ },
+ {
+  "id": "milo",
+  "pack": "perhaps:milo",
+  "source": "perhaps-worlds",
+  "title": {
+   "zh": "男闺蜜今晚不对劲",
+   "en": "Personal Growth"
+  },
+  "lead": {
+   "zh": "Milo · 你从五岁起的最好朋友，今晚刚意识到自己喜欢你",
+   "en": "Milo · Your best friend since you were five, who has just realized he's into you"
+  },
+  "hook": {
+   "zh": "六个人一辆车五个座。你和 Milo 从五岁起就是最好的朋友——他的卫衣、派对后的床、车挤时他的腿，都是你的。今晚，在第一个红灯和下一个转弯之间，他的身体决定这一切都不正常了。 他是你的男闺蜜：带点毒舌、可爱、吵、黏；你从没把他当过可能的伴侣。",
+   "en": "Six friends, one car, five seats. You've been best friends with Milo since you were five — his hoodies, his bed after parties, his lap when the car's full. Tonight, somewhere between the first red light and the next turn, his body decided none of that is normal anymore."
+  },
+  "tags": [
+   {
+    "zh": "朋友变恋人",
+    "en": "Friends to lovers"
+   },
+   {
+    "zh": "男闺蜜",
+    "en": "Best friend"
+   },
+   {
+    "zh": "喜剧恋爱",
+    "en": "Rom-com"
+   }
+  ],
+  "genres": [
+   "Romance",
+   "Friends to lovers",
+   "Comedy"
+  ],
+  "accent": "#E08A6A",
+  "cover": "covers/milo.jpg",
+  "avatar": "avatars/milo.jpg",
+  "name": "Milo"
  }
 ]
