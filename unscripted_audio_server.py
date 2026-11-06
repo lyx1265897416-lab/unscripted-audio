@@ -318,7 +318,8 @@ def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
             if m: on_line(m.group(1).strip(), m.group(2).strip())
     if fast_model:
         try:
-            txt = openrouter_stream(fast_model, sysm, user_msg, feed, max_tokens=500, temperature=0.8, extra={'reasoning': {'enabled': False}})
+            rz = {'effort': 'low'} if 'glm' in fast_model else {'enabled': False}  # GLM 不允许关推理（400），用 low
+            txt = openrouter_stream(fast_model, sysm, user_msg, feed, max_tokens=1400, temperature=0.8, extra={'reasoning': rz})
             sess['writer'] = fast_model
             return txt
         except Exception:
@@ -351,8 +352,25 @@ def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
     return out
 
 
-def run_episode(job, sess, user_msg):
+EP_FAST = os.environ.get('EP_FAST_MODEL', 'z-ai/glm-5.3-prime')  # 她自由输入时写下一集：11-06 实测第一句 2.8 秒（本机 Opus 8–13 秒）
+
+
+def next_msg(sess, her):
+    """按“她对上一集的回应”拼下一集的写作请求（不改 sess：预先生成时她还没选）"""
+    eps = sess['eps'][:-1] + [dict(sess['eps'][-1], her=her)]
+    n = len(eps) + 1; lang = sess['lang']
+    pace = ''
+    if n >= MAX_EPS - 2: pace = '\n（快到这条线的结局了：接下来 1–2 集内收束主要悬念。）' if lang == 'zh' else '\n(Approaching the end of this route: resolve the main thread within 1–2 episodes.)'
+    if n >= MAX_EPS: pace = '\n（这是最后一集：给一个有余味的结局，END: yes。）' if lang == 'zh' else '\n(This is the final episode: give a resonant ending, END: yes.)'
+    so_far = story_so_far(dict(sess, eps=eps))
+    return (f'到目前为止：\n{so_far}\n\n现在写第 {n} 集。{pace}' if lang == 'zh' else f'Story so far:\n{so_far}\n\nNow write episode {n}.{pace}')
+
+
+def run_episode(job, sess, user_msg, spec=None, her=None):
+    """写一集并逐句配音。spec={'base': 集数}：预先生成（她还没选）——Opus 慢慢写，只先配前两句，不记进剧情；她点了这个选项（commit_ep_spec）才配完其余句、记进剧情。
+    不是预先生成（她自由输入）时用快模型 EP_FAST 写，第一句约 3 秒。"""
     t0 = time.time(); n = len(sess['eps']) + 1; lang = sess['lang']; series = sess['series']
+    job['_her'] = her; job['_n'] = n; job['_started'] = set(); job['_raw'] = {}
     cast = set(k for k in VOICES[series] if not k.startswith('_'))
     ep = {'n': n, 'title': '', 'kind': 'live', 'lines': [], 'prompt': '', 'choices': [], 'ending': False}
     job['ep'] = ep; job['t'] = {}; ths = []
@@ -378,11 +396,12 @@ def run_episode(job, sess, user_msg):
     def synth(i, who, text):
         first = i == 0
         try:
-            u = tts_hedged(series, who, text, lang, 3 if first else (2 if i == 1 else 1))
+            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if i == 1 and not spec else 1))
             ep['lines'][i]['url'] = u
         except Exception:
             ep['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
+    job['_synth'] = synth; job['_ths'] = ths; job['_mq'] = (mq, mev); job['_mth'] = None
 
     def on_line(k, v):
         if k == 'TITLE': ep['title'] = v; return
@@ -396,30 +415,73 @@ def run_episode(job, sess, user_msg):
             v = v[:m.start()].strip(); clip = m.group(1) if VIS.get(series) and m.group(1) in {c['id'] for c in VIS[series]['clips']} else None
         if len(ep['lines']) >= 16: return
         i = len(ep['lines']); ep['lines'].append({'who': who, 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None, 'clip': clip})
-        job['status'] = 'voicing'; sess['_got_lines'] = True
+        job['status'] = 'voicing'; job['_got_lines'] = True
         job['t'].setdefault('first_line', round(time.time() - t0, 2))
-        th = threading.Thread(target=synth, args=(i, who, v), daemon=True); th.start(); ths.append(th)
+        job['_raw'][i] = (who, v)
+        if not spec or i < 2 or job.get('_committed'):  # 预先生成只先配前两句
+            job['_started'].add(i)
+            th = threading.Thread(target=synth, args=(i, who, v), daemon=True); th.start(); ths.append(th)
         if not clip: mq['pending'].append((i, who, ep['lines'][i]['text'])); mev.set()
+    job['_mth'] = mth
     try:
-        sess['_got_lines'] = False
-        write_episode(sess, user_msg, on_line)
+        wctx = {'_got_lines': False}
+        write_episode(wctx, user_msg, lambda k, v: (on_line(k, v), wctx.__setitem__('_got_lines', True)), sysm=system_prompt(sess), fast_model=None if spec else EP_FAST)
+        job['writer'] = wctx.get('writer')
         job['t']['writer'] = round(time.time() - t0, 2)
         mq['done'] = True; mev.set()
         if len(ep['lines']) < 3: raise RuntimeError('writer returned too few lines')
         if not ep['choices']: ep['choices'] = ['……', '……'] if lang == 'zh' else ['…', '…']
         if not ep['title']: ep['title'] = (f'第 {n} 集' if lang == 'zh' else f'Episode {n}')
         if n >= MAX_EPS: ep['ending'] = True
-        [x.join(timeout=150) for x in ths]
-        if mth: mth.join(timeout=20)
-        for l in ep['lines']:
-            if l['url'] is None: l['url'] = ''
-        sess['eps'].append({'n': n, 'title': ep['title'], 'lines': [{'who': l['who'], 'text': l['text']} for l in ep['lines']], 'prompt': ep['prompt'], 'choices': ep['choices']})
-        job['status'] = 'done'
-        log(sess['sid'], {'ep': n, 'writer': sess.get('writer'), 't': job['t'], 'ep_out': {k: v for k, v in ep.items() if k != 'lines'}, 'lines': [{k: l[k] for k in ('who', 'text', 'url', 'clip')} for l in ep['lines']], 'at': time.strftime('%F %T')})
+        if spec:
+            with sess.setdefault('_lock', threading.Lock()):
+                if not job.get('_committed'):
+                    [x.join(timeout=150) for x in ths]; job['status'] = 'ready'; return  # 等她选
+        finish_episode(job, sess)
     except Exception as e:
         mq['done'] = True; mev.set()  # 别让配画面线程空转
         job['status'] = 'error'; job['error'] = str(e)[:300]
         log(sess['sid'], {'ep': n, 'error': traceback.format_exc()[-800:]})
+
+
+def finish_episode(job, sess):
+    """配完还没配的句子，记进剧情，然后按这一集的两个选项预先生成下一集"""
+    ep = job['ep']; ths = list(job['_ths'])
+    for i, (who, raw) in sorted(job['_raw'].items()):
+        if i not in job['_started']:
+            job['_started'].add(i); th = threading.Thread(target=job['_synth'], args=(i, who, raw), daemon=True); th.start(); ths.append(th)
+    job['status'] = 'voicing'
+    [x.join(timeout=150) for x in ths]
+    if job.get('_mth'): job['_mth'].join(timeout=20)
+    for l in ep['lines']:
+        if l['url'] is None: l['url'] = ''
+    if job.get('_her') is not None: sess['eps'][-1]['her'] = job['_her']
+    sess['eps'].append({'n': ep['n'], 'title': ep['title'], 'lines': [{'who': l['who'], 'text': l['text']} for l in ep['lines']], 'prompt': ep['prompt'], 'choices': ep['choices']})
+    job['status'] = 'done'
+    log(sess['sid'], {'ep': ep['n'], 'writer': job.get('writer'), 'spec': bool(job.get('_committed')), 't': job['t'], 'ep_out': {k: v for k, v in ep.items() if k != 'lines'}, 'lines': [{k: l.get(k) for k in ('who', 'text', 'url', 'clip')} for l in ep['lines']], 'at': time.strftime('%F %T')})
+    if not ep.get('ending'): start_ep_specs(sess)
+
+
+def start_ep_specs(sess):
+    """她听这一集的时候（1–3 分钟），按两个选项先把下一集写好、前两句配好音；她点选项就直接开播"""
+    last = sess['eps'][-1]; sess['spec'] = {}
+    if len(sess['eps']) >= MAX_EPS: return
+    for ch in (last.get('choices') or [])[:2]:
+        jid = rid(); JOBS[jid] = {'id': jid, 'status': 'writing', 'error': None}
+        her = her_said(ch, 'option', sess['lang'])
+        sess['spec'][ch] = {'job': jid, 'base': len(sess['eps'])}
+        threading.Thread(target=run_episode, args=(JOBS[jid], sess, next_msg(sess, her), {'base': len(sess['eps'])}, her), daemon=True).start()
+
+
+def commit_ep_spec(sess, text):
+    sp = (sess.get('spec') or {}).get(text); sess['spec'] = {}
+    if not sp or sp['base'] != len(sess['eps']): return None
+    job = JOBS.get(sp['job'])
+    if not job or job['status'] == 'error': return None
+    with sess.setdefault('_lock', threading.Lock()):
+        job['_committed'] = True; ready = job['status'] == 'ready'
+    if ready: threading.Thread(target=finish_episode, args=(job, sess), daemon=True).start()
+    return sp['job']
 
 
 # ---------------- 和主角语音通话（参考之前的 Magnus 午夜来电）----------------
@@ -698,6 +760,7 @@ class H(BaseHTTPRequestHandler):
                                 'eps': [{'n': 1, 'title': sc['title'], 'lines': [{'who': l['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', l['text'])} for l in sc['lines']], 'prompt': sc['prompt'], 'choices': sc['choices']}]}
             log(sid, {'start': True, 'series': series, 'lang': lang, 'name': name, 'at': time.strftime('%F %T')})
             c = ep1_cached(series, lang)
+            if not body.get('prewarm'): threading.Thread(target=start_ep_specs, args=(sess,), daemon=True).start()  # 她听第 1 集的 3 分钟里，第 2 集已经按两个选项写好（批量预热第 1 集时不做）
             return self._send(200, {'sid': sid, 'ep': ep1_with_visuals(c, series, lang)} if c else {'sid': sid, 'job': start_job(ep1_job, series, lang)})
         if u.path == '/api/call/start':
             series = body.get('series')
@@ -725,15 +788,11 @@ class H(BaseHTTPRequestHandler):
             sess = SESS.get(body.get('sid'))
             if not sess: return self._send(404, {'error': 'session expired'})
             text = (body.get('text') or '').strip()[:400]; via = body.get('via') or 'free'
-            sess['eps'][-1]['her'] = her_said(text, via, sess['lang'])
-            n = len(sess['eps']) + 1
-            pace = ''
-            if n >= MAX_EPS - 2: pace = '\n（快到这条线的结局了：接下来 1–2 集内收束主要悬念。）' if sess['lang'] == 'zh' else '\n(Approaching the end of this route: resolve the main thread within 1–2 episodes.)'
-            if n >= MAX_EPS: pace = '\n（这是最后一集：给一个有余味的结局，END: yes。）' if sess['lang'] == 'zh' else '\n(This is the final episode: give a resonant ending, END: yes.)'
-            user_msg = (f'到目前为止：\n{story_so_far(sess)}\n\n现在写第 {n} 集。{pace}' if sess['lang'] == 'zh' else
-                        f'Story so far:\n{story_so_far(sess)}\n\nNow write episode {n}.{pace}')
-            log(sess['sid'], {'her': text, 'via': via, 'next': n, 'at': time.strftime('%F %T')})
-            return self._send(200, {'job': start_job(run_episode, sess, user_msg)})
+            her = her_said(text, via, sess['lang']); n = len(sess['eps']) + 1
+            jid = commit_ep_spec(sess, text) if via == 'option' else None
+            if not jid: sess['spec'] = {}
+            log(sess['sid'], {'her': text, 'via': via, 'next': n, 'spec': bool(jid), 'at': time.strftime('%F %T')})
+            return self._send(200, {'job': jid or start_job(run_episode, sess, next_msg(sess, her), None, her)})
         self._send(404, {'error': 'not found'})
 
 
