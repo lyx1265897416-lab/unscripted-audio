@@ -232,6 +232,8 @@ def story_so_far(sess):
 
 def her_said(text, via, lang):
     if via == 'silence' or not text.strip(): return '她没有说话，只是沉默。' if lang == 'zh' else 'She stays silent.'
+    if lang != 'zh':
+        return f'She chooses: {text}' if via == 'option' else f'She says ({"spoken" if via == "voice" else "typed"}): {text}'
     if via == 'option': return f'她选择：{text}'
     return f'她自己说（{"语音" if via == "voice" else "打字"}）：{text}'
 
