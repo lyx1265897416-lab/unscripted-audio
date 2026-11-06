@@ -268,6 +268,7 @@ const RealAPI = {
   play({ series, name }) { return this.post('api/play', { series, lang: LANG, name }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
   job(id) { return this.get('api/job', { id }, false); },
+  specs(sid) { return this.get('api/specs', { sid }, false); },
   fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
   callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
@@ -286,6 +287,7 @@ const MockAPI = {
     };
   },
   calls: new Map(),
+  async specs() { return { n: 0, specs: {} }; },
   async fillers() { await sleep(300); return { urls: ['mock/line_c.mp3'], think: ['mock/line_a.mp3', 'mock/line_b.mp3'] }; },
   async callStart({ series, who, direction }) {
     await sleep(200);
@@ -700,7 +702,35 @@ audio.addEventListener('loadedmetadata', () => {
 });
 audio.addEventListener('play', () => updatePlayerUI());
 audio.addEventListener('pause', () => updatePlayerUI());
-audio.addEventListener('timeupdate', () => { tickUI(); });
+audio.addEventListener('timeupdate', () => { tickUI(); maybeSpecs(); });
+
+/* Speculative next episodes: the relay pre-writes the next episode for both choices while she listens.
+ * Near the end of the episode we fetch them and warm the first line's audio, so tapping a choice
+ * starts the next episode locally with no network round trip. */
+const SPEC = { key: '', at: 0, n: 0, map: {}, warm: [] };
+function maybeSpecs(force) {
+  const ss = P.id && getSess(P.id); const ep = P.ep;
+  if (!ss || !ss.sid || !ep || ep.ending || ss.eps[ss.eps.length - 1] !== ep) return;
+  const key = ss.sid + ':' + (ep.n + 1);
+  if (SPEC.key === key && Object.keys(SPEC.map).length >= Math.min(2, (ep.choices || []).length)) return;
+  let near = !!force;
+  if (!near && ep.kind === 'live') near = P.jobDone && P.idx >= Math.max(0, (ep.lines || []).length - 5);
+  else if (!near && isFinite(audio.duration) && audio.duration > 0) near = audio.duration - audio.currentTime < 45;
+  if (!near || Date.now() - SPEC.at < 6000) return;
+  SPEC.at = Date.now();
+  if (SPEC.key !== key) { SPEC.key = key; SPEC.map = {}; SPEC.n = ep.n + 1; SPEC.warm = []; }
+  API.specs(ss.sid).then((r) => {
+    if (!r || SPEC.key !== key || r.n !== ep.n + 1) return;
+    Object.entries(r.specs || {}).forEach(([ch, sp]) => {
+      if (SPEC.map[ch]) return;
+      SPEC.map[ch] = sp;
+      (sp.ep.lines || []).slice(0, 2).forEach((l) => {
+        if (!l.url) return;
+        try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.src = absUrl(l.url); a.load(); SPEC.warm.push(a); } catch (e) { /* ignore */ }
+      });
+    });
+  }).catch(() => { /* ignore: falls back to the normal path */ });
+}
 audio.addEventListener('error', () => {
   if (!P.cur || audio.src.startsWith('data:')) return;
   if (P.ep && P.ep.kind === 'live') { P.idx += 1; setTimeout(liveAdvance, 120); }
@@ -930,6 +960,7 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 function openChoiceSheet() {
   if (!P.ep || !P.needChoice) return;
   if (topSheet() && topSheet().kind === 'choice') return;
+  maybeSpecs(true);
   const s = byId(P.id);
   const ep = P.ep;
   const nextN = ep.n + 1;
@@ -1022,6 +1053,28 @@ async function sendNext(id, text, via) {
   ensureToday(); S.tasks.choices += 1;
   P.needChoice = false;
   audio.pause(); P.cur = '';
+  const sp = via === 'option' && SPEC.key === ss.sid + ':' + nextN ? SPEC.map[text] : null;
+  if (sp && sp.ep && sp.ep.n === nextN && sp.ep.lines && sp.ep.lines[0] && sp.ep.lines[0].url) {
+    // Instant start: the next episode for this choice was pre-written and its first lines are voiced.
+    SPEC.key = '';
+    const ep = Object.assign({ durs: {} }, sp.ep, { kind: 'live' });
+    ss.eps = ss.eps.filter((e) => e.n !== nextN); ss.eps.push(ep); ss.eps.sort((a, b) => a.n - b.n);
+    ss.job = { id: sp.job, n: nextN, text };
+    ep._done = false; P.gen = null; save();
+    playEpisode(id, ep, { autoplay: true });
+    P.jobDone = false;
+    openPlayer(); updatePlayerUI(); renderMini();
+    API.next({ sid: ss.sid, text, via }).then((res) => {
+      if (res && res.job === sp.job) startGeneration(res.job, nextN, text, false, true);
+      else if (res && res.job) { // relay could not use the pre-written episode: fall back to the fresh one
+        ss.eps = ss.eps.filter((e) => e !== ep); audio.pause(); P.cur = ''; P.ep = null;
+        P.gen = { n: nextN, text, via, status: 'writing', err: null };
+        ss.job = { id: res.job, n: nextN, text }; save();
+        startGeneration(res.job, nextN, text, false);
+      }
+    }).catch((e) => { console.warn(e); startGeneration(sp.job, nextN, text, false, true); });
+    return;
+  }
   P.gen = { n: nextN, text, via, status: 'writing', err: null };
   save();
   updatePlayerUI(); renderMini(); openPlayer();
@@ -1041,14 +1094,16 @@ async function sendNext(id, text, via) {
 
 let genToken = 0;
 function cancelGen() { genToken++; P.gen = null; }
-function startGeneration(jobId, n, text, resumed) {
+function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
   const my = ++genToken;
   const id = P.id;
-  P.gen = P.gen && P.gen.n === n ? P.gen : { n, text, via: 'option', status: 'writing' };
-  P.want = true;
+  if (!alreadyPlaying) {
+    P.gen = P.gen && P.gen.n === n ? P.gen : { n, text, via: 'option', status: 'writing' };
+    P.want = true;
+  }
   updatePlayerUI(); renderMini();
   const ss = getSess(id);
-  let started = false;
+  let started = !!alreadyPlaying;
   const poll = async () => {
     if (my !== genToken && started === false) return;
     let j;

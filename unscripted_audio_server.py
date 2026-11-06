@@ -731,6 +731,16 @@ class H(BaseHTTPRequestHandler):
                 if sid not in BASE or who not in VOICES[sid]: return self._send(404, {'error': 'no caller'})
                 try: return self._send(200, call_fillers(sid, who, lang))
                 except Exception as e: return self._send(500, {'error': str(e)[:200]})
+            if u.path == '/api/specs':  # 她还在听这一集时，前端先取两个选项预先写好的下一集（前两句已配音），点选项就本地直接播，省掉公网往返
+                sess = SESS.get(g('sid') or '')
+                out = {}
+                for ch, sp in ((sess or {}).get('spec') or {}).items():
+                    j = JOBS.get(sp['job'])
+                    if not j or sp['base'] != len(sess['eps']) or j.get('status') == 'error' or not j.get('ep'): continue
+                    L = j['ep']['lines']
+                    if not (L and L[0].get('url')): continue
+                    out[ch] = {'job': sp['job'], 'n': j['ep']['n'], 'ep': dict(j['ep'], lines=[dict(x) for x in L])}
+                return self._send(200, {'n': len(sess['eps']) + 1 if sess else 0, 'specs': out})
             if u.path == '/api/job':
                 j = JOBS.get(g('id'))
                 if j and j.get('status') == 'ready': j = dict(j, status='voicing')  # 预先生成好了但还没被选：对外当作还在合成
