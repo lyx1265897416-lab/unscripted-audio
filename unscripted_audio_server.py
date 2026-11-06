@@ -352,7 +352,8 @@ def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
     return out
 
 
-EP_FAST = os.environ.get('EP_FAST_MODEL', 'z-ai/glm-5.3-prime')  # 她自由输入时写下一集：11-06 实测第一句 2.8 秒（本机 Opus 8–13 秒）
+EP_FAST = os.environ.get('EP_FAST_MODEL', 'z-ai/glm-5.3-prime')
+SPEC_LINES = 4  # 预先生成先配几句：2 句点选项后第 3 句要等 ~13 秒，4 句（约 15–20 秒音频）能盖住其余句子的配音时间  # 她自由输入时写下一集：11-06 实测第一句 2.8 秒（本机 Opus 8–13 秒）
 
 
 def next_msg(sess, her):
@@ -396,7 +397,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
     def synth(i, who, text):
         first = i == 0
         try:
-            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if i == 1 and not spec else 1))
+            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if (i == 1 and not spec) or (spec and i == SPEC_LINES) else 1))
             ep['lines'][i]['url'] = u
         except Exception:
             ep['lines'][i]['url'] = ''
@@ -418,7 +419,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
         job['status'] = 'voicing'; job['_got_lines'] = True
         job['t'].setdefault('first_line', round(time.time() - t0, 2))
         job['_raw'][i] = (who, v)
-        if not spec or i < 2 or job.get('_committed'):  # 预先生成只先配前两句
+        if not spec or i < SPEC_LINES or job.get('_committed'):  # 预先生成只先配前几句（够她听到其余句子配好）
             job['_started'].add(i)
             th = threading.Thread(target=synth, args=(i, who, v), daemon=True); th.start(); ths.append(th)
         if not clip: mq['pending'].append((i, who, ep['lines'][i]['text'])); mev.set()

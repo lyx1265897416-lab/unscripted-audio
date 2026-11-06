@@ -724,7 +724,7 @@ function maybeSpecs(force) {
     Object.entries(r.specs || {}).forEach(([ch, sp]) => {
       if (SPEC.map[ch]) return;
       SPEC.map[ch] = sp;
-      (sp.ep.lines || []).slice(0, 2).forEach((l) => {
+      (sp.ep.lines || []).slice(0, 4).forEach((l) => {
         if (!l.url) return;
         try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.src = absUrl(l.url); a.load(); SPEC.warm.push(a); } catch (e) { /* ignore */ }
       });
