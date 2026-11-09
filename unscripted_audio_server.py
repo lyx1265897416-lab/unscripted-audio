@@ -395,6 +395,35 @@ def openrouter_stream(model, sysm, user_msg, feed, max_tokens=1400, temperature=
     return out
 
 
+class _Lost(Exception): pass
+
+
+def openrouter_hedged(models, sysm, user_msg, feed, max_tokens=1400, temperature=0.8):
+    """同时让两个快模型写，谁先写完第一行就用谁，另一个立刻断开（11-09：单个快模型时快时慢，1.3 秒到 22 秒都有）"""
+    lock = threading.Lock(); win = {'m': None}; bufs = {}; res = {}
+    def rz(m): return {'reasoning': {'effort': 'low'}} if 'glm' in m else {'reasoning': {'enabled': False}}
+    def run(m):
+        bufs[m] = ''
+        def f(chunk):
+            with lock:
+                if win['m'] is None:
+                    bufs[m] += chunk
+                    if re.search(r'[A-Za-z0-9 ._-]{1,24}\s*[:：].+\n', bufs[m]): win['m'] = m; feed(bufs[m])
+                elif win['m'] == m: feed(chunk)
+                else: raise _Lost()
+        try:
+            txt = openrouter_stream(m, sysm, user_msg, f, max_tokens=max_tokens, temperature=temperature, extra=rz(m))
+            with lock:
+                if win['m'] is None and bufs[m].strip(): win['m'] = m; feed(bufs[m])
+            if win['m'] == m: res['txt'] = txt; res['model'] = m
+        except _Lost: pass
+        except Exception as e: res.setdefault('errs', []).append(repr(e)[:120])
+    ths = [threading.Thread(target=run, args=(m,), daemon=True) for m in models]
+    [t.start() for t in ths]; [t.join(90) for t in ths]
+    if 'txt' not in res: raise RuntimeError('hedged writers failed: ' + '; '.join(res.get('errs', [])))
+    return res['txt'], res['model']
+
+
 def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
     """逐行流式；on_line(key, value) 每写完一行回调一次。返回全文。sysm 不给就用剧集编剧的系统提示词（通话传自己的）。
     fast_model：先用这个 OpenRouter 快模型（通话第 2 轮起用，第一句约 3 秒），失败再走 Claude Code。"""
@@ -407,6 +436,15 @@ def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
             ln, buf['b'] = buf['b'].split('\n', 1)
             m = KEYS_RE.match(ln)
             if m: on_line(m.group(1).strip(), m.group(2).strip())
+    if isinstance(fast_model, (list, tuple)):
+        try:
+            txt, m = openrouter_hedged(fast_model, sysm, user_msg, feed, max_tokens=1400, temperature=0.8)
+            sess['writer'] = m
+            return txt
+        except Exception:
+            traceback.print_exc(); buf['b'] = ''
+            if sess.get('_got_lines'): raise
+        fast_model = None
     if fast_model:
         try:
             rz = {'effort': 'low'} if 'glm' in fast_model else {'enabled': False}  # GLM 不允许关推理（400），用 low
@@ -668,7 +706,8 @@ def callers(sid):
     for key, v in VOICES[sid].items():
         if key.startswith('_') or not v.get('lead'): continue
         ch = next((c for c in w['characters'] if c['name'].split()[0] == key or c['name'] == key), {})
-        out.append({'key': key, 'name': key, 'name_zh': ch.get('name_zh') or key, 'role_zh': ch.get('role_zh', ''), 'role_en': ch.get('role_en', '')})
+        av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'  # 11-09：多角色的剧每人一张头像（来电、选人、通话页）
+        out.append({'key': key, 'name': key, 'name_zh': ch.get('name_zh') or key, 'role_zh': ch.get('role_zh', ''), 'role_en': ch.get('role_en', ''), 'avatar': av if (APP / av).exists() else None})
     return out
 
 
@@ -698,7 +737,7 @@ def call_fillers(series, who, lang):
 CALL_RULES = {
  'zh': """这是一通电话，纯语音。你只演 {who}（{role}），对面是她（听众本人），她叫「{name}」。
 - 只写 {who} 对着电话说的话，口语、短句，像真人深夜打电话；不要旁白、不要动作描写、不要括号。
-- 每轮 2–3 句。第一句必须从这几句里原样挑一句最贴切的（它们是预先录好的，能马上出声）：嗯？ / 嗯。 / 等等。 / 你说。 / ……真的？ / 好。 / 行。 / 什么？ / 哈。 / 我在听。 / 慢点说。 / ……嗯。 第二句起再正常往下说（每句 8–40 个字）。她沉默就回应沉默。
+- 每轮 4–6 句，多说一点（11-09 她嫌太短）：讲具体的细节、此刻在做什么、一段回忆或心里话，最后常常抛给她一个好回答的具体问题，引她开口。第一句必须从这几句里原样挑一句最贴切的（它们是预先录好的，能马上出声）：嗯？ / 嗯。 / 等等。 / 你说。 / ……真的？ / 好。 / 行。 / 什么？ / 哈。 / 我在听。 / 慢点说。 / ……嗯。 第二句起再正常往下说（每句 8–40 个字）。她沉默就回应沉默。
 - 她随时可能打断你（记录里写着“被她打断”）：别把被打断的话原样再说一遍，先接她刚说的。
 - 她没出声的时候，你自己把电话撑下去：接着讲一件具体的事、说一句心里话，或者问她一个很好回答的具体问题，引她开口；别反复问“你怎么不说话”，也别催她。
 - 严格按人设和说话方式说话；只说他这时候知道的事，世界卡里的真相按节奏透露，不一次说破。
@@ -708,7 +747,7 @@ CALL_RULES = {
 - 通话到第 18 轮左右自然收尾，给一个让她想再打来的钩子，HANGUP: yes。""",
  'en': """This is a phone call, voice only. You play only {who} ({role}); on the other end is her (the listener), named "{name}".
 - Write only what {who} says into the phone: short, natural late-night phone talk; no narration, no actions, no brackets.
-- 2–3 lines per turn. The FIRST line must be exactly one of these (they are pre-recorded so he answers instantly): Mm? / Mm. / Wait. / Go on. / …Really? / Okay. / Yeah. / What? / Ha. / I'm listening. / Slow down. / …Yeah. — pick the one that fits, then say more from the second line on (each under 25 words). If she is silent, respond to the silence.
+- 4–6 lines per turn — say more: concrete details, what you're doing right now, a memory or a feeling, and often end with one easy, specific question that draws her in. The FIRST line must be exactly one of these (they are pre-recorded so he answers instantly): Mm? / Mm. / Wait. / Go on. / …Really? / Okay. / Yeah. / What? / Ha. / I'm listening. / Slow down. / …Yeah. — pick the one that fits, then say more from the second line on (each under 25 words). If she is silent, respond to the silence.
 - She can interrupt you at any moment (the log says "cut off by her"): don't repeat what you were cut off saying; answer what she just said.
 - When she stays quiet, carry the call yourself: tell her something specific, admit a small feeling, or ask one easy, concrete question that draws her in. Don't keep asking why she's quiet and don't push her.
 - Stay strictly in character; only say what he knows now; reveal the world-card truths gradually, never all at once.
@@ -718,16 +757,17 @@ CALL_RULES = {
 - No "baby/darling". Sparse tags at line start allowed: [softly] [quietly] [sighs] [chuckles softly] [exhales], at most one per turn.
 - Around turn 18, wrap up naturally with a hook that makes her want to call again, HANGUP: yes."""}
 CALL_FORMAT = """OUTPUT FORMAT — plain lines only, nothing else:
-LINE: <what he says>
-LINE: <optional second line>
-LINE: <optional third line>
-C1: <a short reply she might say, first person>
-C2: <a different short reply>
+LINE: <his first line: one of the pre-recorded short reactions>
+LINE: <what he says next>
+LINE: <more>
+LINE: <more>
+LINE: <optional>
+LINE: <optional, often an easy question for her>
 HANGUP: no"""
 
 
 CALL_TTS = tts_engine(os.environ.get('CALL_TTS', 'flash'))  # 11-08 通话要像真打电话：默认 Turbo v2.5（每句约 3.4 秒，v4 约 5.2 秒）
-CALL_FAST = os.environ.get('CALL_FAST_MODEL', 'deepseek/deepseek-v4.1-flash')  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
+CALL_FAST = tuple(os.environ.get('CALL_FAST_MODEL', 'deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3').split(','))  # 11-09 两个同时写，谁先出第一句用谁  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
 
 
 def call_system(c, lite=False):
@@ -763,7 +803,7 @@ def run_call(job, c, her, spec=None):
     job['_synth'] = synth
 
     def on_line(k, v):
-        if k == 'LINE' and v and len(out['lines']) < 4:
+        if k == 'LINE' and v and len(out['lines']) < 6:
             if n == 1 and not out['lines']:  # 接通时已经播过预先配好的“喂？/Hey.”，第一句别再打招呼
                 v = re.sub(r'^\s*(\[[^\]]*\]\s*)?(喂+|嗨|(?:hey|hi|hello)\b)[\s,，。.!！?？—–-]*', lambda m: m.group(1) or '', v, flags=re.I).strip()
                 v = re.sub(r'^((?:\[[^\]]*\]\s*)?)([a-z])', lambda m: m.group(1) + m.group(2).upper(), v)
@@ -827,6 +867,71 @@ def finish_turn(job, c, ths):
     if job.get('_canceled'): return
     log('call-' + c['cid'], {'turn': n, 'her': her, 'writer': job.get('writer'), 'spec': bool(job.get('_committed')), 't': job['t'], 'out': out, 'at': time.strftime('%F %T')})
     if not out['hangup'] and c['cid'] in CALLS: start_specs(c, out['choices'])
+
+
+def asr_local(data, ctype, lang, hint=''):
+    """本机识别（unscripted_asr.py 8917）。hint：人名/他刚说的话/选项，帮识别认对专有名词（11-09 她说识别不准）"""
+    from urllib.parse import quote
+    req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': ctype or 'audio/wav', 'X-Lang': lang, 'X-Hint': quote((hint or '')[:300])})
+    return (json.loads(op.open(req, timeout=30).read()).get('text') or '').strip()
+
+
+def call_hint(c):
+    names = [c['who'], c.get('name') or '']
+    last = (c['turns'][-1]['lines'] if c['turns'] else [])[-2:]
+    return '，'.join(x for x in names if x) + ('。' + ' '.join(last) if last else '')
+
+
+import difflib
+def echo_of_him(c, text, extra=None):
+    """锁屏外放时他的声音会被录进去：识别结果和他最近说的话很像就当回声丢掉"""
+    t = re.sub(r'[\s\W_]+', '', text.lower())
+    if len(t) < 2: return True
+    recent = [l for tt in c['turns'][-2:] for l in tt['lines']] + list(extra or [])
+    for l in recent:
+        ll = re.sub(r'[\s\W_]+', '', l.lower())
+        if ll and (t in ll or difflib.SequenceMatcher(None, t, ll).ratio() >= 0.55): return True
+    return False
+
+
+def ear_feed(c, data, ctype):
+    """锁屏通话：手机每 ~2 秒传一段录音（锁屏后网页没法测音量），这里解码拼起来，用能量检测找“她说完的一句”
+    （说了 ≥0.3 秒、之后静 ≥1 秒）。返回说完的那段 16k 单声道 PCM，没有就 None。"""
+    import array, tempfile
+    with tempfile.NamedTemporaryFile(suffix='.mp4' if 'mp4' in (ctype or '') else '.webm', delete=False) as f: f.write(data); src = f.name
+    try:
+        pcm = subprocess.run([FF, '-v', 'error', '-i', src, '-ac', '1', '-ar', '16000', '-f', 's16le', '-'], capture_output=True, timeout=20).stdout
+    finally: os.unlink(src)
+    E = c.setdefault('_ear', {'buf': bytearray(), 'start': None, 'voiced': 0, 'quiet': 0, 'floor': 300.0})
+    E['buf'] += pcm
+    a = array.array('h'); a.frombytes(bytes(E['buf'][len(E['buf']) - len(pcm):]) if pcm else b'')
+    fr = 480  # 30 ms
+    base = (len(E['buf']) - len(pcm)) // 2
+    done = None
+    for i in range(0, len(a) - fr + 1, fr):
+        x = a[i:i + fr]; rms = (sum(v * v for v in x) / fr) ** 0.5
+        th = max(700.0, E['floor'] * 3)
+        if rms > th:
+            if E['start'] is None: E['start'] = max(0, base + i - 8000)  # 0.5 秒前开始，别吃掉第一个字
+            E['voiced'] += 0.03; E['quiet'] = 0
+        else:
+            if E['start'] is None: E['floor'] = E['floor'] * 0.97 + rms * 0.03
+            else: E['quiet'] += 0.03
+        if E['start'] is not None and E['quiet'] >= 1.0:  # 锁屏时她句中停顿常有 0.8 秒，等 1 秒再算说完
+            if E['voiced'] >= 0.3: done = bytes(E['buf'][E['start'] * 2:(base + i + fr) * 2])
+            E['start'] = None; E['voiced'] = 0; E['quiet'] = 0
+    if E['start'] is None and len(E['buf']) > 16000 * 2 * 6: del E['buf'][:len(E['buf']) - 16000 * 2 * 2]  # 不在说话时只留最后 2 秒
+    if done:
+        import io, wave
+        bio = io.BytesIO(); w = wave.open(bio, 'wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(done); w.close()
+        return bio.getvalue()
+    return None
+
+
+def call_start_turn(c, text, prev, played, cut):
+    if cut or prev: cut_turn(c, prev, played)
+    c['spec'] = {}
+    return start_job(run_call, c, her_said(text, 'voice', c['lang']))
 
 
 def cut_turn(c, job_id, played):
@@ -893,7 +998,7 @@ def series_card(sid, lang):
     pl, ra = STATS.get(sid, ('100K', 4.7))
     return {'id': sid, 'title': b['title'][lang], 'lead': (b.get('lead') or {}).get(lang, ''), 'hook': b['hook'][lang],
             'tags': [t[lang] for t in b.get('tags', [])], 'genres': b['genres'], 'accent': b['accent'], 'cover': b['cover'], 'avatar': b['avatar'], 'motion': MOTION.get(sid), 'visuals': vis_card(sid),
-            'callers': [{'key': x['key'], 'name': x['name'] if lang == 'en' else x['name_zh'], 'role': x['role_en'] if lang == 'en' else x['role_zh']} for x in callers(sid)],
+            'callers': [{'key': x['key'], 'name': x['name'] if lang == 'en' else x['name_zh'], 'role': x['role_en'] if lang == 'en' else x['role_zh'], 'avatar': x.get('avatar')} for x in callers(sid)],
             'stats': {'plays': pl, 'rating': ra}, 'ep1': {'title': w[f'ep1_title_{lang}'], 'dur': c['dur'] if c else None, 'ready': bool(c), 'audio': c.get('audio') if c else None,
                     'visuals': (ep1_with_visuals(c, sid, lang) or {}).get('visuals') if c else None}}  # audio：前端点播放先直接放，不等 /api/play 走隧道
 
@@ -993,18 +1098,36 @@ class H(BaseHTTPRequestHandler):
             data = self.rfile.read(n) if 0 < n <= 8_000_000 else b''
             t0 = time.time(); text = ''
             if data:
-                try:
-                    req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/wav', 'X-Lang': c['lang']})
-                    text = (json.loads(op.open(req, timeout=30).read()).get('text') or '').strip()
-                except Exception as e:
-                    print('call/say asr', repr(e)[:120], flush=True)
+                try: text = asr_local(data, self.headers.get('Content-Type') or 'audio/wav', c['lang'], call_hint(c))
+                except Exception as e: print('call/say asr', repr(e)[:120], flush=True)
             asr_ms = int((time.time() - t0) * 1000)
             if not text: return self._send(200, {'text': '', 'asr_ms': asr_ms})
-            if gq('cut') == '1' or gq('prev'): cut_turn(c, gq('prev'), int(gq('played') or 0))
-            c['spec'] = {}
-            jid = start_job(run_call, c, her_said(text, 'voice', c['lang']))
+            jid = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
             log('call-' + c['cid'], {'say': text, 'asr_ms': asr_ms, 'cut': gq('cut') == '1', 'played': gq('played'), 'at': time.strftime('%F %T')})
             return self._send(200, {'text': text, 'job': jid, 'asr_ms': asr_ms})
+        if u.path == '/api/call/chunk':  # 锁屏通话：一小段录音；服务器拼起来断句，她说完一句就识别 + 开始他下一轮
+            q = parse_qs(u.query); gq = lambda k, d='': q.get(k, [d])[0]
+            if gq('k') != TOKEN: return self._send(403, {'error': 'bad key'})
+            c = CALLS.get(gq('cid'))
+            if not c: return self._send(404, {'error': 'call ended'})
+            n = int(self.headers.get('Content-Length') or 0)
+            data = self.rfile.read(n) if 0 < n <= 4_000_000 else b''
+            if not data: return self._send(200, {'text': ''})
+            with c.setdefault('_earlock', threading.Lock()):
+                try: wav = ear_feed(c, data, self.headers.get('Content-Type') or '')
+                except Exception as e: print('call/chunk', repr(e)[:160], flush=True); wav = None
+                speaking = (c.get('_ear') or {}).get('start') is not None
+            if not wav: return self._send(200, {'text': '', 'speaking': speaking})
+            t0 = time.time()
+            try: text = asr_local(wav, 'audio/wav', c['lang'], call_hint(c))
+            except Exception as e: text = ''; print('call/chunk asr', repr(e)[:120], flush=True)
+            prev_job = JOBS.get(gq('prev') or '') or {}
+            his_now = [l['text'] for l in ((prev_job.get('call') or {}).get('lines') or [])]
+            if not text or echo_of_him(c, text, his_now):
+                log('call-' + c['cid'], {'chunk_drop': text, 'at': time.strftime('%F %T')}); return self._send(200, {'text': ''})
+            jid = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
+            log('call-' + c['cid'], {'say': text, 'locked': True, 'asr_ms': int((time.time() - t0) * 1000), 'at': time.strftime('%F %T')})
+            return self._send(200, {'text': text, 'job': jid})
         if u.path == '/api/asr':  # 手机录的几秒语音 → 本机 faster-whisper（unscripted_asr.py，8917），中英文自动判断
             q = parse_qs(u.query)
             if q.get('k', [''])[0] != TOKEN: return self._send(403, {'error': 'bad key'})
@@ -1012,7 +1135,12 @@ class H(BaseHTTPRequestHandler):
             data = self.rfile.read(n) if 0 < n <= 8_000_000 else b''
             if not data: return self._send(400, {'error': 'empty'})
             try:
-                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0]})
+                from urllib.parse import quote
+                sess = get_sess(q.get('sid', [''])[0]); hint = ''
+                if sess:  # 选项原文 + 角色名当提示，识别更准（11-09）
+                    ch = (sess['eps'][-1].get('choices') or [])[:2]
+                    hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
+                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0], 'X-Hint': quote(hint[:300])})
                 return self._send(200, json.loads(op.open(req, timeout=30).read()))
             except Exception as e:
                 return self._send(200, {'text': '', 'error': 'asr unavailable: ' + repr(e)[:120]})

@@ -282,8 +282,9 @@ const RealAPI = {
   play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, me: S.me || '', tts: TTS }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
   job(id, have) { return this.get('api/job', have == null ? { id } : { id, wait: 8, have }, false); },  // have: long-poll until a new line is voiced
-  async callSay(cid, blob, q) {
-    const r = await apiFetch(() => { const u = new URL(apiUrl('api/call/say')); u.searchParams.set('k', TOKEN); u.searchParams.set('cid', cid); Object.entries(q || {}).forEach(([k, v]) => u.searchParams.set(k, v)); return u.toString(); },
+  async callChunk(cid, blob, q) { return this.callSay(cid, blob, q, 'api/call/chunk'); },
+  async callSay(cid, blob, q, path) {
+    const r = await apiFetch(() => { const u = new URL(apiUrl(path || 'api/call/say')); u.searchParams.set('k', TOKEN); u.searchParams.set('cid', cid); Object.entries(q || {}).forEach(([k, v]) => u.searchParams.set(k, v)); return u.toString(); },
       { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/wav' }, body: blob });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
@@ -293,7 +294,7 @@ const RealAPI = {
   cue(sid, n) { return this.get('api/cue', { sid, n }, false); },
   wish(sid, text) { return this.post('api/wish', { sid, text }); },
   async asr(blob) {
-    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); return u.toString(); },
+    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid); return u.toString(); },
       { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
@@ -318,6 +319,7 @@ const MockAPI = {
   calls: new Map(),
   async specs() { return { n: 0, specs: {} }; },
   async callSay() { return { text: '' }; },
+  async callChunk() { return { text: '' }; },
   async ep() { throw new Error('no episode'); },
   async cue() { await sleep(400); return { url: 'mock/line_a.mp3', text: 'Mock question: this way, or that way?' }; },
   async wish() { return { ok: true }; },
@@ -1813,7 +1815,7 @@ function openUnlockSheet(id, n, onDone, opts = {}) {
     return `
     <div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="ul-head" style="margin-top:-30px">
-      <div class="ul-art ${isCall ? 'round' : ''}"><img src="${esc(isCall ? avatarOf(s) : coverOf(s))}" alt=""><div class="lk">${ic(isCall ? 'phone' : 'lock', 'lg')}</div></div>
+      <div class="ul-art ${isCall ? 'round' : ''}"><img src="${esc(isCall ? callerAv(s, caller && caller.key) : coverOf(s))}" alt=""><div class="lk">${ic(isCall ? 'phone' : 'lock', 'lg')}</div></div>
       <h3>${isCall ? `Call ${esc(shortName(caller))}` : `Unlock Episode ${n}`}</h3>
       <p>${isCall ? `${esc(s.title)} · your first call was free` : `${esc(s.title)} · written live from your choice`}</p>
     </div>
@@ -2072,6 +2074,8 @@ function callersOf(s) {
   return [{ key: s.name || s.id, name: s.name || s.id, role: s.lead || '' }];
 }
 const callerOf = (s, key) => callersOf(s).find((c) => c.key === key) || callersOf(s)[0];
+/** each caller's own face (villa: Jace / Theo / Kai…); falls back to the series avatar */
+const callerAv = (s, key) => { const c = s && key ? callersOf(s).find((x) => x.key === key) : null; return (c && c.avatar) || avatarOf(s); };
 const shortName = (c) => String((c && (c.name || c.key)) || '').split(/\s*[·•]\s*/)[0].trim();
 const callCost = (id) => (S.vip || !(S.callsUsed || {})[id] ? 0 : CALL_PRICE);
 
@@ -2095,7 +2099,7 @@ function openCallerChooser(id, opts) {
     <div class="sh-list">
       ${callersOf(s).map((c) => `
         <button class="caller-row" data-act="call-who" data-id="${esc(id)}" data-who="${esc(c.key)}">
-          <img src="${esc(avatarOf(s))}" alt="">
+          <img src="${esc(c.avatar || avatarOf(s))}" alt="">
           <span class="ct"><b>${esc(c.name || c.key)}</b><span>${esc(c.role || '')}</span></span>
           <span class="call-go">${ic('phone')}</span>
         </button>`).join('')}
@@ -2270,7 +2274,7 @@ function turnDone() {
   }
   call.phase = 'your-turn';
   renderCallUI();
-  if (EAR.on) earIdle(call); else callListen(call);
+  if (EAR.on || lockEarWanted()) earIdle(call); else callListen(call);
 }
 /** Hands-free call: as soon as he stops, the mic listens. She talks → sent when she pauses (~1 s). Nothing for 9 s → he carries on. */
 function callListen(call, retry) {
@@ -2369,6 +2373,42 @@ function earResume(call) {
   if (call.phase === 'your-turn') earIdle(call);
   renderCallUI();
 }
+/* ---------- lock-screen call ear (11-09): once the phone locks the AudioContext stops, so the on-screen ear goes deaf.
+ * MediaRecorder keeps recording in Safari, so record ~2 s pieces and let the relay stitch them and find where she finished
+ * a sentence (/api/call/chunk: energy detection → recognition → his next turn; his own voice leaking back is filtered there). */
+const LOCKEAR = { on: false, rec: null, t: 0 };
+const lockEarWanted = () => !!(C && C.cid && C.pickedUp && callActive() && C.phase !== 'hanging' && !C.muted && VI.stream && window.MediaRecorder
+  && (document.hidden || !actx || actx.state !== 'running'));
+function lockEarTick() { if (!lockEarWanted()) { lockEarStop(); return; } if (!LOCKEAR.on) { LOCKEAR.on = true; lockEarSeg(); } }
+function lockEarSeg() {
+  if (!LOCKEAR.on || !lockEarWanted()) { lockEarStop(); return; }
+  const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  let rec;
+  try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { LOCKEAR.on = false; return; }
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => { const b = new Blob(chunks, { type: rec.mimeType || type || 'audio/mp4' }); if (b.size > 200) lockEarSend(b); };
+  LOCKEAR.rec = rec;
+  try { rec.start(); } catch (e) { LOCKEAR.on = false; return; }
+  LOCKEAR.t = setTimeout(() => { try { rec.stop(); } catch (e) { /* ignore */ } lockEarSeg(); }, 2000);
+}
+function lockEarStop() {
+  LOCKEAR.on = false; clearTimeout(LOCKEAR.t);
+  if (LOCKEAR.rec && LOCKEAR.rec.state !== 'inactive') { try { LOCKEAR.rec.stop(); } catch (e) { /* ignore */ } }
+  LOCKEAR.rec = null;
+}
+async function lockEarSend(blob) {
+  const call = C; if (!call || !call.cid) return;
+  const unfinished = !call.jobDone || call.phase === 'thinking' || himTalking(call);
+  let r = null;
+  try { r = await API.callChunk(call.cid, blob, unfinished ? { prev: call.job || '', played: call.idx + (call.playing ? 1 : 0), cut: 1 } : {}); } catch (e) { r = null; }
+  if (C !== call || !r || call.phase === 'ended') return;
+  if (r.speaking && call.phase === 'your-turn') earIdle(call);   // she's mid-sentence: don't let him carry on over her yet
+  if (r.text) { if (call.playing || call.fillerPlaying) { try { callAudio.pause(); } catch (e) { /* ignore */ } } takeHerTurn(call, r); }
+}
+document.addEventListener('visibilitychange', () => setTimeout(lockEarTick, 50));
+setInterval(() => { if (C) lockEarTick(); }, 1000);
+
 /** after he finishes: nothing from her for 9 s → he carries on */
 function earIdle(call) {
   clearTimeout(call.silentT);
@@ -2399,6 +2439,10 @@ async function sendCallSay(call, wav, u) {
   try { r = await API.callSay(call.cid, wav, unfinished ? { prev: call.job || '', played, cut: 1 } : {}); } catch (e) { r = null; }
   if (C !== call || call.phase === 'ended') return;
   if (!r || !r.text) { earResume(call); return; }   // nothing recognisable: he just carries on
+  takeHerTurn(call, r);
+}
+/** what she said is in (on-screen ear or lock-screen pieces): he stops and answers it */
+function takeHerTurn(call, r) {
   stopCallPoll(); clearTimeout(call.thinkT); clearTimeout(call.silentT);
   if (call.held || call.playing) { try { callAudio.pause(); } catch (e) { /* ignore */ } }
   call.transcript.push({ who: 'you', text: r.text }); recHer(call, r.text, 'voice');
@@ -2466,7 +2510,7 @@ function hangUp() {
 function endCall(reason) {
   const call = C;
   if (!call || call.phase === 'ended') return;
-  stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT); clearTimeout(call.silentT); earStop(); setTimeout(micPark, 100);
+  stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT); clearTimeout(call.silentT); earStop(); lockEarStop(); setTimeout(micPark, 100);
   try { callAudio.pause(); } catch (e) { /* ignore */ }
   clearInterval(call.timer);
   const base = call.t0 || call.acceptedAt;  // 计时从他开口算；没开口就从接通算，不会记成 0:00
@@ -2523,7 +2567,8 @@ function renderCall() {
   const shellKey = `${call.seq}:${call.phase === 'ended' ? 'end' : 'live'}`;
   if (el.dataset.key !== shellKey) {
     el.dataset.key = shellKey;
-    const circle = `<div class="cl-circle"><img src="${esc(avatarOf(s))}" alt="">${mo && !reduceMotion() ? `<video src="${esc(absUrl(mo))}" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video>` : ''}</div>`;
+    const own = callerAv(s, call.who), solo = own === avatarOf(s);   // a caller with their own face: no series motion clip over it
+    const circle = `<div class="cl-circle"><img src="${esc(own)}" alt="">${mo && solo && !reduceMotion() ? `<video src="${esc(absUrl(mo))}" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video>` : ''}</div>`;
     if (call.phase === 'ended') {
       el.className = 'call on ph-ended';
       el.innerHTML = `
@@ -2744,7 +2789,7 @@ function callRowHtml(r) {
     <button class="swipe-del" data-act="call-del" data-rid="${esc(r.rid)}" aria-label="Delete call">${ic('trash', 'sm')}<span>Delete</span></button>
     <div class="swipe-body lib-row">
       <button class="open" data-act="call-tr" data-rid="${esc(r.rid)}">
-        <span class="cv round"><img src="${esc(avatarOf(s))}" alt="" loading="lazy"></span>
+        <span class="cv round"><img src="${esc(callerAv(s, r.who))}" alt="" loading="lazy"></span>
         <span class="lt"><b>${esc(r.name)}</b><span>${esc(s.title)} · ${recLines(r)} line${recLines(r) === 1 ? '' : 's'}</span><span class="call-meta ${bad ? 'miss' : ''}">${ic(r.direction === 'incoming' ? 'phone' : 'send', 'xs')} ${r.direction === 'incoming' ? 'Incoming' : 'Outgoing'} · ${fmtWhen(r.startedAt)} · ${esc(recStatusLabel(r))}</span></span>
       </button>
       <button class="rm call-back-btn" data-act="call-back" data-id="${esc(r.series)}" data-who="${esc(r.who)}" aria-label="Call back">${ic('phone', 'sm')}</button>
@@ -2855,7 +2900,7 @@ function renderTranscriptView() {
       const can = !!h.url && !live;
       const on = TR.cur === key;
       out += `<div class="msg him ${on ? 'playing' : ''}" data-k="${key}">
-        <img class="av" src="${esc(avatarOf(s))}" alt="">
+        <img class="av" src="${esc(callerAv(s, r.who))}" alt="">
         <div class="col"><span class="nm">${esc(shortName({ name: r.name }))}<i>${rel(h.at)}</i></span>
           <div class="bub-row"><div class="bub">${esc(cleanText(h.text))}</div>
           <button class="line-play" data-act="tr-line" data-k="${key}" ${can ? '' : 'disabled'} aria-label="${on ? 'Pause line' : 'Play line'}">${ic(on && !trAudio.paused ? 'pause' : 'play')}</button></div></div>
@@ -2868,7 +2913,7 @@ function renderTranscriptView() {
   el.innerHTML = `
     <header class="trv-top">
       <button class="icon-btn" data-act="tr-close" aria-label="Back">${ic('back')}</button>
-      <div class="trv-who"><img src="${esc(avatarOf(s))}" alt=""><div><b>${esc(r.name)}</b><span>${esc(s.title)} · ${r.direction === 'incoming' ? 'Incoming' : 'Outgoing'} · ${fmtWhen(r.startedAt)} · ${esc(recStatusLabel(r))}</span></div></div>
+      <div class="trv-who"><img src="${esc(callerAv(s, r.who))}" alt=""><div><b>${esc(r.name)}</b><span>${esc(s.title)} · ${r.direction === 'incoming' ? 'Incoming' : 'Outgoing'} · ${fmtWhen(r.startedAt)} · ${esc(recStatusLabel(r))}</span></div></div>
       <button class="icon-btn" data-act="tr-del" aria-label="Delete call" ${live ? 'disabled' : ''}>${ic('trash', 'sm')}</button>
     </header>
     ${live ? `<div class="trv-live"><span class="dot"></span> Live call — saved after every turn. Replay unlocks when it ends.</div>` : ''}
