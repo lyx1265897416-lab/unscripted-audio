@@ -847,22 +847,54 @@ async function newSession(id) {
   P.id = id; P.ep = null; P.loading = true; P.needChoice = false; P.want = true; P.cur = '';
   document.documentElement.style.setProperty('--accent', s.accent);
   renderPlayer(); updatePlayerUI(); renderMini(); openPlayer();
-  try {
+  // Instant start: Episode 1 is pre-produced, so play its audio right away (full script from this device's cache,
+  // or audio-only from the series list) and merge the session / cues / choices when /api/play comes back through the tunnel.
+  const k1 = 'ua.ep1.' + id + '.' + LANG;
+  const cached = store.get(k1, null);
+  const audioUrl = (s.ep1 && s.ep1.audio) || (cached && cached.audio);
+  let early = null;
+  if (!MOCK && audioUrl) {
+    early = (cached && cached.audio === audioUrl) ? JSON.parse(JSON.stringify(cached))
+      : { n: 1, kind: 'produced', title: (s.ep1 && s.ep1.title) || 'Episode 1', audio: audioUrl, dur: (s.ep1 && s.ep1.dur) || 0, cues: [], choices: [], prompt: '' };
+    early.kind = 'produced';
+    SESS[skey(id)] = { sid: null, eps: [early], chosen: {}, job: null, started: Date.now() };
+    recordStart(id); save();
+    playEpisode(id, early);
+  }
+  const sidP = SIDP[skey(id)] = (async () => {
     const res = await API.play({ series: id, name: S.name || '' });
     let ep = res.ep;
     if (!ep && res.job) ep = await waitJobEp(res.job, (j) => { P.loadStatus = j.status; updatePlayerUI(); });
     if (!ep) throw new Error('No episode returned');
+    return { res, ep };
+  })();
+  try {
+    const { res, ep } = await sidP;
+    if (ep.audio) store.set(k1, ep);
+    const ss = getSess(id);
+    if (early && ss && ss.eps[0] === early && ep.audio === early.audio) {
+      Object.assign(early, ep, { kind: 'produced' }); ss.sid = res.sid; save();
+      if (P.ep === early) { updatePlayerUI(true); if (s.visuals) renderVisual(true); }
+      return;
+    }
     if (P.id !== id) return;
     SESS[skey(id)] = { sid: res.sid, eps: [ep], chosen: {}, job: null, started: Date.now() };
     recordStart(id);
     save();
     playEpisode(id, ep);
   } catch (e) {
+    if (early && P.ep === early) { audio.pause(); P.ep = null; }
     console.warn(e);
     P.loading = false; P.want = false;
     updatePlayerUI();
     toast(`Couldn't start the story. ${esc(e.message || '')}`);
   }
+}
+const SIDP = {};
+async function sidReady(id) {  // Episode 1 starts before /api/play returns; anything that needs the server session waits here
+  const ss = getSess(id); if (!ss) return null;
+  if (!ss.sid && SIDP[skey(id)]) { try { const r = await SIDP[skey(id)]; if (!ss.sid) ss.sid = r.res.sid; } catch (e) { /* ignore */ } }
+  return ss.sid;
 }
 async function waitJobEp(jobId, onTick) {
   const t0 = Date.now();
@@ -1271,7 +1303,7 @@ async function sendWish(text) {
   toast(`${ic('spark', 'sm')} Got it — Episode ${P.ep.n + 1} will follow that`);
   ss.wishes = (ss.wishes || []).concat(text).slice(-3); save();
   SPEC.key = ''; SPEC.map = {}; // the pre-written next episodes are being rewritten around her wish
-  try { await API.wish(ss.sid, text); } catch (e) { console.warn(e); }
+  try { await sidReady(P.id); await API.wish(ss.sid, text); } catch (e) { console.warn(e); }
 }
 
 function openModeSheet() {
@@ -1318,6 +1350,7 @@ function submitChoice(text, via) {
 }
 async function sendNext(id, text, via) {
   const ss = getSess(id); if (!ss) return;
+  if (!ss.sid) await sidReady(id);
   const nextN = P.ep.n + 1;
   ss.chosen = ss.chosen || {};
   ss.chosen[P.ep.n] = via === 'silence' ? '' : text;
@@ -3446,10 +3479,25 @@ async function boot() {
   try {
     if (MOCK) throw new Error('mock');
     await loadRelay();
-    const list = await RealAPI.series();
-    if (!Array.isArray(list) || !list.length) throw new Error('empty');
-    SERIES = list;
-    API = RealAPI;
+    const ck = 'ua.series.' + LANG, cachedList = store.get(ck, null);
+    const fresh = RealAPI.series().then((list) => {
+      if (!Array.isArray(list) || !list.length) throw new Error('empty');
+      store.set(ck, list);
+      return list;
+    });
+    if (Array.isArray(cachedList) && cachedList.length) {
+      // Open instantly from the last series list on this device; refresh in the background (the tunnel can take seconds)
+      SERIES = cachedList; API = RealAPI;
+      fresh.then((list) => {
+        const byIdNew = Object.fromEntries(list.map((x) => [x.id, x]));
+        SERIES.forEach((x) => { if (byIdNew[x.id]) Object.assign(x, byIdNew[x.id]); });
+        list.forEach((x) => { if (!SERIES.some((y) => y.id === x.id)) SERIES.push(x); });
+        if (curTab === 'home' && !isDetailOpen() && location.hash !== '#/player') renderHome();
+      }).catch(() => toast('Server is reconnecting…'));
+    } else {
+      SERIES = await fresh;
+      API = RealAPI;
+    }
   } catch (e) {
     const wasExplicit = MOCK;
     MOCK = true; API = MockAPI;
