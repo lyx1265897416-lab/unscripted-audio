@@ -1167,11 +1167,34 @@ function micRelease() {
   if (VI.stream) { VI.stream.getTracks().forEach((t) => t.stop()); VI.stream = null; VI.an = null; }
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* ignore */ }
 }
-function primeMic() {  // inside a tap, so the permission prompt appears now and the stream is ready at the choice point
+/** Hands-free asks for the mic up front (opening the app / choosing Hands-free), never for the first time at a choice point.
+ * force: she chose Hands-free or tapped a mic herself — ask even if she said no before. */
+function primeMic(force) {
   if (VI.primed || !VOICE_OK || modeOf() !== 'voice') return;
+  if (VI.denied && !force) return;
   VI.primed = true;
-  micStream().catch(() => { VI.denied = true; VI.primed = false; });
+  micStream().catch((e) => {
+    VI.primed = false;
+    if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+      VI.denied = true;
+      toast(LANG === 'zh' ? '没开麦克风：选择点会显示选项，5 秒不选就自动往下。想用语音，可在收听模式里重新选 Hands-free。' : 'Mic is off: choices show on screen and the story moves on after 5 seconds. Pick Hands-free again in listening modes to use your voice.');
+    }
+  });
 }
+async function micPermission() {
+  try { return (await navigator.permissions.query({ name: 'microphone' })).state; } catch (e) { return ''; }
+}
+/** Opening the app in Hands-free: ask right away (open the stream silently if already allowed); the first tap anywhere asks too,
+ * for browsers that only show the prompt after a gesture. */
+async function primeMicOnEntry() {
+  if (!S.onboarded || !VOICE_OK || modeOf() !== 'voice') return;
+  const st = await micPermission();
+  if (st === 'denied') { VI.denied = true; return; }
+  if (st !== 'granted') toast(LANG === 'zh' ? `${ic('mic', 'sm')} Hands-free 需要麦克风：到选择点直接说出你的回答` : `${ic('mic', 'sm')} Hands-free uses your mic: just say your answer at each choice`);
+  VI.primed = true;
+  micStream().catch((e) => { VI.primed = false; if (st === 'prompt' && e && e.name === 'NotAllowedError') VI.denied = true; });
+}
+document.addEventListener('pointerdown', () => { if (S.onboarded) primeMic(); }, { capture: true, passive: true });
 function micLevel() {
   if (!VI.an || !actx || actx.state !== 'running') return -1;
   VI.an.getFloatTimeDomainData(VI.buf);
@@ -1414,7 +1437,7 @@ function openModeSheet() {
 function setMode(m) {
   if (!MODES[m] || (m === 'voice' && !VOICE_OK)) return;
   S.mode = m; save();
-  if (m === 'voice') primeMic(); else micRelease();
+  if (m === 'voice') { VI.denied = false; primeMic(true); } else micRelease();
   closeSheet(); toast(`${ic(MODES[m].icon, 'sm')} ${MODES[m].name}`);
   updateModePill();
   if (P.needChoice) { closeAllSheets(); hfStop(); stopAutoCountdown(); endOfEpisodeFlow(); }
@@ -3620,6 +3643,7 @@ function obNext(skip) {
   if (!S.ledger.some((l) => /Welcome/.test(l.l))) addCoins(30, 'Welcome bonus');
   save(true);
   const el = $('#onboard'); el.hidden = true; el.innerHTML = '';
+  primeMic();  // the last onboarding tap: ask for the mic now (Hands-free is the default), not at the first choice point
   toast(`${coinIc('sm')} Welcome${S.name ? ', ' + esc(S.name) : ''}! +30 coins`);
   route();
 }
@@ -3663,7 +3687,7 @@ async function boot() {
   // drop live sessions with a different language/mode? keys already include both.
   if (location.hash === '#/player') history.replaceState(null, '', location.pathname + location.search + '#/home');
   if (!S.onboarded) { renderOnboard(); showTab('home'); }
-  else route();
+  else { route(); primeMicOnEntry(); }
   renderMini();
 }
 boot();
