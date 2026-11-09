@@ -89,15 +89,16 @@ def _mlx_worker():
         except Exception as e: box['e'] = e
         ev.set()
 threading.Thread(target=_mlx_worker, daemon=True).start()
-def on_mlx(fn):
-    box, ev = {}, threading.Event(); MLXQ.put((fn, box, ev)); ev.wait(60)
+def on_mlx(fn, wait=60):
+    box, ev = {}, threading.Event(); MLXQ.put((fn, box, ev))
+    if not ev.wait(wait): raise TimeoutError('mlx slow')
     if 'e' in box: raise box['e']
     return box.get('r')
 
 
-def transcribe(path, hint, ctx=''):
+def transcribe(path, hint, ctx='', fast=False):
     with LOCK:
-        t = time.time()
+        t = time.time(); sv = None
         if SV:
             try:
                 text, lang = transcribe_sv(path)
@@ -107,15 +108,17 @@ def transcribe(path, hint, ctx=''):
                     if JUNK.search(text): text = ''
                     return {'text': text, 'lang': 'zh' if text else (hint or 'zh'), 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'sensevoice'}
                 hint = 'en'   # English: Whisper below is better at English (and keeps normal casing/punctuation)
+                sv = text
             except Exception as e:
                 print('sensevoice failed', repr(e)[:160], flush=True)
         if MLX:
             try:
-                text, lang = on_mlx(lambda: transcribe_mlx(path, hint, ctx))
+                text, lang = on_mlx(lambda: transcribe_mlx(path, hint, ctx), 2.5 if fast and sv else 60)  # 通话里（X-Fast）英文最多等 2.5 秒
                 if JUNK.search(text): text = ''
                 return {'text': text, 'lang': lang, 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'mlx'}
             except Exception as e:
                 print('mlx failed', repr(e)[:160], flush=True)
+                if sv: return {'text': sv, 'lang': 'en', 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'sensevoice-en'}
         kw = dict(beam_size=1, vad_filter=True, vad_parameters={'min_silence_duration_ms': 400}, condition_on_previous_text=False, without_timestamps=True)
         segs, info = MODEL.transcribe(path, initial_prompt=PROMPT + (ctx or ''), **kw)  # 一遍：自动判断中/英，提示让中文出简体（11-08 实测约 1.8 秒）
         segs = list(segs)
@@ -152,7 +155,7 @@ class H(BaseHTTPRequestHandler):
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
             f.write(data); p = f.name
         try:
-            r = transcribe(p, hint, ctx)
+            r = transcribe(p, hint, ctx, fast=self.headers.get('X-Fast') == '1')
         except Exception as e:
             r = {'text': '', 'error': repr(e)[:200]}
         finally:

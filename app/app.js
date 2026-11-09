@@ -2162,7 +2162,7 @@ function onCallAudioDone() {
     const wasThink = C.thinkPlaying || C.greeting;
     C.fillerPlaying = false; C.thinkPlaying = false; C.greeting = false;
     if (!wasThink) scheduleThink(C, C.turn);
-  } else if (C.playing) { C.playing = false; C.idx += 1; }
+  } else if (C.playing) { C.playing = false; C.idx += 1; gapFill(C); }
   else return;
   renderCallUI();
   setTimeout(callAdvance, 120);
@@ -2234,7 +2234,8 @@ function beginCallRequest(call) {
       if (!r) throw err || new Error('no answer');
       if (C !== call) { if (r && r.cid) API.callEnd({ cid: r.cid, seconds: 0 }).catch(() => {}); return; }
       call.cid = r.cid; if (r.who) call.who = r.who; call.job = r.job;
-      if (r.greet && !(call.greet || []).length) { call.greet = [r.greet]; fetchBlob(r.greet); callAdvance(); }   // "Hello?" ready the moment he picks up
+      if (r.greet && !(call.greet || []).length) { call.greet = [r.greet]; fetchBlob(r.greet); callAdvance(); }
+      (r.bridges || []).forEach((u) => fetchBlob(u));   // his "first sentence" replies: on the phone before she ever speaks   // "Hello?" ready the moment he picks up
       pollCall(r.job, call.turn);
     } catch (e) {
       if (C !== call) return;
@@ -2470,7 +2471,7 @@ function earFrame(x) {
   }
   const u = EAR.utt; u.buf.push(frame); u.dur += dt;
   if (lv > th * 0.6) { u.voiced += dt; u.quiet = 0; } else u.quiet += dt;
-  if (u.quiet >= 0.7 || u.dur >= 20) earEnd(call);
+  if (u.quiet >= 0.6 || u.dur >= 20) earEnd(call);
 }
 function earBegin(call, over) {
   EAR.utt = { buf: EAR.pre.slice(), dur: EAR.pre.length * 2048 / EAR.sr, voiced: EAR.above, quiet: 0, over, idx: call.idx, turn: call.turn };
@@ -2564,8 +2565,12 @@ function takeHerTurn(call, r) {
   call.transcript.push({ who: 'you', text: r.text }); recHer(call, r.text, 'voice');
   call.turn += 1;
   Object.assign(call, { lines: [], idx: 0, jobDone: false, choices: [], logged: new Set(), caption: null, phase: 'thinking', waiting: true, playing: false, held: false, listen: '', job: r.job, said: r.text });
-  scheduleThink(call, call.turn);   // his first line is a pre-recorded reaction ("Mm?", "Wait.") and usually arrives in ~2 s; "let me think" only if it doesn't
+  // 11-09: the relay hands back the whole sentence he says first (pre-voiced, e.g. "That's a good question. Let me tell you.")
+  // → it plays the moment her words are recognised, while the rest of his turn is written and voiced
+  if (r.first && r.first.url) { call.lines = [{ who: r.first.who || call.who, text: cleanText(r.first.text), url: r.first.url }]; fetchBlob(r.first.url); }
+  scheduleThink(call, call.turn);
   renderCall();
+  if (call.lines.length) callAdvance();
   pollCall(r.job, call.turn);
 }
 /** ~3.5 s after the filler, if his first line still has no audio: one "let me think" clip
@@ -2585,6 +2590,23 @@ function scheduleThink(call, turn) {
     call.fillerPlaying = true; call.thinkPlaying = true;
     playCallSrc(u);
   }, 3500);
+}
+/** 11-09: his next line isn't voiced yet when one ends (Waku takes 4–9 s a line): after 1.4 s of quiet,
+ *  one soft "let me think" clip so the call never sits dead — at most once per turn. */
+function gapFill(call) {
+  clearTimeout(call.gapT);
+  if (!call.thinks || !call.thinks.length || call.thinkTurn === call.turn) return;
+  const turn = call.turn, idx = call.idx;
+  call.gapT = setTimeout(() => {
+    if (C !== call || call.turn !== turn || call.idx !== idx || call.playing || call.fillerPlaying || call.held || EAR.utt || call.phase === 'ended' || call.phase === 'your-turn') return;
+    const L = call.lines; let i = call.idx; while (i < L.length && L[i].url === '') i++;
+    if (L[i] && L[i].url) return;
+    if (call.jobDone && i >= L.length) return;
+    const pool = call.thinks.filter((u) => u !== call.lastThink); if (!pool.length) return;
+    const u = pool[Math.floor(Math.random() * pool.length)];
+    call.thinkTurn = turn; call.lastThink = u; call.fillerPlaying = true; call.thinkPlaying = true;
+    playCallSrc(u);
+  }, 1400);
 }
 function playFiller() {
   const call = C; if (!call || !call.fillers.length) return;

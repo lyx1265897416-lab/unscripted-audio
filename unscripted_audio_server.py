@@ -60,8 +60,15 @@ MAX_EPS = 12
 
 POOL = queue.Queue()
 for _ in range(10): POOL.put(WakuMCP())
+CALL_HEDGE = [int(x) for x in os.environ.get('CALL_HEDGE', '2,1').split(',')]  # 正文第 1、2 句各发几路
 CALL_POOL = queue.Queue()  # 11-09 通话专用配音通道：剧集在后台整集配音时，通话不跟它排队（原来排到 20 秒）
-threading.Thread(target=lambda: [CALL_POOL.put(WakuMCP()) for _ in range(int(os.environ.get('CALL_POOL', '6')))], daemon=True).start()  # 后台建，不拖慢重启
+CALL_POOL_N = [0]
+def _fill_call_pool(n):
+    for _ in range(n):
+        for k in range(3):  # waku mcp shim 偶尔初始化失败（机器上 shim 太多时），重试
+            try: CALL_POOL.put(WakuMCP()); CALL_POOL_N[0] += 1; break
+            except Exception as e: print('call pool', repr(e)[:100], flush=True); time.sleep(3)
+threading.Thread(target=_fill_call_pool, args=(int(os.environ.get('CALL_POOL', '8')),), daemon=True).start()  # 后台建，不拖慢重启；11-09 实测 14 条 + 三路并发并不更快（Waku 端排队）
 SESS, JOBS, EP1_LOCK = {}, {}, {}
 CALL_KEYS = {}
 op = U.build_opener(U.ProxyHandler({}))
@@ -150,6 +157,7 @@ def tts_text(text, lead, lang):
 
 
 def waku(model, params, timeout=120, pool=None):
+    if pool is CALL_POOL and not CALL_POOL_N[0]: pool = POOL  # 通话通道还没建好就先用公共的
     pool = pool or POOL
     m = pool.get()
     try:
@@ -160,6 +168,15 @@ def waku(model, params, timeout=120, pool=None):
         m = WakuMCP(); raise
     finally:
         pool.put(m)
+
+
+_CREDIT_T = [0]
+def credit_alarm():
+    """配音报余额不足：马上跑一次额度守护（低于线就充 30usd），1 分钟内只跑一次（11-09）"""
+    if time.time() - _CREDIT_T[0] < 60: return
+    _CREDIT_T[0] = time.time()
+    g = Path(__file__).resolve().parents[2] / 'tools' / 'credit-guard' / 'credit_guard.py'
+    if g.exists(): subprocess.Popen([sys.executable, str(g), '--now'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def tts(series, who, text, lang, engine='v4', pool=None):
@@ -173,6 +190,7 @@ def tts(series, who, text, lang, engine='v4', pool=None):
             r = waku(model, params, pool=pool)
             if r.get('asset_url'): return r['asset_url']
             err = r.get('error') or r
+            if 'insufficient_credit' in str(err): credit_alarm()
         except Exception as e:
             err = e
         if attempt == 1: params['text'] = re.sub(r'\[[^\]]*\]\s*', '', params['text'])  # 标签导致参数错误时去标签再试
@@ -405,7 +423,7 @@ class _Lost(Exception): pass
 def openrouter_hedged(models, sysm, user_msg, feed, max_tokens=1400, temperature=0.8):
     """同时让两个快模型写，谁先写完第一行就用谁，另一个立刻断开（11-09：单个快模型时快时慢，1.3 秒到 22 秒都有）"""
     lock = threading.Lock(); win = {'m': None}; bufs = {}; res = {}
-    def rz(m): return {'reasoning': {'effort': 'low'}} if 'glm' in m else {'reasoning': {'enabled': False}}
+    def rz(m): return {'reasoning': {'effort': 'low'} if 'glm' in m else {'enabled': False}, 'provider': {'sort': 'latency'}}  # 11-09 选首字最快的供应商
     def run(m):
         bufs[m] = ''
         def f(chunk):
@@ -704,6 +722,46 @@ REACTS = {'zh': ['嗯？', '嗯。', '等等。', '你说。', '……真的？'
           'en': ['Mm?', 'Mm.', 'Wait.', 'Go on.', '…Really?', 'Okay.', 'Yeah.', 'What?', 'Ha.', "I'm listening.", 'Slow down.', '…Yeah.']}
 react_key = lambda t: re.sub(r'[\s\W_]+', '', (t or '').lower())
 REACT_URLS = {}  # (series, who, lang) -> {key: url}  # 接通那一刻马上说的第一声（预先配好），盖住他第一句话的生成时间
+# 11-09 她说完，他马上说的一整句过渡话（预先配好，0 等待；不是单个语气词）。模型从这句后面接着写。
+BRIDGES = {  # 约 4 秒一句，盖住第一句正文的配音时间
+ 'zh': {'q': ['你问这个啊……好，那我就跟你说实话，你听了别笑我。', '这个问题，我其实想过很多遍了，我得好好回答你。', '你这么问，那我也不瞒你了，我慢慢跟你说。', '问得好。你等我一下，我想想该从哪里说起。'],
+        's': ['我听着呢。你这么一说，我倒是突然想起一件事来。', '真的吗？那我可得好好跟你说说，你先别挂。', '你刚才这句话啊，我大概会记很久很久。', '哈，你总是这样，让我一下子都接不上话了。', '好，那既然这样，我也跟你说一句实话吧。', '等等，你刚才那句话，让我先缓一缓。']},
+ 'en': {'q': ["You're asking me that… okay. I'll be honest with you, just don't laugh.", "That's a good question. I've actually thought about it a lot, so let me tell you.", "Since you asked, I'm not gonna hide it from you. Here's the thing.", "Okay. Give me a second, I'm figuring out where to even start."],
+        's': ["I'm listening. And you know, that actually reminds me of something.", "Really? Okay, then I've got something to tell you too. Don't hang up.", "Hm. I think I'm gonna remember you said that for a long time.", "Ha. You always do this — you leave me a little speechless.", "Okay. Then let me be honest with you too, for a second.", "Wait. Hold on. Let me just take that in for a moment."]}}
+BRIDGE_URLS = {}  # (series, who, lang) -> {'q': [(text, url)], 's': [...]}
+_BRIDGE_MAKING = set()
+
+
+def bridge_urls(series, who, lang, make=True):
+    k = (series, who, lang)
+    if k in BRIDGE_URLS: return BRIDGE_URLS[k]
+    f = CACHE / 'fillers' / f'bridge2.{series}.{who}.{lang}.json'
+    if f.exists():
+        BRIDGE_URLS[k] = {g: [tuple(x) for x in v] for g, v in json.load(open(f)).items()}; return BRIDGE_URLS[k]
+    if not make or k in _BRIDGE_MAKING: return None
+    _BRIDGE_MAKING.add(k)
+    try:
+        import concurrent.futures as cf
+        with cf.ThreadPoolExecutor(5) as ex:
+            d = {g: list(zip(ts, ex.map(lambda t: tts(series, who, t, lang, CALL_TTS), ts))) for g, ts in BRIDGES[lang].items()}
+        f.parent.mkdir(parents=True, exist_ok=True); json.dump(d, open(f, 'w'), ensure_ascii=False)
+        BRIDGE_URLS[k] = {g: [tuple(x) for x in v] for g, v in d.items()}; return BRIDGE_URLS[k]
+    finally: _BRIDGE_MAKING.discard(k)
+
+
+QWORDS = re.compile(r'[?？]|吗|呢$|什么|怎么|为什么|为啥|哪|谁|几|是不是|有没有|能不能|会不会|要不要|可不可以|多少', re.I)
+QEN = re.compile(r'\?|^(what|why|how|where|who|when|which|do|does|did|are|is|can|could|will|would|should|have|has)\b', re.I)
+def pick_bridge(c, text):
+    b = bridge_urls(c['series'], c['who'], c['lang'], make=False)
+    if not b: return None
+    g = 'q' if (QWORDS.search(text) if c['lang'] == 'zh' else QEN.search(text.strip())) else 's'
+    used = c.setdefault('_bused', [])
+    pool = [x for x in b.get(g, []) if x[0] not in used[-3:] and x[1]] or [x for x in b.get(g, []) if x[1]]
+    if not pool: return None
+    t, u = random.choice(pool); used.append(t)
+    return {'who': c['who'], 'text': t, 'url': u}
+
+
 THINKS = {'zh': ['让我想想。', '你这么问……', '嗯……我在想怎么跟你说。', '……这个问题。'], 'en': ['Let me think.', 'You asking me that…', "Mm… I'm figuring out how to say this.", '…That question.']}
 
 
@@ -767,7 +825,7 @@ def call_fillers(series, who, lang):
 CALL_RULES = {
  'zh': """这是一通电话，纯语音。你只演 {who}（{role}），对面是她（听众本人），她叫「{name}」。
 - 只写 {who} 对着电话说的话，口语、短句，像真人深夜打电话；不要旁白、不要动作描写、不要括号。
-- 每轮 4–6 句，多说一点（11-09 她嫌太短）：讲具体的细节、此刻在做什么、一段回忆或心里话，最后常常抛给她一个好回答的具体问题，引她开口。第一句必须从这几句里原样挑一句最贴切的（它们是预先录好的，能马上出声）：嗯？ / 嗯。 / 等等。 / 你说。 / ……真的？ / 好。 / 行。 / 什么？ / 哈。 / 我在听。 / 慢点说。 / ……嗯。 第二句起再正常往下说（每句 8–40 个字）。她沉默就回应沉默。
+- 每轮 5–7 句（第 1 轮开场 6–8 句），多说一点（11-09 她嫌太短、只听到语气词）：讲具体的细节、此刻在做什么、一段回忆或心里话，最后常常抛给她一个好回答的具体问题，引她开口。不要用“嗯/哈/好/行”这种语气词单独成句；第一句就说到点子上（12–30 个字），后面每句 10–40 个字。她沉默就回应沉默。
 - 她随时可能打断你（记录里写着“被她打断”）：别把被打断的话原样再说一遍，先接她刚说的。
 - 她没出声的时候，你自己把电话撑下去：接着讲一件具体的事、说一句心里话，或者问她一个很好回答的具体问题，引她开口；别反复问“你怎么不说话”，也别催她。
 - 严格按人设和说话方式说话；只说他这时候知道的事，世界卡里的真相按节奏透露，不一次说破。
@@ -777,7 +835,7 @@ CALL_RULES = {
 - 通话到第 18 轮左右自然收尾，给一个让她想再打来的钩子，HANGUP: yes。""",
  'en': """This is a phone call, voice only. You play only {who} ({role}); on the other end is her (the listener), named "{name}".
 - Write only what {who} says into the phone: short, natural late-night phone talk; no narration, no actions, no brackets.
-- 4–6 lines per turn — say more: concrete details, what you're doing right now, a memory or a feeling, and often end with one easy, specific question that draws her in. The FIRST line must be exactly one of these (they are pre-recorded so he answers instantly): Mm? / Mm. / Wait. / Go on. / …Really? / Okay. / Yeah. / What? / Ha. / I'm listening. / Slow down. / …Yeah. — pick the one that fits, then say more from the second line on (each under 25 words). If she is silent, respond to the silence.
+- 5–7 lines per turn (6–8 for the opening turn) — say more: concrete details, what you're doing right now, a memory or a feeling, and often end with one easy, specific question that draws her in. Never make a bare interjection ("Mm." / "Ha." / "Okay.") its own line; make the first line get straight to the point (8–20 words), the rest under 25 words each. If she is silent, respond to the silence.
 - She can interrupt you at any moment (the log says "cut off by her"): don't repeat what you were cut off saying; answer what she just said.
 - When she stays quiet, carry the call yourself: tell her something specific, admit a small feeling, or ask one easy, concrete question that draws her in. Don't keep asking why she's quiet and don't push her.
 - Stay strictly in character; only say what he knows now; reveal the world-card truths gradually, never all at once.
@@ -787,17 +845,18 @@ CALL_RULES = {
 - No "baby/darling". Sparse tags at line start allowed: [softly] [quietly] [sighs] [chuckles softly] [exhales], at most one per turn.
 - Around turn 18, wrap up naturally with a hook that makes her want to call again, HANGUP: yes."""}
 CALL_FORMAT = """OUTPUT FORMAT — plain lines only, nothing else:
-LINE: <his first line: one of the pre-recorded short reactions>
+LINE: <his first line: short, straight to the point>
 LINE: <what he says next>
 LINE: <more>
 LINE: <more>
+LINE: <optional>
 LINE: <optional>
 LINE: <optional, often an easy question for her>
 HANGUP: no"""
 
 
 CALL_TTS = tts_engine(os.environ.get('CALL_TTS', 'flash'))  # 11-08 通话要像真打电话：默认 Turbo v2.5（每句约 3.4 秒，v4 约 5.2 秒）
-CALL_FAST = tuple(os.environ.get('CALL_FAST_MODEL', 'deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3,qwen/qwen3.8-flash').split(','))  # 11-09 两个同时写，谁先出第一句用谁  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
+CALL_FAST = tuple(os.environ.get('CALL_FAST_MODEL', 'qwen/qwen3.6-35b-a3b,deepseek/deepseek-v4.1-flash,qwen/qwen3.8-flash,moonshotai/kimi-k3').split(','))  # 11-09 两个同时写，谁先出第一句用谁  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
 
 
 def call_system(c, lite=False):
@@ -819,22 +878,28 @@ def call_context(c):
     return story, turns
 
 
-def run_call(job, c, her, spec=None):
+def run_call(job, c, her, spec=None, bridge=None):
     """一轮通话。spec={'base': 轮数}：预先生成（她还没选）——只合成第一句，不记进通话；她点了这条快捷回复（commit_spec）才补合成其余句并记进通话。"""
     t0 = time.time(); lang = c['lang']; n = len(c['turns']) + 1
     if (c['series'], c['who'], lang) not in REACT_URLS: load_reacts(c['series'], c['who'], lang)
     out = {'lines': [], 'choices': [], 'hangup': False}; job['call'] = out; job['t'] = {}; ths = []; raws = []
     job['_raws'] = raws; job['_her'] = her; job['_n'] = n; job['_ths'] = ths; job['_started'] = set()
+    if bridge:  # 他已经先说了这句（预先配好），正文从它后面接
+        out['lines'].append(dict(bridge)); raws.append(bridge['text']); job['_started'].add(0)
+        job['status'] = 'voicing'; job['t'] = {'l0': 0, 'bridge': True}
 
     def synth(i, text):
         if job.get('_canceled'): out['lines'][i]['url'] = ''; return  # 她已经打断了这一轮，后面的句子不再配音
-        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, 2 if i == 0 else 1, c.get('tts', 'flash'), CALL_POOL)
+        k = i - (1 if bridge else 0)  # 第一句正文三路、第二句两路并发（Waku 每句 4–9 秒且波动大，取最快的）
+        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, CALL_HEDGE[k] if 0 <= k < len(CALL_HEDGE) else 1, c.get('tts', 'flash'), CALL_POOL)
         except Exception: out['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
     job['_synth'] = synth
 
     def on_line(k, v):
-        if k == 'LINE' and v and len(out['lines']) < 6:
+        if k == 'LINE' and v and len(out['lines']) < (8 if n == 1 else 7):
+            if bridge and len(out['lines']) == 1 and difflib.SequenceMatcher(None, react_key(v), react_key(bridge['text'])).ratio() >= 0.5: return  # 有的模型会把过渡句再写一遍
+            if bridge and len(out['lines']) == 1 and react_key(re.sub(r'\[[^\]]*\]\s*', '', v)) in {react_key(x) for x in REACTS[lang]}: return  # 过渡句后面不再接单个语气词
             if n == 1 and not out['lines']:  # 接通时已经播过预先配好的“喂？/Hey.”，第一句别再打招呼
                 v = re.sub(r'^\s*(\[[^\]]*\]\s*)?(喂+|嗨|(?:hey|hi|hello)\b)[\s,，。.!！?？—–-]*', lambda m: m.group(1) or '', v, flags=re.I).strip()
                 v = re.sub(r'^((?:\[[^\]]*\]\s*)?)([a-z])', lambda m: m.group(1) + m.group(2).upper(), v)
@@ -859,6 +924,9 @@ def run_call(job, c, her, spec=None):
         ask = f'她主动打给他。他接起电话，已经说了一声“{g}”，接着往下说（别再说“喂”）。' if lang == 'zh' else f'She is calling him. He picked up and already said "{g}" — continue from there (don\'t greet again).'
     else:
         ask = her
+    if bridge:
+        ask += (f'\n他已经先回了一句：“{bridge["text"]}”——从这句话后面直接接着说（别重复它，也别再用“嗯/哈/好”这种语气词开头），第一句就说到点子上。' if lang == 'zh'
+                else f'\nHe has already answered with: "{bridge["text"]}" — continue straight on from it (don\'t repeat it, don\'t open with "Mm/Ha/Okay"); get to the point in the first line.')
     pace = ''
     if n >= MAX_CALL_TURNS - 2: pace = '（该收尾了，1–2 轮内挂断。）' if lang == 'zh' else '(Time to wrap up within 1–2 turns.)'
     if n >= MAX_CALL_TURNS: pace = '（这是最后一轮，说再见，HANGUP: yes。）' if lang == 'zh' else '(Last turn: say goodbye, HANGUP: yes.)'
@@ -901,10 +969,10 @@ def finish_turn(job, c, ths):
     if not out['hangup'] and c['cid'] in CALLS: start_specs(c, out['choices'])
 
 
-def asr_local(data, ctype, lang, hint=''):
+def asr_local(data, ctype, lang, hint='', fast=True):
     """本机识别（unscripted_asr.py 8917）。hint：人名/他刚说的话/选项，帮识别认对专有名词（11-09 她说识别不准）"""
     from urllib.parse import quote
-    req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': ctype or 'audio/wav', 'X-Lang': lang, 'X-Hint': quote((hint or '')[:300])})
+    req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': ctype or 'audio/wav', 'X-Lang': lang, 'X-Hint': quote((hint or '')[:300]), 'X-Fast': '1' if fast else '0'})
     return (json.loads(op.open(req, timeout=30).read()).get('text') or '').strip()
 
 
@@ -975,9 +1043,11 @@ def backchannel(text, lang):
 
 
 def call_start_turn(c, text, prev, played, cut):
+    """返回 (job id, 他马上说的过渡句 {text,url} 或 None)"""
     if cut or prev: cut_turn(c, prev, played)
     c['spec'] = {}
-    return start_job(run_call, c, her_said(text, 'voice', c['lang']))
+    b = pick_bridge(c, text)
+    return start_job(run_call, c, her_said(text, 'voice', c['lang']), None, b), b
 
 
 def cut_turn(c, job_id, played):
@@ -1154,9 +1224,9 @@ class H(BaseHTTPRequestHandler):
             if gq('cut') == '1' and (backchannel(text, c['lang']) or echo_of_him(c, text, his_now)):
                 log('call-' + c['cid'], {'say_drop': text, 'asr_ms': asr_ms, 'at': time.strftime('%F %T')})
                 return self._send(200, {'text': '', 'bc': text, 'asr_ms': asr_ms})
-            jid = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
-            log('call-' + c['cid'], {'say': text, 'asr_ms': asr_ms, 'cut': gq('cut') == '1', 'played': gq('played'), 'at': time.strftime('%F %T')})
-            return self._send(200, {'text': text, 'job': jid, 'asr_ms': asr_ms})
+            jid, first = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
+            log('call-' + c['cid'], {'say': text, 'asr_ms': asr_ms, 'cut': gq('cut') == '1', 'played': gq('played'), 'bridge': (first or {}).get('text'), 'at': time.strftime('%F %T')})
+            return self._send(200, {'text': text, 'job': jid, 'asr_ms': asr_ms, 'first': first})
         if u.path == '/api/call/chunk':  # 锁屏通话：一小段录音；服务器拼起来断句，她说完一句就识别 + 开始他下一轮
             q = parse_qs(u.query); gq = lambda k, d='': q.get(k, [d])[0]
             if gq('k') != TOKEN: return self._send(403, {'error': 'bad key'})
@@ -1177,9 +1247,9 @@ class H(BaseHTTPRequestHandler):
             his_now = [l['text'] for l in ((prev_job.get('call') or {}).get('lines') or [])]
             if not text or echo_of_him(c, text, his_now) or (gq('cut') == '1' and backchannel(text, c['lang'])):
                 log('call-' + c['cid'], {'chunk_drop': text, 'at': time.strftime('%F %T')}); return self._send(200, {'text': ''})
-            jid = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
-            log('call-' + c['cid'], {'say': text, 'locked': True, 'asr_ms': int((time.time() - t0) * 1000), 'at': time.strftime('%F %T')})
-            return self._send(200, {'text': text, 'job': jid})
+            jid, first = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
+            log('call-' + c['cid'], {'say': text, 'locked': True, 'asr_ms': int((time.time() - t0) * 1000), 'bridge': (first or {}).get('text'), 'at': time.strftime('%F %T')})
+            return self._send(200, {'text': text, 'job': jid, 'first': first})
         if u.path == '/api/asr/chunk':  # 锁屏时的选择点：一小段录音，中转拼起来断句，她一说完就识别（不用等满 5 秒）
             q = parse_qs(u.query); gq = lambda k, d='': q.get(k, [d])[0]
             if gq('k') != TOKEN: return self._send(403, {'error': 'bad key'})
@@ -1248,11 +1318,13 @@ class H(BaseHTTPRequestHandler):
             log('call-' + cid, {'start': True, 'series': series, 'who': who, 'lang': lang, 'name': name, 'sid': c['sid'], 'direction': c['direction'], 'at': time.strftime('%F %T')})
             if (series, who, lang) not in REACT_URLS and not load_reacts(series, who, lang):
                 threading.Thread(target=call_fillers, args=(series, who, lang), daemon=True).start()  # 第一次打给这个角色：后台配好短反应
+            if not bridge_urls(series, who, lang, make=False): threading.Thread(target=bridge_urls, args=(series, who, lang), daemon=True).start()
             jid = start_job(run_call, c, '')
             if ck: CALL_KEYS[ck] = (cid, jid)
             g = greet_url(series, who, lang, make=False)
             if not g: threading.Thread(target=greet_url, args=(series, who, lang), daemon=True).start()
-            return self._send(200, {'cid': cid, 'who': who, 'job': jid, 'greet': g})
+            bu = bridge_urls(series, who, lang, make=False) or {}
+            return self._send(200, {'cid': cid, 'who': who, 'job': jid, 'greet': g, 'bridges': [u for v in bu.values() for _, u in v if u]})
         if u.path == '/api/call/turn':
             c = CALLS.get(body.get('cid'))
             if not c: return self._send(404, {'error': 'call ended'})
