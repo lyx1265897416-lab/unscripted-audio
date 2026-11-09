@@ -981,3 +981,16 @@ h1, h2, h3, h4, p { margin: 0; }
 .me-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
 .me-chips .chip { font-size: 12px; min-height: 30px; padding: 0 10px; }
 .opt.mode-row .ol { display: inline-flex; align-items: center; gap: 8px; }
+
+/* 11-08 voice-only call: listening state instead of reply chips / text box */
+.cl-listen { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; font-size: 15px; font-weight: 700; color: var(--b); }
+.cl-listen.muted, .cl-listen.denied { color: var(--dim); }
+.cl-wave { display: inline-flex; align-items: center; gap: 3px; height: 22px; }
+.cl-wave b { width: 3px; height: 6px; border-radius: 2px; background: currentColor; opacity: .9; animation: clw 1.1s ease-in-out infinite; }
+.cl-wave b:nth-child(2) { animation-delay: .12s; } .cl-wave b:nth-child(3) { animation-delay: .24s; } .cl-wave b:nth-child(4) { animation-delay: .36s; } .cl-wave b:nth-child(5) { animation-delay: .48s; }
+.cl-listen.speaking .cl-wave b { animation-duration: .5s; }
+.cl-listen.muted .cl-wave b, .cl-listen.denied .cl-wave b, .cl-listen.thinking .cl-wave b { animation: none; height: 4px; }
+@keyframes clw { 0%, 100% { height: 5px; } 50% { height: 20px; } }
+.cl-cap .txt.dim { opacity: .55; }
+.cl-ctrl .tool.on { color: var(--b); }
+@media (prefers-reduced-motion: reduce) { .cl-wave b { animation: none; height: 8px; } }

@@ -1855,6 +1855,9 @@ function langUrl(l) {
  * 10b. Voice calls with the lead (incoming / outgoing / in-call / ended)
  * ========================================================================= */
 const CALL_PRICE = 20;
+const tz = (en, zh) => (LANG === 'zh' ? zh : en);
+const CALL_WAIT = 9000;   // after he finishes: how long the mic waits for her to start talking before he carries on
+const MIN_RING = 2600;    // an outgoing call rings at least this long before he picks up (feels like a real call; covers his first line)
 const callAudio = new Audio();
 callAudio.preload = 'auto';
 callAudio.setAttribute('playsinline', '');
@@ -1889,8 +1892,21 @@ function ringOnce() {
     tone(t + d, f, 1.1, 0.12); tone(t + d, f * 2, 0.5, 0.025);
   });
 }
-function startRing() { unlockCtx(); stopRing(); ringOnce(); if (C) C.ringT = setInterval(ringOnce, 3200); }
-function stopRing() { if (C && C.ringT) { clearInterval(C.ringT); C.ringT = 0; } }
+function startRing() {
+  unlockCtx(); stopRing();
+  if (playLoop('ring-in.mp3')) return;
+  ringOnce(); if (C) C.ringT = setInterval(ringOnce, 3200);
+}
+function stopRing() { if (C && C.ringT) { clearInterval(C.ringT); C.ringT = 0; } stopLoop(); }
+/** ringtone / ringback on the call element itself (loops until he picks up) */
+function playLoop(url) {
+  try {
+    callAudio.loop = true; callAudio.src = url; callAudio.dataset.loop = '1';
+    const p = callAudio.play(); if (p && p.catch) p.catch(() => { if (C && !C.ringT && callAudio.dataset.loop) { delete callAudio.dataset.loop; ringOnce(); C.ringT = setInterval(ringOnce, 3200); } });
+    return true;
+  } catch (e) { return false; }
+}
+function stopLoop() { if (callAudio.dataset.loop) { delete callAudio.dataset.loop; callAudio.loop = false; try { callAudio.pause(); } catch (e) { /* ignore */ } } }
 function hangupTone() {
   unlockCtx();
   if (!actx || actx.state !== 'running') return;
@@ -1909,18 +1925,19 @@ function primeCallAudio() {
   } catch (e) { /* ignore */ }
 }
 function playCallSrc(url) {
-  callAudio.src = absUrl(url);
+  delete callAudio.dataset.loop; callAudio.loop = false;
+  callAudio.src = srcFor(url);
   try { callAudio.defaultPlaybackRate = S.callSpeed || 1; callAudio.playbackRate = S.callSpeed || 1; callAudio.preservesPitch = true; callAudio.webkitPreservesPitch = true; } catch (e) { /* ignore */ }
   const p = callAudio.play();
   if (p && p.catch) p.catch((err) => { if (err && err.name === 'NotAllowedError' && C) { C.blocked = true; renderCallUI(); } });
 }
 callAudio.addEventListener('ended', onCallAudioDone);
-callAudio.addEventListener('error', () => { if (!callAudio.src.startsWith('data:')) onCallAudioDone(); });
+callAudio.addEventListener('error', () => { if (!callAudio.src.startsWith('data:') && !callAudio.dataset.loop) onCallAudioDone(); });
 function onCallAudioDone() {
-  if (!C || callAudio.src.startsWith('data:')) return;
+  if (!C || callAudio.src.startsWith('data:') || callAudio.dataset.loop) return;
   if (C.fillerPlaying) {
-    const wasThink = C.thinkPlaying;
-    C.fillerPlaying = false; C.thinkPlaying = false;
+    const wasThink = C.thinkPlaying || C.greeting;
+    C.fillerPlaying = false; C.thinkPlaying = false; C.greeting = false;
     if (!wasThink) scheduleThink(C, C.turn);
   } else if (C.playing) { C.playing = false; C.idx += 1; }
   else return;
@@ -1943,7 +1960,7 @@ function requestCall(id, opts = {}) {
   const cs = callersOf(s);
   if (!opts.who && cs.length > 1) { openCallerChooser(id, opts); return; }
   const who = opts.who || cs[0].key;
-  primeCallAudio(); unlockCtx();
+  primeCallAudio(); unlockCtx(); callMicPrime();
   const sid = opts.sid || (getSess(id) || {}).sid || null;
   const go = () => startCall(id, who, { direction: 'outgoing', sid });
   if (callCost(id) > 0) { openUnlockSheet(id, 0, go, { call: true, who }); return; }
@@ -1997,16 +2014,40 @@ function beginCallRequest(call) {
 }
 function prefetchFillers(call) {
   // {urls:[short fillers], think:["let me think" lines]} — older servers send only urls
-  API.fillers({ series: call.id, who: call.who }).then((r) => { if (C === call) { call.fillers = (r && r.urls) || []; call.thinks = (r && r.think) || []; } }).catch(() => {});
+  API.fillers({ series: call.id, who: call.who }).then((r) => {
+    if (C !== call) return;
+    call.fillers = (r && r.urls) || []; call.thinks = (r && r.think) || []; call.greet = (r && r.greet) || [];
+    [...call.greet, ...call.fillers, ...call.thinks].forEach((u) => fetchBlob(u));
+    callAdvance();
+  }).catch(() => {});
 }
 function startCall(id, who, o) {
   closeAllSheets();
   const call = newCall(id, who, 'outgoing', o.sid);
   S.callsUsed = S.callsUsed || {}; S.callsUsed[id] = true;
   ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save();
+  call.dialAt = Date.now();
   renderCall();
+  playLoop('ringback.mp3');  // the ringback tone you hear while it rings on his side
   prefetchFillers(call);
   beginCallRequest(call);
+}
+/** a voice call needs the mic: ask inside the tap that starts / accepts it, so the prompt never lands mid-call */
+function callMicPrime() { if (VOICE_OK) micStream().catch(() => { VI.denied = true; }); }
+/** He picks up: "Hello?" right away (pre-voiced), then his first line as soon as it's voiced. */
+function maybePickUp(call) {
+  if (call.pickedUp) return true;
+  const firstReady = call.lines.some((l) => l.url);
+  const greet = (call.greet || [])[0];
+  if (call.direction === 'outgoing' && Date.now() - (call.dialAt || 0) < MIN_RING) {
+    if (!call.pickT) call.pickT = setTimeout(() => { call.pickT = 0; if (C === call) callAdvance(); }, MIN_RING - (Date.now() - call.dialAt) + 30);
+    return false;
+  }
+  if (!greet && !firstReady) return false;
+  call.pickedUp = true; stopLoop();
+  if (!call.t0) { call.t0 = Date.now(); call.timer = setInterval(updateCallTimer, 1000); }
+  if (greet) { call.fillerPlaying = true; call.greeting = true; playCallSrc(greet); renderCallUI(); return false; }
+  return true;
 }
 /** He calls you: shows the ringing screen; generation of his first line starts while it rings. */
 function showIncoming(id, who, sid) {
@@ -2019,7 +2060,7 @@ function showIncoming(id, who, sid) {
 }
 function acceptCall() {
   if (!C || C.phase !== 'incoming') return;
-  primeCallAudio(); unlockCtx();
+  primeCallAudio(); unlockCtx(); callMicPrime();
   stopRing();
   C.accepted = true; C.phase = 'connecting'; C.acceptedAt = Date.now();
   if (C.rec) { C.rec.status = 'live'; saveCalls(true); }
@@ -2064,6 +2105,7 @@ function callAdvance() {
   const call = C;
   if (!call || !call.accepted || call.phase === 'ended' || call.phase === 'incoming' || call.phase === 'hanging') return;
   if (call.playing || call.fillerPlaying) return;
+  if (!maybePickUp(call)) { renderCallUI(); return; }
   const L = call.lines;
   while (call.idx < L.length && L[call.idx].url === '') call.idx++;
   if (call.idx >= L.length) {
@@ -2087,6 +2129,8 @@ function preloadCallNext() {
   let j = C.idx + 1;
   while (j < C.lines.length && C.lines[j].url === '') j++;
   const u = C.lines[j] && C.lines[j].url; if (!u) return;
+  C.lines.forEach((l) => l.url && fetchBlob(l.url));
+  if (blobable(u)) return;
   try {
     if (!callPre) { callPre = new Audio(); callPre.preload = 'auto'; callPre.muted = true; }
     if (callPre.dataset.u !== u) { callPre.dataset.u = u; callPre.src = absUrl(u); callPre.load(); }
@@ -2103,6 +2147,36 @@ function turnDone() {
   }
   call.phase = 'your-turn';
   renderCallUI();
+  callListen(call);
+}
+/** Hands-free call: as soon as he stops, the mic listens. She talks → sent when she pauses (~1 s). Nothing for 9 s → he carries on. */
+function callListen(call, retry) {
+  if (C !== call || call.phase !== 'your-turn' || callRecog) return;
+  const turn = call.turn;
+  if (call.muted || VI.denied) {
+    call.listen = call.muted ? 'muted' : 'denied'; renderCallUI();
+    clearTimeout(call.silentT);
+    call.silentT = setTimeout(() => { if (C === call && call.turn === turn && call.phase === 'your-turn' && !callRecog) sendCallTurn('', 'silence'); }, CALL_WAIT);
+    return;
+  }
+  call.listen = 'listening'; renderCallUI();
+  const h = callRecog = recordAnswer({ wait: CALL_WAIT, max: 30000, onState: (st) => { if (C === call) { call.listen = st; renderCallUI(); } } });
+  h.done.then((r) => {
+    if (callRecog === h) callRecog = null;
+    if (C !== call || call.turn !== turn || call.phase !== 'your-turn' || r.canceled) return;
+    if (r.denied) { VI.denied = true; toast(tz('Microphone is off — allow it to talk on the call', '麦克风没开，允许后才能通话')); callListen(call); return; }
+    if (r.text) { sendCallTurn(r.text, 'voice'); return; }
+    if (r.spoke && !retry) { call.listen = 'again'; renderCallUI(); setTimeout(() => callListen(call, true), 600); return; }
+    sendCallTurn('', 'silence');
+  });
+}
+function toggleCallMute() {
+  const call = C; if (!call) return;
+  call.muted = !call.muted;
+  if (call.muted) stopCallMic();
+  clearTimeout(call.silentT);
+  if (call.phase === 'your-turn') callListen(call);
+  renderCallUI(true);
 }
 /** ~3.5 s after the filler, if his first line still has no audio: one "let me think" clip
  *  (at most once per turn, never the same clip as last turn); skipped when his line is already there. */
@@ -2130,7 +2204,7 @@ function playFiller() {
 async function sendCallTurn(text, via) {
   const call = C;
   if (!call || call.phase !== 'your-turn' || !call.cid) return;
-  stopCallMic();
+  stopCallMic(); clearTimeout(call.silentT); call.listen = '';
   primeCallAudio();
   const silent = via === 'silence';
   call.transcript.push({ who: 'you', text: silent ? '' : text, silent });
@@ -2161,7 +2235,7 @@ function hangUp() {
 function endCall(reason) {
   const call = C;
   if (!call || call.phase === 'ended') return;
-  stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT);
+  stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT); clearTimeout(call.silentT);
   try { callAudio.pause(); } catch (e) { /* ignore */ }
   clearInterval(call.timer);
   const base = call.t0 || call.acceptedAt;  // 计时从他开口算；没开口就从接通算，不会记成 0:00
@@ -2267,7 +2341,7 @@ function renderCallUI(force) {
   if (st) {
     st.textContent = call.phase === 'incoming' ? 'Incoming call…'
       : call.phase === 'hanging' ? 'Hanging up…'
-      : !call.t0 ? (call.direction === 'outgoing' ? 'Calling…' : 'Connecting…')
+      : !call.t0 ? (call.direction === 'outgoing' ? tz('Calling…', '正在呼叫…') : tz('Connecting…', '正在接通…'))
       : fmtTime((Date.now() - call.t0) / 1000);
   }
   const cap = $('#cl-cap');
@@ -2275,17 +2349,24 @@ function renderCallUI(force) {
     let key, html;
     if (call.phase === 'incoming') { key = 'in'; html = `<p class="cl-hint">${esc(call.caller && call.caller.role ? call.caller.role : '')}</p>`; }
     else if (call.phase === 'thinking' || (call.waiting && !call.playing && call.phase !== 'your-turn')) {
-      key = 'think' + call.turn;
-      html = `<div class="cl-think">${!call.t0 ? 'Connecting' : `${esc(name)} is thinking`}<span class="dots-pulse"><i></i><i></i><i></i></span></div>`;
+      key = 'think' + call.turn + (call.greeting ? 'g' : '') + (call.t0 ? 't' : '');
+      html = call.greeting ? `<span class="who">${esc(name)}</span><p class="txt fade">${esc(tz('Hey.', '喂？'))}</p>`
+        : `<div class="cl-think">${!call.t0 ? tz('Connecting', '正在接通') : call.direction === 'outgoing' && call.turn === 0 ? tz(`${esc(name)} picked up`, `${esc(name)} 接起来了`) : tz(`${esc(name)} is thinking`, `${esc(name)} 在想`)}<span class="dots-pulse"><i></i><i></i><i></i></span></div>`;
+    } else if (call.phase === 'your-turn') {
+      const ls = call.listen || 'listening';
+      key = 'you' + call.turn + ls;
+      const msg = { listening: tz('Your turn — just talk', '轮到你了，直接说'), speaking: tz('Listening…', '在听你说…'), thinking: tz('Got it…', '听到了…'),
+        again: tz("Didn't catch that — say it again", '没听清，再说一遍'), muted: tz('Mic muted — he’ll keep talking', '麦克风已静音，他会接着说'), denied: tz('Mic is off', '麦克风没开') }[ls] || '';
+      html = `${call.caption ? `<p class="txt dim">${esc(call.caption.text)}</p>` : ''}<div class="cl-listen ${ls}"><i class="cl-wave"><b></b><b></b><b></b><b></b><b></b></i><span>${msg}</span></div>`;
     } else if (call.caption) {
-      key = 'cap' + call.turn + ':' + call.idx + (call.phase === 'your-turn' ? 'y' : '');
+      key = 'cap' + call.turn + ':' + call.idx;
       html = `<span class="who">${esc(name)}</span><p class="txt fade ${call.phase === 'your-turn' ? 'dim' : ''}">${esc(call.caption.text)}</p>`;
     } else { key = 'empty'; html = ''; }
     if (cap.dataset.k !== key || force) { cap.dataset.k = key; cap.innerHTML = html; }
   }
   const bot = $('#cl-bottom');
   if (bot) {
-    const key = call.phase === 'incoming' ? 'in' : call.phase === 'your-turn' ? 'turn' + call.turn : 'live' + (S.callSpeed || 1) + (call.blocked ? 'b' : '');
+    const key = call.phase === 'incoming' ? 'in' : 'live' + (S.callSpeed || 1) + (call.blocked ? 'b' : '') + (call.muted ? 'm' : '');
     if (bot.dataset.k !== key || force) {
       bot.dataset.k = key;
       if (call.phase === 'incoming') {
@@ -2295,33 +2376,14 @@ function renderCallUI(force) {
             <div><button class="cl-btn green" data-act="call-accept" aria-label="Accept">${ic('phone', 'lg')}</button><span>Accept</span></div>
           </div>`;
       } else {
-        const turn = call.phase === 'your-turn';
+        // voice only, like a real phone call: no typing, no reply chips — he talks, then the mic listens to her
         bot.innerHTML = `
-          ${call.blocked ? `<button class="btn btn-grad btn-block" data-act="call-resume" style="margin-bottom:12px">${ic('play', 'sm')} Tap to hear ${esc(name)}</button>` : ''}
-          ${turn ? `
-          <div class="cl-reply">
-            <p class="cl-turn">Your turn</p>
-            <div class="cl-chips">${call.choices.map((c, i) => `<button class="cl-chip" data-act="call-choice" data-i="${i}">${esc(c)}</button>`).join('')}</div>
-            <form class="cl-input" data-form="call" autocomplete="off">
-              <div class="fld"><input id="cl-text" type="text" maxlength="300" placeholder="Say it your way…" enterkeyhint="send" aria-label="Your reply"><button class="ch-send" type="submit" aria-label="Send" disabled>${ic('send')}</button></div>
-              ${VOICE_OK ? `<button class="ch-mic" type="button" id="cl-mic" aria-label="Hold to talk">${ic('mic')}</button>` : ''}
-            </form>
-          </div>` : ''}
+          ${call.blocked ? `<button class="btn btn-grad btn-block" data-act="call-resume" style="margin-bottom:12px">${ic('play', 'sm')} ${tz(`Tap to hear ${esc(name)}`, `点一下听 ${esc(name)} 说话`)}</button>` : ''}
           <div class="cl-ctrl">
-            <button class="tool" data-act="call-speed" aria-label="Call speed"><b>${S.callSpeed || 1}x</b>Speed</button>
+            <button class="tool" data-act="call-speed" aria-label="Call speed"><b>${S.callSpeed || 1}x</b>${tz('Speed', '语速')}</button>
             <button class="cl-btn red" data-act="call-hangup" aria-label="Hang up">${ic('phoneDown', 'lg')}</button>
-            <button class="tool" data-act="call-silent" ${turn ? '' : 'disabled'} aria-label="Stay silent">${ic('quote')}<span>Stay silent</span></button>
+            <button class="tool ${call.muted ? 'on' : ''}" data-act="call-mute" aria-label="Mute">${ic('mic')}<span>${call.muted ? tz('Unmute', '取消静音') : tz('Mute', '静音')}</span></button>
           </div>`;
-        if (turn) {
-          const inp = $('#cl-text', bot), send = $('.ch-send', bot);
-          inp.addEventListener('input', () => { send.disabled = !inp.value.trim(); });
-          const mic = $('#cl-mic', bot);
-          if (mic) {
-            mic.addEventListener('pointerdown', (e) => { e.preventDefault(); try { mic.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } startCallMic(mic); });
-            ['pointerup', 'pointercancel'].forEach((ev) => mic.addEventListener(ev, releaseCallMic));
-            mic.addEventListener('contextmenu', (e) => e.preventDefault());
-          }
-        }
       }
     }
   }
@@ -3549,6 +3611,7 @@ document.addEventListener('click', (e) => {
     case 'call-hangup': hangUp(); break;
     case 'call-choice': { const c = C && C.choices[+el.dataset.i]; if (c) sendCallTurn(c, 'option'); break; }
     case 'call-silent': sendCallTurn('', 'silence'); break;
+    case 'call-mute': toggleCallMute(); break;
     case 'call-speed': cycleCallSpeed(); break;
     case 'call-resume': if (C) { C.blocked = false; callAudio.play().catch(() => {}); renderCallUI(true); } break;
     case 'call-close': closeCallScreen(); break;

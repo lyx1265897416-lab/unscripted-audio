@@ -653,6 +653,7 @@ def commit_ep_spec(sess, text):
 CALLS = {}
 MAX_CALL_TURNS = 12
 FILLERS = {'zh': ['嗯。', '嗯，我在听。', '我在。', '嗯，我知道。'], 'en': ['Mm.', "I'm listening.", "I'm here.", 'Yeah. I know.']}
+GREETS = {'zh': ['喂？'], 'en': ['Hey.']}  # 接通那一刻马上说的第一声（预先配好），盖住他第一句话的生成时间
 THINKS = {'zh': ['让我想想。', '你这么问……', '嗯……我在想怎么跟你说。', '……这个问题。'], 'en': ['Let me think.', 'You asking me that…', "Mm… I'm figuring out how to say this.", '…That question.']}
 
 
@@ -671,16 +672,17 @@ def call_fillers(series, who, lang):
     f = CACHE / 'fillers' / f'{series}.{who}.{lang}.json'
     if f.exists():
         d = json.load(open(f))
-        if isinstance(d, dict): return d
-        d = {'urls': d}  # 旧缓存只有垫场声，补上思考声
+        if isinstance(d, dict) and d.get('greet'): return d
+        if not isinstance(d, dict): d = {'urls': d}  # 旧缓存只有垫场声，补上思考声
     else: d = None
     f.parent.mkdir(parents=True, exist_ok=True)
     import concurrent.futures as cf
     say = lambda t: tts(series, who, ('[quietly] ' + t) if lang == 'en' else t, lang)
     with cf.ThreadPoolExecutor(4) as ex:
         urls = d['urls'] if d else list(ex.map(say, FILLERS[lang]))
-        think = list(ex.map(say, THINKS[lang]))
-    d = {'urls': urls, 'think': think}
+        think = (d or {}).get('think') or list(ex.map(say, THINKS[lang]))
+        greet = list(ex.map(say, GREETS[lang]))
+    d = {'urls': urls, 'think': think, 'greet': greet}
     json.dump(d, open(f, 'w')); return d
 
 
@@ -711,6 +713,7 @@ C2: <a different short reply>
 HANGUP: no"""
 
 
+CALL_TTS = tts_engine(os.environ.get('CALL_TTS', 'flash'))  # 11-08 通话要像真打电话：默认 Turbo v2.5（每句约 3.4 秒，v4 约 5.2 秒）
 CALL_FAST = os.environ.get('CALL_FAST_MODEL', 'deepseek/deepseek-v4.1-flash')  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
 
 
@@ -746,6 +749,10 @@ def run_call(job, c, her, spec=None):
 
     def on_line(k, v):
         if k == 'LINE' and v and len(out['lines']) < 4:
+            if n == 1 and not out['lines']:  # 接通时已经播过预先配好的“喂？/Hey.”，第一句别再打招呼
+                v = re.sub(r'^\s*(\[[^\]]*\]\s*)?(喂+|嗨|(?:hey|hi|hello)\b)[\s,，。.!！?？—–-]*', lambda m: m.group(1) or '', v, flags=re.I).strip()
+                v = re.sub(r'^((?:\[[^\]]*\]\s*)?)([a-z])', lambda m: m.group(1) + m.group(2).upper(), v)
+                if not v: return
             i = len(out['lines']); out['lines'].append({'who': c['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None}); raws.append(v)
             job['status'] = 'voicing'; job['t'].setdefault('first_line', round(time.time() - t0, 2))
             if spec and i > 0 and not job.get('_committed'): return  # 预先生成只配第一句，其余等她真选了再配
@@ -754,10 +761,11 @@ def run_call(job, c, her, spec=None):
         elif k in ('C1', 'C2') and v: out['choices'].append(v)
         elif k == 'HANGUP': out['hangup'] = v.lower().startswith('y')
     story, turns = call_context(c)
+    g = GREETS[lang][0]
     if c['direction'] == 'incoming' and n == 1:
-        ask = '他主动打给她。电话刚接通，他先开口。' if lang == 'zh' else 'He is calling her. The call just connected; he speaks first.'
+        ask = f'他主动打给她。电话刚接通，他已经说了一声“{g}”，接着往下说（别再说“喂”）。' if lang == 'zh' else f'He is calling her. The call just connected; he has already said "{g}" — continue from there (don\'t greet again).'
     elif n == 1:
-        ask = '她主动打给他。他接起电话，先开口。' if lang == 'zh' else 'She is calling him. He picks up and speaks first.'
+        ask = f'她主动打给他。他接起电话，已经说了一声“{g}”，接着往下说（别再说“喂”）。' if lang == 'zh' else f'She is calling him. He picked up and already said "{g}" — continue from there (don\'t greet again).'
     else:
         ask = her
     pace = ''
@@ -767,8 +775,8 @@ def run_call(job, c, her, spec=None):
            f'Story so far:\n{story}\n\nThis call so far:\n{turns or "(just connected)"}\n\nTurn {n}. {ask}{pace}')
     try:
         c['_got_lines'] = False
-        fast = CALL_FAST if n > 1 else None  # 第 1 轮响铃时间够长，用 Opus 写开场；之后每轮用快模型
-        write_episode(c, msg, on_line, sysm=call_system(c, lite=bool(fast)), fast_model=fast)
+        # 11-08：第 1 轮也用快模型（原来 Opus 要 19–22 秒才接通）；第 1 轮用完整世界卡，之后精简
+        write_episode(c, msg, on_line, sysm=call_system(c, lite=n > 1), fast_model=CALL_FAST)
         job['t']['writer'] = round(time.time() - t0, 2); job['writer'] = c.get('writer')
         if not out['lines']: raise RuntimeError('writer returned no lines')
         if n >= MAX_CALL_TURNS: out['hangup'] = True
@@ -812,7 +820,7 @@ def finish_spec(job, c):
 def start_specs(c, choices):
     """他这轮说完、她还在听/读的时候，按两个快捷回复先把他下一轮写好、第一句配好音"""
     c['spec'] = {}
-    for ch in choices[:2] + ['__silence__']:  # 两个快捷回复 + 沉默，都是能猜到的回应
+    for ch in ['__silence__']:  # 11-08 通话改成纯语音（没有快捷回复了），只预先写“她没出声”这一种
         jid = rid(); JOBS[jid] = {'id': jid, 'status': 'writing', 'error': None, '_spec': True}
         c['spec'][ch] = {'job': jid, 'base': len(c['turns'])}
         her = her_said('', 'silence', c['lang']) if ch == '__silence__' else her_said(ch, 'option', c['lang'])
@@ -973,7 +981,7 @@ class H(BaseHTTPRequestHandler):
             cid = 'c' + time.strftime('%m%d%H%M') + rid(4)
             c = CALLS[cid] = {'cid': cid, 'series': series, 'lang': lang, 'name': name, 'who': who, 'me': (body.get('me') or (sess or {}).get('me') or '').strip()[:400], 'sid': sess['sid'] if sess and sess['series'] == series else None,
                               'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': [],
-                              'tts': tts_engine(body.get('tts') or (sess or {}).get('tts'))}
+                              'tts': body.get('tts') if body.get('tts') in ('turbo', 'flash') else CALL_TTS}
             log('call-' + cid, {'start': True, 'series': series, 'who': who, 'lang': lang, 'name': name, 'sid': c['sid'], 'direction': c['direction'], 'at': time.strftime('%F %T')})
             return self._send(200, {'cid': cid, 'who': who, 'job': start_job(run_call, c, '')})
         if u.path == '/api/call/turn':
