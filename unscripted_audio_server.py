@@ -61,6 +61,7 @@ MAX_EPS = 12
 POOL = queue.Queue()
 for _ in range(10): POOL.put(WakuMCP())
 SESS, JOBS, EP1_LOCK = {}, {}, {}
+CALL_KEYS = {}
 op = U.build_opener(U.ProxyHandler({}))
 
 
@@ -378,13 +379,13 @@ def her_said(text, via, lang):
 KEYS_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9 ._-]{0,24}|NARR|TITLE|PROMPT|C1|C2|END|LINE|HANGUP)\s*[:：]\s*(.+)$')
 
 
-def openrouter_stream(model, sysm, user_msg, feed, max_tokens=1400, temperature=0.85, extra=None):
+def openrouter_stream(model, sysm, user_msg, feed, max_tokens=1400, temperature=0.85, extra=None, timeout=60):
     body = {'model': model, 'max_tokens': max_tokens, 'temperature': temperature, 'stream': True,
             'messages': [{'role': 'system', 'content': sysm}, {'role': 'user', 'content': user_msg}], **(extra or {})}
     req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
                     headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
     out = ''
-    with op.open(req, timeout=60) as r:
+    with op.open(req, timeout=timeout) as r:
         for line in r:
             line = line.decode('utf8', 'ignore').strip()
             if not line.startswith('data:') or line.endswith('[DONE]'): continue
@@ -412,12 +413,14 @@ def openrouter_hedged(models, sysm, user_msg, feed, max_tokens=1400, temperature
                 elif win['m'] == m: feed(chunk)
                 else: raise _Lost()
         try:
-            txt = openrouter_stream(m, sysm, user_msg, f, max_tokens=max_tokens, temperature=temperature, extra=rz(m))
+            txt = openrouter_stream(m, sysm, user_msg, f, max_tokens=max_tokens, temperature=temperature, extra=rz(m), timeout=15)
             with lock:
                 if win['m'] is None and bufs[m].strip(): win['m'] = m; feed(bufs[m])
             if win['m'] == m: res['txt'] = txt; res['model'] = m
         except _Lost: pass
-        except Exception as e: res.setdefault('errs', []).append(repr(e)[:120])
+        except Exception as e:
+            res.setdefault('errs', []).append(repr(e)[:120])
+            if win['m'] == m: res['txt'] = bufs[m]; res['model'] = m + ' (cut)'  # stalled mid-turn: keep the lines it already gave
     ths = [threading.Thread(target=run, args=(m,), daemon=True) for m in models]
     [t.start() for t in ths]; [t.join(90) for t in ths]
     if 'txt' not in res: raise RuntimeError('hedged writers failed: ' + '; '.join(res.get('errs', [])))
@@ -481,7 +484,7 @@ def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
     return out
 
 
-EP_FAST = os.environ.get('EP_FAST_MODEL', 'z-ai/glm-5.3-prime')
+EP_FAST = tuple(os.environ.get('EP_FAST_MODEL', 'z-ai/glm-5.3-prime,deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3').split(','))  # 11-09 三个同时写，谁先写完第一行用谁
 SPEC_LINES = 4  # 预先生成先配几句：2 句点选项后第 3 句要等 ~13 秒，4 句（约 15–20 秒音频）能盖住其余句子的配音时间  # 她自由输入时写下一集：11-06 实测第一句 2.8 秒（本机 Opus 8–13 秒）
 
 
@@ -530,7 +533,8 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
     def synth(i, who, text):
         first = i == 0
         try:
-            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if (i == 1 and not spec) or (spec and i == SPEC_LINES) else 1), sess.get('tts', 'v4'))
+            eng = 'flash' if (not spec and i < 2) else sess.get('tts', 'v4')  # 11-09 她说完现写的那集：前两句用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒）
+            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if (i == 1 and not spec) or (spec and i == SPEC_LINES) else 1), eng)
             ep['lines'][i]['url'] = u
             threading.Thread(target=cache_line, args=(u,), daemon=True).start()
         except Exception:
@@ -711,6 +715,20 @@ def callers(sid):
     return out
 
 
+def greet_url(series, who, lang, make=True):
+    """接通那声“喂？”单独缓存（每个角色、每种语言一句），/api/call/start 直接带回去，接通瞬间就能播（11-09）"""
+    f = CACHE / 'fillers' / f'greet.{series}.{who}.{lang}.json'
+    if f.exists(): return json.load(open(f)).get('url')
+    full = CACHE / 'fillers' / f'{series}.{who}.{lang}.json'
+    if full.exists():
+        d = json.load(open(full))
+        if isinstance(d, dict) and d.get('greet'): json.dump({'url': d['greet'][0]}, open(f, 'w')); return d['greet'][0]
+    if not make: return None
+    f.parent.mkdir(parents=True, exist_ok=True)
+    u = tts(series, who, ('[quietly] ' + GREETS[lang][0]) if lang == 'en' else GREETS[lang][0], lang)
+    json.dump({'url': u}, open(f, 'w')); return u
+
+
 def call_fillers(series, who, lang):
     """垫场声：她说完立刻播一句“嗯，我在听”，盖住他“想”的那几秒（11-05 她说这几句的音色最好）。第一次用时合成，之后缓存。"""
     f = CACHE / 'fillers' / f'{series}.{who}.{lang}.json'
@@ -767,7 +785,7 @@ HANGUP: no"""
 
 
 CALL_TTS = tts_engine(os.environ.get('CALL_TTS', 'flash'))  # 11-08 通话要像真打电话：默认 Turbo v2.5（每句约 3.4 秒，v4 约 5.2 秒）
-CALL_FAST = tuple(os.environ.get('CALL_FAST_MODEL', 'deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3').split(','))  # 11-09 两个同时写，谁先出第一句用谁  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
+CALL_FAST = tuple(os.environ.get('CALL_FAST_MODEL', 'deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3,qwen/qwen3.8-flash').split(','))  # 11-09 两个同时写，谁先出第一句用谁  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
 
 
 def call_system(c, lite=False):
@@ -1128,6 +1146,26 @@ class H(BaseHTTPRequestHandler):
             jid = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
             log('call-' + c['cid'], {'say': text, 'locked': True, 'asr_ms': int((time.time() - t0) * 1000), 'at': time.strftime('%F %T')})
             return self._send(200, {'text': text, 'job': jid})
+        if u.path == '/api/asr/chunk':  # 锁屏时的选择点：一小段录音，中转拼起来断句，她一说完就识别（不用等满 5 秒）
+            q = parse_qs(u.query); gq = lambda k, d='': q.get(k, [d])[0]
+            if gq('k') != TOKEN: return self._send(403, {'error': 'bad key'})
+            sess = get_sess(gq('sid'))
+            if not sess: return self._send(404, {'error': 'session expired'})
+            n = int(self.headers.get('Content-Length') or 0)
+            data = self.rfile.read(n) if 0 < n <= 4_000_000 else b''
+            with sess.setdefault('_earlock', threading.Lock()):
+                if gq('first') == '1': sess.pop('_ear', None)
+                try: wav = ear_feed(sess, data, self.headers.get('Content-Type') or '') if data else None
+                except Exception as e: print('asr/chunk', repr(e)[:160], flush=True); wav = None
+                E = sess.get('_ear') or {}
+                speaking = E.get('start') is not None
+            if not wav: return self._send(200, {'text': '', 'speaking': speaking, 'heard': speaking or bool(E.get('voiced'))})
+            ch = (sess['eps'][-1].get('choices') or [])[:2]
+            hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
+            try: text = asr_local(wav, 'audio/wav', sess['lang'], hint)
+            except Exception as e: text = ''; print('asr/chunk asr', repr(e)[:120], flush=True)
+            sess.pop('_ear', None)
+            return self._send(200, {'text': text, 'done': True})
         if u.path == '/api/asr':  # 手机录的几秒语音 → 本机 faster-whisper（unscripted_asr.py，8917），中英文自动判断
             q = parse_qs(u.query)
             if q.get('k', [''])[0] != TOKEN: return self._send(403, {'error': 'bad key'})
@@ -1163,6 +1201,9 @@ class H(BaseHTTPRequestHandler):
         if u.path == '/api/call/start':
             series = body.get('series')
             if series not in BASE: return self._send(404, {'error': 'no series'})
+            ck = (body.get('ckey') or '')[:40]
+            if ck and ck in CALL_KEYS and CALL_KEYS[ck][0] in CALLS:  # 同一通电话的重试（公网隧道丢了回包）：还给同一个
+                return self._send(200, {'cid': CALL_KEYS[ck][0], 'who': CALLS[CALL_KEYS[ck][0]]['who'], 'job': CALL_KEYS[ck][1]})
             cs = callers(series); who = body.get('who') if body.get('who') in [x['key'] for x in cs] else cs[0]['key']
             name = (body.get('name') or ('你' if lang == 'zh' else 'you')).strip()[:24]
             sess = get_sess(body.get('sid'))
@@ -1171,7 +1212,11 @@ class H(BaseHTTPRequestHandler):
                               'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': [],
                               'tts': body.get('tts') if body.get('tts') in ('turbo', 'flash') else CALL_TTS}
             log('call-' + cid, {'start': True, 'series': series, 'who': who, 'lang': lang, 'name': name, 'sid': c['sid'], 'direction': c['direction'], 'at': time.strftime('%F %T')})
-            return self._send(200, {'cid': cid, 'who': who, 'job': start_job(run_call, c, '')})
+            jid = start_job(run_call, c, '')
+            if ck: CALL_KEYS[ck] = (cid, jid)
+            g = greet_url(series, who, lang, make=False)
+            if not g: threading.Thread(target=greet_url, args=(series, who, lang), daemon=True).start()
+            return self._send(200, {'cid': cid, 'who': who, 'job': jid, 'greet': g})
         if u.path == '/api/call/turn':
             c = CALLS.get(body.get('cid'))
             if not c: return self._send(404, {'error': 'call ended'})

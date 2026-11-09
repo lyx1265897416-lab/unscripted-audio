@@ -300,7 +300,7 @@ const RealAPI = {
     return r.json();
   },
   fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
-  callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '', tts: TTS }); },
+  callStart({ series, who, sid, direction, ckey }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '', tts: TTS, ckey }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
   callEnd({ cid, seconds }) { return this.post('api/call/end', { cid, seconds }); },
 };
@@ -818,10 +818,11 @@ const SPEC = { key: '', at: 0, n: 0, map: {}, warm: [] };
 function maybeSpecs(force) {
   const ss = P.id && getSess(P.id); const ep = P.ep;
   if (!ss || !ss.sid || !ep || ep.ending || ss.eps[ss.eps.length - 1] !== ep) return;
+  if (modeOf() === 'voice' && (ep.choices || []).length && (ep.kind !== 'live' || P.jobDone) && !CUE[ss.sid + ':' + ep.n]) fetchCue(ss.sid, ep.n);  // the narrator's question is ready long before the end (11-09)
   const key = ss.sid + ':' + (ep.n + 1);
   if (SPEC.key === key && Object.keys(SPEC.map).length >= Math.min(2, (ep.choices || []).length)) return;
   let near = !!force;
-  if (!near && ep.kind === 'live') near = P.jobDone && P.idx >= Math.max(0, (ep.lines || []).length - 5);
+  if (!near && ep.kind === 'live') near = P.jobDone && P.idx >= Math.max(0, (ep.lines || []).length - 8);
   else if (!near && isFinite(audio.duration) && audio.duration > 0) near = audio.duration - audio.currentTime < 45;
   if (!near || Date.now() - SPEC.at < 6000) return;
   SPEC.at = Date.now();
@@ -1375,7 +1376,7 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState } = {}
       if (manual) { if (now - t0 > max) finish(true); return; }
       if (blind) { if (now - t0 > wait + 1500) finish(true); return; }  // can't hear levels: send the whole window, the recognizer decides
       if (!speechAt && now - t0 > wait) { finish(false); return; }
-      if (speechAt && (now - lastVoice > 1100 || now - t0 > max)) finish(true);
+      if (speechAt && (now - lastVoice > 800 || now - t0 > max)) finish(true);   // she stopped → recognise and go (11-09: was 1.1 s)
     }, 100);
   })();
   return { done, stop: () => finish(true), cancel: () => { canceled = true; finish(false); } };
@@ -1456,8 +1457,53 @@ async function startHandsFree() {
   if (HF.key !== key || !P.needChoice || HF.phase !== 'ask') return;
   hfListen();
 }
+/** Lock screen at a choice point (11-09): the page can't hear levels, so instead of recording the whole 6.5 s window,
+ * send 1.5 s pieces; the relay stitches them and answers as soon as she has finished her sentence. */
+function hfListenLocked(key) {
+  const t0 = Date.now(); let first = true, heard = false, over = false, rec = null, timer = 0;
+  const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  const stop = () => { over = true; clearTimeout(timer); if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } micBusy = Math.max(0, micBusy - 1); };
+  const ok = () => HF.key === key && P.needChoice && !over;
+  const piece = () => {
+    if (!ok()) return;
+    if (!heard && Date.now() - t0 > WAIT * 1000 + 600) { stop(); continueOnItsOwn('quiet'); return; }   // said nothing → the story carries on
+    if (Date.now() - t0 > 20000) { stop(); continueOnItsOwn('unclear'); return; }
+    try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { stop(); continueOnItsOwn('quiet'); return; }
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = async () => {
+      const b = new Blob(chunks, { type: rec.mimeType || type || 'audio/mp4' });
+      const f = first; first = false;
+      let r = null;
+      try {
+        const ss = getSess(P.id);
+        const u = new URL(apiUrl('api/asr/chunk')); u.searchParams.set('k', TOKEN); u.searchParams.set('sid', (ss && ss.sid) || ''); if (f) u.searchParams.set('first', '1');
+        const res = await fetch(u.toString(), { method: 'POST', headers: { 'Content-Type': b.type || 'audio/mp4' }, body: b });
+        r = res.ok ? await res.json() : null;
+      } catch (e) { r = null; }
+      if (!ok() && !(r && r.text)) return;
+      if (r && (r.speaking || r.heard)) { heard = true; stopAutoCountdown(); HF.phase = 'speaking'; paintHF(); }
+      if (r && r.done) {
+        stop();
+        if (HF.key !== key || !P.needChoice) return;
+        if (r.text) { HF.phase = 'heard'; HF.heard = r.text; paintHF(); submitChoice(r.text, 'voice'); if (P.gen) playAux(`ack.${LANG}.mp3`).then(() => { if (P.gen) keepAlive(); }); }
+        else continueOnItsOwn('unclear');
+      }
+    };
+    try { rec.start(); } catch (e) { stop(); continueOnItsOwn('quiet'); return; }
+    timer = setTimeout(() => { if (rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } piece(); }, 1500);
+  };
+  micBusy++;
+  HF.rec = { cancel: stop };
+  piece();
+}
 function hfListen() {
   if (!P.needChoice || !VOICE_OK) return;
+  if (VI.stream && (document.hidden || !actx || actx.state !== 'running')) {   // locked: piece-by-piece, ends when she does
+    stopAutoCountdown(); if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
+    keepAlive(); HF.phase = 'listen'; HF.heard = ''; paintHF();
+    hfListenLocked(HF.key); return;
+  }
   stopAutoCountdown();
   if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
   keepAlive();
@@ -1961,7 +2007,7 @@ function langUrl(l) {
 const CALL_PRICE = 20;
 const tz = (en, zh) => (LANG === 'zh' ? zh : en);
 const CALL_WAIT = 3500;   // 11-09: a real call doesn't wait for "your turn" — if she says nothing he carries on / draws her in   // after he finishes: how long the mic waits for her to start talking before he carries on
-const MIN_RING = 2600;    // an outgoing call rings at least this long before he picks up (feels like a real call; covers his first line)
+const MIN_RING = 1800;    // an outgoing call rings at least this long before he picks up (feels like a real call; covers his first line)
 const callAudio = new Audio();
 callAudio.preload = 'auto';
 callAudio.setAttribute('playsinline', '');
@@ -2125,9 +2171,16 @@ function beginCallRequest(call) {
   if (call.startP) return call.startP;
   call.startP = (async () => {
     try {
-      const r = await API.callStart({ series: call.id, who: call.who, sid: call.sid, direction: call.direction });
+      // the quick tunnel sometimes loses an answer: retry after 8 s with the same key (the relay hands back the same call)
+      call.ckey = call.ckey || ('k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+      let r = null, err = null;
+      for (let i = 0; i < 3 && !r && C === call; i++) {
+        try { r = await Promise.race([API.callStart({ series: call.id, who: call.who, sid: call.sid, direction: call.direction, ckey: call.ckey }), sleep(8000).then(() => { throw new Error('timeout'); })]); } catch (e) { err = e; }
+      }
+      if (!r) throw err || new Error('no answer');
       if (C !== call) { if (r && r.cid) API.callEnd({ cid: r.cid, seconds: 0 }).catch(() => {}); return; }
       call.cid = r.cid; if (r.who) call.who = r.who; call.job = r.job;
+      if (r.greet && !(call.greet || []).length) { call.greet = [r.greet]; fetchBlob(r.greet); callAdvance(); }   // "Hello?" ready the moment he picks up
       pollCall(r.job, call.turn);
     } catch (e) {
       if (C !== call) return;
