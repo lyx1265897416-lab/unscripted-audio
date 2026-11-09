@@ -618,10 +618,38 @@ function primeAudio() {
 }
 document.addEventListener('pointerdown', () => primeAudio(), { capture: true, once: false, passive: true });
 
+/* Line audio lives on Google storage (no CORS, 1–2.5 s to first byte from China), and phones re-download it when the
+ * main <audio> switches lines even if a hidden <audio> preloaded it — that was the gap/stutter between lines.
+ * Now every line is fetched once through the relay (/api/a, cached on the relay) into a local blob ahead of time;
+ * the main element plays the blob with no network. Same-origin files (Episode 1, bed) play directly. */
+const BLOB = new Map();
+const blobable = (u) => !MOCK && !!u && /^https:\/\/storage\.googleapis\.com\//.test(u);
+function fetchBlob(u) {
+  if (!blobable(u)) return Promise.resolve(null);
+  let r = BLOB.get(u);
+  if (!r) {
+    r = { obj: null };
+    r.p = (async () => {
+      for (let i = 0; i < 2 && !r.obj; i++) {
+        try {
+          const q = new URL(apiUrl('api/a')); q.searchParams.set('k', TOKEN); q.searchParams.set('u', u);
+          const res = await fetch(q.toString(), withTimeout({}));
+          if (res.ok) { const b = await res.blob(); if (b.size) r.obj = URL.createObjectURL(b.type ? b : new Blob([b], { type: 'audio/mpeg' })); }
+        } catch (e) { /* retry once, then fall back to the direct URL */ }
+      }
+      return r.obj;
+    })();
+    BLOB.set(u, r);
+    if (BLOB.size > 120) for (const [k, v] of BLOB) { if (BLOB.size <= 100) break; if (k !== P.cur && v.obj) { URL.revokeObjectURL(v.obj); BLOB.delete(k); } }
+  }
+  return r.p;
+}
+const blobNow = (u) => { const r = BLOB.get(u); return r && r.obj; };
+const srcFor = (u) => blobNow(u) || absUrl(u);
 function loadSrc(url, at) {
   P.aux = false; P.auxEnd = null; audio.loop = false; audio.volume = 1;  // swap straight from the bed/question to the story (no pause: keeps the lock screen alive)
   P.cur = url;
-  audio.src = absUrl(url);
+  audio.src = srcFor(url);
   setAudioRate();
   if (at) {
     const seek = () => { try { audio.currentTime = at; } catch (e) { /* ignore */ } audio.removeEventListener('loadedmetadata', seek); };
@@ -684,12 +712,20 @@ function liveAdvance() {
   }
   const ln = lines[P.idx];
   if (!ln.url) { P.waiting = true; updatePlayerUI(); return; }
+  if (blobable(ln.url) && !blobNow(ln.url) && P.blobWait !== ln.url) {  // its local copy is on the way: wait up to 4 s for it (a direct download is no faster and would compete with it)
+    P.blobWait = ln.url; P.waiting = true; updatePlayerUI();
+    const ep0 = ep, i0 = P.idx;
+    Promise.race([fetchBlob(ln.url), sleep(4000)]).then(() => { if (P.ep === ep0 && P.idx === i0 && P.waiting) liveAdvance(); });
+    return;
+  }
+  P.blobWait = null;
   P.waiting = false;
   P.lineStart = 0;
   for (let i = 0; i < P.idx; i++) P.lineStart += (ep.durs && ep.durs[i]) || 0;
   loadSrc(ln.url, 0);
   if (P.want) doPlay();
   preloadNext(); warmLines(ep);
+  renderVisual();
   saveProgress();
   setMediaSession();
   updatePlayerUI(true);
@@ -700,6 +736,7 @@ function preloadNext() {
   while (j < lines.length && lines[j].url === '') j++;
   const u = lines[j] && lines[j].url;
   if (!u) return;
+  if (blobable(u)) { fetchBlob(u); return; }
   try {
     if (!preloader) { preloader = new Audio(); preloader.preload = 'auto'; preloader.muted = true; }
     if (preloader.dataset.u !== u) { preloader.dataset.u = u; preloader.src = absUrl(u); preloader.load(); }
@@ -728,7 +765,7 @@ audio.addEventListener('loadedmetadata', () => {
 });
 audio.addEventListener('play', () => updatePlayerUI());
 audio.addEventListener('pause', () => updatePlayerUI());
-audio.addEventListener('timeupdate', () => { tickUI(); maybeSpecs(); });
+audio.addEventListener('timeupdate', () => { tickUI(); maybeSpecs(); if (P.ep && P.ep.visuals && !P.aux && playerOpen) renderVisual(); });
 
 /* Speculative next episodes: the relay pre-writes the next episode for both choices while she listens.
  * Near the end of the episode we fetch them and warm the first line's audio, so tapping a choice
@@ -753,7 +790,8 @@ function maybeSpecs(force) {
       SPEC.map[ch] = sp;
       (sp.ep.lines || []).slice(0, 4).forEach((l) => {
         if (!l.url) return;
-        try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.src = absUrl(l.url); a.load(); SPEC.warm.push(a); } catch (e) { /* ignore */ }
+        if (blobable(l.url)) fetchBlob(l.url);
+    else try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.src = absUrl(l.url); a.load(); SPEC.warm.push(a); } catch (e) { /* ignore */ }
       });
     });
   }).catch(() => { /* ignore: falls back to the normal path */ });
@@ -877,7 +915,7 @@ async function newSession(id) {
   let early = null;
   if (!MOCK && audioUrl) {
     early = (cached && cached.audio === audioUrl) ? JSON.parse(JSON.stringify(cached))
-      : { n: 1, kind: 'produced', title: (s.ep1 && s.ep1.title) || 'Episode 1', audio: audioUrl, dur: (s.ep1 && s.ep1.dur) || 0, cues: [], choices: [], prompt: '' };
+      : { n: 1, kind: 'produced', title: (s.ep1 && s.ep1.title) || 'Episode 1', audio: audioUrl, dur: (s.ep1 && s.ep1.dur) || 0, cues: [], choices: [], prompt: '', visuals: (s.ep1 && s.ep1.visuals) || undefined };
     early.kind = 'produced';
     SESS[skey(id)] = { sid: null, eps: [early], chosen: {}, job: null, started: Date.now() };
     recordStart(id); save();
@@ -1140,7 +1178,7 @@ function fetchCue(sid, n) {
   const k = sid + ':' + n;
   if (!CUE[k]) {
     CUE[k] = API.cue(sid, n).then((d) => {
-      if (d && d.url) { try { const a = new Audio(); a.preload = 'auto'; a.src = absUrl(d.url); a.load(); } catch (e) { /* ignore */ } }
+      if (d && d.url) { if (blobable(d.url)) fetchBlob(d.url); else try { const a = new Audio(); a.preload = 'auto'; a.src = absUrl(d.url); a.load(); } catch (e) { /* ignore */ } }
       return d;
     }).catch(() => { delete CUE[k]; return null; });
   }
@@ -1251,7 +1289,7 @@ function playAux(url, { loop = false, volume = 1 } = {}) {
   return new Promise((res) => {
     P.aux = true; P.auxEnd = loop ? null : res;
     audio.loop = loop; audio.volume = volume;
-    audio.src = absUrl(url); audio.playbackRate = 1;
+    audio.src = srcFor(url); audio.playbackRate = 1;
     const p = audio.play();
     if (p && p.catch) p.catch(() => { if (P.auxEnd === res) { P.auxEnd = null; res(); } });
     if (loop) res();
@@ -2901,6 +2939,7 @@ function warmEp1(s) {
 async function showDetail(id) {
   const s = byId(id); if (!s) { location.hash = '#/home'; return; }
   warmEp1(s);
+  if (s.visuals) [...((s.ep1 && s.ep1.visuals) || []).slice(0, 3).map((x) => x.clip), ...(s.visuals.pool || []).slice(0, 1)].forEach((c) => s.visuals.clips[c] && clipBlob(s.visuals.clips[c]));  // first pictures ready before Play
   if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
   detailId = id;
   renderDetail();
@@ -3106,6 +3145,11 @@ function renderPlayer() {
   const art = $('#pl-art'); if (art.getAttribute('src') !== coverOf(s)) art.src = coverOf(s);
   // 动态封面（Pocket FM 式）：静音循环短片盖在封面上，能播了才淡入；没有短片就只显示封面
   const vid = $('#pl-vid'), mo = motionOf(s);
+  if (VS.sid !== s.id) {  // another series: drop the old one's picture at once (its cover shows) instead of leaving it up until the new clip loads
+    VS.sid = s.id; VS.url = null; VS.tok++;
+    [vid, $('#pl-vid2')].forEach((v) => { v.classList.remove('on'); v.oncanplay = null; v.onplaying = null; try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ } delete v.dataset.src; });
+    warmVisuals(s);
+  }
   if (s.visuals) { renderVisual(true); }  // 有画面库：按台词切剧情画面（renderVisual），不用单一动态封面
   else if (!mo) { vid.removeAttribute('src'); vid.classList.remove('on'); }
   else if (vid.dataset.src !== mo) {
@@ -3120,12 +3164,29 @@ function renderPlayer() {
 /* 剧情画面：播放器封面区跟着音频切静音循环片段（服务器给的画面库 s.visuals = {clips:{id:src}, pool:[id…]}）。
  * 第 1 集按 ep.visuals 时间轴 [{s,e,clip}]；实时集按当前这句的 line.clip；没有对应画面（等待、选择点、没标）就在 pool 里每 7 秒轮播
  * 万能 live / 剧照。两个 <video> 交替淡入，片段能播了才切。 */
-const VS = { url: null };
+const VS = { url: null, sid: null, tok: 0 };
+/* clips are small same-origin mp4s: keep local blobs so a switch is instant (no re-download, no black frame) */
+const VBLOB = new Map();
+function clipBlob(url) {
+  if (!url || VBLOB.has(url)) return VBLOB.get(url) || null;
+  const r = { obj: null }; VBLOB.set(url, r);
+  r.p = fetch(absUrl(url)).then((x) => (x.ok ? x.blob() : null)).then((b) => { if (b && b.size) r.obj = URL.createObjectURL(b); return r.obj; }).catch(() => null);
+  return r;
+}
+function warmVisuals(s) {
+  const V = s && s.visuals; if (!V) return;
+  const ids = new Set(V.pool || []);
+  const ss = getSess(s.id), ep = P.id === s.id && P.ep;
+  ((ep && ep.visuals) || (s.ep1 && s.ep1.visuals) || []).forEach((x) => ids.add(x.clip));
+  ((ep && ep.lines) || []).forEach((l) => l.clip && ids.add(l.clip));
+  if (ss && !ep) ((ss.eps[ss.eps.length - 1] || {}).lines || []).forEach((l) => l.clip && ids.add(l.clip));
+  [...ids].slice(0, 40).forEach((id) => V.clips[id] && clipBlob(V.clips[id]));
+}
 function visualClipId(s) {
   const V = s.visuals, ep = P.ep;
   if (!V) return null;
   let id = null;
-  if (ep && !P.needChoice) {
+  if (ep && !P.needChoice && !P.aux) {  // P.aux: the bed / spoken question is on the audio element, its time is not the episode's
     if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; const v = ep.visuals.find(x => t >= x.s && t < x.e) || ep.visuals[ep.visuals.length - 1]; id = v && v.clip; }
     else if (ep.kind === 'live') { const ln = (ep.lines || [])[P.idx]; id = ln && ln.clip; }
   }
@@ -3140,14 +3201,22 @@ function renderVisual(force) {
   if (url === VS.url && !force) return;
   if (url === VS.url) { const f = a.classList.contains('on') ? a : b; if (f.paused) f.play().catch(() => {}); return; }
   VS.url = url;
+  const tok = ++VS.tok;
   const front = a.classList.contains('on') ? a : (b.classList.contains('on') ? b : null), back = front === a ? b : a;
-  back.src = url; back.load();
-  back.oncanplay = () => {
-    back.oncanplay = null;
-    if (VS.url !== url) return;
-    back.currentTime = 0; back.play().catch(() => {}); back.classList.add('on');
-    if (front) { front.classList.remove('on'); setTimeout(() => { if (!front.classList.contains('on')) front.pause(); }, 700); }
+  const br = clipBlob(url);
+  back.oncanplay = null; back.onplaying = null;
+  back.src = (br && br.obj) || absUrl(url);
+  // phones often don't load a hidden video until play() is called: start it now (muted) and fade it in on its first frame
+  const show = () => {
+    back.oncanplay = null; back.onplaying = null;
+    if (VS.tok !== tok) return;
+    back.classList.add('on');
+    if (front && front !== back) { front.classList.remove('on'); setTimeout(() => { if (!front.classList.contains('on')) front.pause(); }, 700); }
   };
+  back.onplaying = show;
+  back.oncanplay = () => { back.play().then(show).catch(show); };
+  try { back.load(); back.play().catch(() => {}); } catch (e) { /* ignore */ }
+  warmVisuals(s);
 }
 setInterval(() => { const pl = $('#player'); if (pl && pl.dataset.built && P.id) renderVisual(); }, 1000);
 let lastSubKey = '';
@@ -3322,6 +3391,7 @@ const LINE_WARM = new Map();
 function warmLines(ep) {  // every line of a live episode is its own small file: preload them all so jumping around is instant
   (ep && ep.lines || []).forEach((l) => {
     if (!l.url || LINE_WARM.has(l.url)) return;
+    if (blobable(l.url)) { fetchBlob(l.url); LINE_WARM.set(l.url, null); return; }
     try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.src = absUrl(l.url); a.load(); LINE_WARM.set(l.url, a); } catch (e) { /* ignore */ }
   });
   while (LINE_WARM.size > 40) { const k = LINE_WARM.keys().next().value; LINE_WARM.delete(k); }

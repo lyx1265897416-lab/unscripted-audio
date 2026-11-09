@@ -4,7 +4,7 @@
 - 第 2 集起：她选了什么 → 编剧层按世界卡（data/world/<id>.json）写下一集，逐行流式输出，每写完一句就送去合成。
   编剧：DIRECTOR_CLI 设了就用本机 Claude Code（Opus 5.5），失败退回 OpenRouter（WRITER_FALLBACK，默认 GLM-5.3-prime）。
 用法：python3 unscripted_audio_server.py <token> <port>（名字故意起得独一无二：别的会话会按 server.py 之类的通用名批量杀进程）"""
-import json, os, queue, shutil, random, re, string, subprocess, sys, threading, time, traceback, base64
+import hashlib, json, os, queue, shutil, random, re, string, subprocess, sys, threading, time, traceback, base64
 import urllib.request as U
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -65,6 +65,26 @@ def rid(n=10): return ''.join(random.choices(string.ascii_lowercase + string.dig
 
 def log(sid, rec):
     with open(LOGS / 'sessions' / f'{sid}.jsonl', 'a') as f: f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+
+
+LINE_CACHE = ROOT / 'cache' / 'lines'
+LINE_CACHE.mkdir(parents=True, exist_ok=True)
+GCS_PREFIX = 'https://storage.googleapis.com/waku-core-aicap/'
+
+
+def cache_line(u, timeout=25):
+    """每句配音（谷歌存储，不带跨域头、国内首字节 1–2.5 秒）下载到本机，/api/a 带跨域头转给手机：
+    手机整集提前取成本地 blob，句与句之间不再等网络。配完音就在后台先下好，手机来取时直接给。"""
+    if not u or not u.startswith(GCS_PREFIX): return None
+    f = LINE_CACHE / (hashlib.sha1(u.encode()).hexdigest() + '.mp3')
+    if f.exists() and f.stat().st_size > 0: return f
+    try:
+        b = op.open(U.Request(u), timeout=timeout).read()
+        if b:
+            tmp = f.with_suffix('.part' + rid(4)); tmp.write_bytes(b); tmp.rename(f); return f
+    except Exception as e:
+        print(time.strftime('%m-%d %H:%M:%S'), 'cache_line failed', u[-40:], repr(e)[:80], flush=True)
+    return None
 
 
 SID_RE = re.compile(r'^[0-9]{8}[a-z0-9]{4}$')
@@ -468,6 +488,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
         try:
             u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if (i == 1 and not spec) or (spec and i == SPEC_LINES) else 1))
             ep['lines'][i]['url'] = u
+            threading.Thread(target=cache_line, args=(u,), daemon=True).start()
         except Exception:
             ep['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
@@ -824,7 +845,8 @@ def series_card(sid, lang):
     return {'id': sid, 'title': b['title'][lang], 'lead': (b.get('lead') or {}).get(lang, ''), 'hook': b['hook'][lang],
             'tags': [t[lang] for t in b.get('tags', [])], 'genres': b['genres'], 'accent': b['accent'], 'cover': b['cover'], 'avatar': b['avatar'], 'motion': MOTION.get(sid), 'visuals': vis_card(sid),
             'callers': [{'key': x['key'], 'name': x['name'] if lang == 'en' else x['name_zh'], 'role': x['role_en'] if lang == 'en' else x['role_zh']} for x in callers(sid)],
-            'stats': {'plays': pl, 'rating': ra}, 'ep1': {'title': w[f'ep1_title_{lang}'], 'dur': c['dur'] if c else None, 'ready': bool(c), 'audio': c.get('audio') if c else None}}  # audio：前端点播放先直接放，不等 /api/play 走隧道
+            'stats': {'plays': pl, 'rating': ra}, 'ep1': {'title': w[f'ep1_title_{lang}'], 'dur': c['dur'] if c else None, 'ready': bool(c), 'audio': c.get('audio') if c else None,
+                    'visuals': (ep1_with_visuals(c, sid, lang) or {}).get('visuals') if c else None}}  # audio：前端点播放先直接放，不等 /api/play 走隧道
 
 
 def series_detail(sid, lang):
@@ -886,6 +908,9 @@ class H(BaseHTTPRequestHandler):
                     if not (L and L[0].get('url')): continue
                     out[ch] = {'job': sp['job'], 'n': j['ep']['n'], 'ep': dict(j['ep'], lines=[dict(x) for x in L])}
                 return self._send(200, {'n': len(sess['eps']) + 1 if sess else 0, 'specs': out})
+            if u.path == '/api/a':  # 一句配音（本机缓存，带跨域头），手机取成 blob 提前放在本地
+                f = cache_line(g('u'))
+                return self._send(200, f.read_bytes(), 'audio/mpeg', 'public, max-age=604800, immutable') if f else self._send(404, {'error': 'no audio'})
             if u.path == '/api/ep':  # 任务丢了（中转重启）但这一集其实写完了：按会话日志把整集（含配音地址）还给前端
                 sess = get_sess(g('sid'))
                 if not sess: return self._send(404, {'error': 'session expired'})
