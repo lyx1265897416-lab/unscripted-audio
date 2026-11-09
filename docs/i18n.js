@@ -54,8 +54,8 @@
     // listening modes
     'How do you want to listen?': '你想怎么听？', 'Switch any time. Calls with characters work in every mode.': '随时可以切换。和角色通话在哪种模式下都能用。', 'How you listen': '收听方式',
     'Hands-free': '免手动', 'I ask out loud, you just answer': '我念问题，你直接回答', 'Lean back': '躺着听', 'The story keeps going on its own': '故事自己往下走', 'Tap to choose': '点选', 'Pick on screen': '在屏幕上选',
-    'At every choice point the narrator asks out loud and the mic listens for 5 seconds — answer in Chinese or English. Say nothing and the story carries on. Keeps going with the screen locked where your phone allows it.':
-      '每到选择点，旁白会把问题念出来，麦克风听 5 秒 —— 中文、英文都能回答。不说话，故事就自己往下走。手机允许的话，锁屏也能继续。',
+    'At every choice point the narrator asks out loud and the mic listens for 5 seconds — answer in Chinese or English. Say nothing and the story carries on. Works with the screen locked too (on iPhone, open it in Safari).':
+      '每到选择点，旁白会把问题念出来，麦克风听 5 秒 —— 中文、英文都能回答。不说话，故事就自己往下走。锁屏也能语音回答（iPhone 要用 Safari 打开）。',
     'No questions. The story keeps moving by itself, episode after episode — for winding down or falling asleep.': '不提问，故事一集接一集自己往下走 —— 适合放松或睡前听。',
     'Choose on screen or type your own answer. The story waits 5 seconds — touch the screen and it waits until you’re done.': '在屏幕上点选或打字回答。故事会等 5 秒 —— 碰一下屏幕，它就一直等你选完。',
     ' · not supported in this browser': ' · 这个浏览器不支持',

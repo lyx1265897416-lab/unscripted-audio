@@ -681,10 +681,10 @@ function doPlay() {
   });
   updatePlayerUI();
 }
-function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; audio.pause(); updatePlayerUI(); }
+function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
 if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; } };  // ?debug=1: inspect player state from the console
 function togglePlay() {
-  primeMic();
+  primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
   // at a choice point the narrator's question / the quiet bed are on the player: a tap stops them (and the 5 s countdown) and opens the choices
   if (P.needChoice) { holdForHer(); if (P.aux) { try { audio.pause(); } catch (e) { /* ignore */ } } openChoiceSheet(); updatePlayerUI(); return; }
@@ -938,7 +938,7 @@ function recordStart(id) {
 
 async function newSession(id) {
   const s = byId(id); if (!s) return;
-  primeAudio(); primeMic();
+  primeAudio(); primeMic(); setTimeout(micHold, 0);
   cancelGen();
   audio.pause();
   P.id = id; P.ep = null; P.loading = true; P.needChoice = false; P.want = true; P.cur = '';
@@ -1009,7 +1009,7 @@ async function waitJobEp(jobId, onTick) {
 function startOrContinue(id) {
   const ss = getSess(id);
   if (!ss || !ss.eps || !ss.eps.length) { newSession(id); return; }
-  primeAudio();
+  primeAudio(); setTimeout(micHold, 0);
   if (P.id === id && (P.ep || P.loading)) { openPlayer(); if (P.needChoice) setTimeout(openChoiceSheet, 380); else if (!isPlaying() && !P.gen && !P.loading) togglePlay(); return; }
   const last = ss.eps[ss.eps.length - 1];
   const pr = S.progress[skey(id)];
@@ -1093,6 +1093,13 @@ function cancelUpNext() { if (P.upNext) { clearInterval(P.upNext.t); P.upNext = 
 let recog = null;
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;  // no longer used for input (single-language); kept for reference
 const VOICE_OK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+/* Lock-screen answers (11-09): on iPhone only a Safari tab keeps recording once the screen locks (WebKit bugs 239602 / 226620);
+ * apps' built-in browsers (Feishu, WeChat…) and home-screen web apps lose the mic as soon as the phone locks. */
+const UA_ = navigator.userAgent || '';
+const IOS = /iP(hone|ad|od)/.test(UA_) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IN_APP = /MicroMessenger|Lark|Feishu|DingTalk|\bQQ\/|Weibo|FBAN|FBAV|Instagram|Line\/|TikTok|aweme|NewsArticle|Bytedance/i.test(UA_) || (IOS && !/Safari\//.test(UA_));
+const STANDALONE = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+const LOCK_VOICE_OK = VOICE_OK && !(IOS && (IN_APP || STANDALONE));
 
 function openChoiceSheet() {
   if (!P.ep || !P.needChoice) return;
@@ -1168,7 +1175,7 @@ function toggleMic(btn) {
  * "Talk to the story" (any time) steers what happens next. Calling a character is a separate thing.
  * ========================================================================= */
 const MODES = {
-  voice: { icon: 'mic', name: 'Hands-free', short: 'I ask out loud, you just answer', desc: 'At every choice point the narrator asks out loud and the mic listens for 5 seconds — answer in Chinese or English. Say nothing and the story carries on. Keeps going with the screen locked where your phone allows it.' },
+  voice: { icon: 'mic', name: 'Hands-free', short: 'I ask out loud, you just answer', desc: 'At every choice point the narrator asks out loud and the mic listens for 5 seconds — answer in Chinese or English. Say nothing and the story carries on. Works with the screen locked too (on iPhone, open it in Safari).' },
   auto: { icon: 'moon', name: 'Lean back', short: 'The story keeps going on its own', desc: 'No questions. The story keeps moving by itself, episode after episode — for winding down or falling asleep.' },
   tap: { icon: 'hand', name: 'Tap to choose', short: 'Pick on screen', desc: 'Choose on screen or type your own answer. The story waits 5 seconds — touch the screen and it waits until you\u2019re done.' },
 };
@@ -1229,7 +1236,7 @@ function fetchCue(sid, n) {
 const VI = { stream: null, an: null, buf: null, denied: false, primed: false };
 async function micStream() {
   if (VI.stream && VI.stream.getAudioTracks().some((t) => t.readyState === 'live')) return VI.stream;
-  try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) { /* ignore */ }
+  try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch (e) { /* ignore */ }  // let Safari pick record+play itself (forcing it was one suspect for the 0:00 stall)
   VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   VI.denied = false;
   // iOS switches the audio session when the mic opens and may pause the story that is playing: pick it straight back up
@@ -1243,10 +1250,24 @@ async function micStream() {
 /** Mic off unless something is listening right now (11-09): on iPhone an open mic puts the page in play-and-record,
  * and the story's <audio> could then sit at 0:00 "playing" with no sound. Permission stays granted for the page. */
 let micBusy = 0;
+const lockHold = () => LOCK_VOICE_OK && modeOf() === 'voice' && !!P.id && (P.want || P.needChoice || !!P.gen || (Date.now() - (P.pausedAt || 0) < 60000));
 function micPark() {
-  if (callActive() || HF.rec || callRecog || talkRec || micBusy) return;
+  if (callActive() || HF.rec || callRecog || talkRec || micBusy || lockHold()) return;
   micRelease();
 }
+/** Hands-free in Safari: open the mic inside the Play tap and keep it for the whole story, so answers work on the lock screen.
+ * (The mic can't be started once the phone is locked — it has to be running already.) */
+function micHold() {
+  if (!lockHold() || VI.denied) return;
+  micStream().then(() => { VI.primed = true; }).catch((e) => { if (e && e.name === 'NotAllowedError') VI.denied = true; });
+}
+document.addEventListener('visibilitychange', () => {
+  // back from the lock screen: if iOS ended or muted the mic track, open it again (WebKit workaround)
+  if (document.hidden || !lockHold() || !VI.stream) return;
+  const t = VI.stream.getAudioTracks()[0];
+  if (!t || t.readyState !== 'live' || t.muted) { try { VI.stream.getTracks().forEach((x) => x.stop()); } catch (e) { /* ignore */ } VI.stream = null; micHold(); }
+});
+setInterval(() => { if (VI.stream && !lockHold() && !callActive()) micPark(); }, 15000);
 function micRelease() {
   if (VI.stream) { VI.stream.getTracks().forEach((t) => t.stop()); VI.stream = null; VI.an = null; }
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* ignore */ }
@@ -1530,6 +1551,8 @@ function setMode(m) {
 }
 function updateModePill() {
   const el = $('#pl-mode'); if (!el) return;
+  const note = $('#pl-note');
+  if (note) note.hidden = !(VOICE_OK && !LOCK_VOICE_OK && IOS && modeOf() === 'voice');
   const m = MODES[modeOf()];
   const html = `${ic(m.icon, 'sm')}<span><b>${m.name}</b> · ${m.short}</span>${ic('chevR', 'xs')}`;
   if (el.dataset.m !== modeOf()) { el.dataset.m = modeOf(); el.innerHTML = html; }
@@ -3368,6 +3391,7 @@ function renderPlayer() {
         <div class="pl-titles"><div class="tt"><h2 id="pl-title"></h2><p id="pl-ep"></p></div>
           <button class="icon-btn" data-act="pl-save" id="pl-save" aria-label="Add to Library">${ic('plus')}</button></div>
         <button class="pl-mode" id="pl-mode" data-act="mode-sheet" aria-label="Listening mode"></button>
+        <button class="pl-note" id="pl-note" data-act="open-safari" hidden>${ic('lock', 'xs')}<span>${tz('Answering with the screen locked needs Safari — tap to copy the link', '锁屏也能语音回答需要用 Safari 打开 · 点这里复制链接')}</span></button>
         <div class="pl-sub" id="pl-sub" aria-live="polite"></div>
         <div class="pl-gen" id="pl-gen" hidden></div>
         <div class="pl-prog">
@@ -3797,6 +3821,13 @@ document.addEventListener('click', (e) => {
     case 'call-choice': { const c = C && C.choices[+el.dataset.i]; if (c) sendCallTurn(c, 'option'); break; }
     case 'call-silent': sendCallTurn('', 'silence'); break;
     case 'call-mute': toggleCallMute(); break;
+    case 'open-safari': {
+      const u = location.origin + location.pathname + '?k=' + encodeURIComponent(TOKEN) + '&lang=' + LANG + (TTS !== 'v4' ? '&tts=' + TTS : '');
+      const done = () => toast(tz('Link copied — open Safari and paste it', '链接已复制，打开 Safari 粘贴到地址栏'));
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(done).catch(() => window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u));
+      else window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u);
+      break;
+    }
     case 'call-speaker': toggleCallSpeaker(); break;
     case 'call-speed': cycleCallSpeed(); break;
     case 'call-resume': if (C) { C.blocked = false; callAudio.play().catch(() => {}); renderCallUI(true); } break;
