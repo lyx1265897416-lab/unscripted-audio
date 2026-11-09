@@ -2736,8 +2736,19 @@ function renderRewards() {
 /* Detail */
 let detailId = null, detailTab = 'episodes', synOpen = false;
 const isDetailOpen = (id) => $('#detail').classList.contains('on') && (!id || detailId === id);
+/* Episode 1 audio lives on cloud storage whose first byte takes ~3 s; warm it as soon as she opens a series so Play starts at once */
+const WARM = [];
+function warmEp1(s) {
+  const u = s && s.ep1 && s.ep1.audio;
+  if (!u || MOCK || getSess(s.id) || WARM.some((a) => a.dataset.u === u)) return;
+  try {
+    const a = new Audio(); a.preload = 'auto'; a.muted = true; a.dataset.u = u; a.src = absUrl(u); a.load();
+    WARM.push(a); while (WARM.length > 2) { const o = WARM.shift(); o.removeAttribute('src'); o.load(); }
+  } catch (e) { /* ignore */ }
+}
 async function showDetail(id) {
   const s = byId(id); if (!s) { location.hash = '#/home'; return; }
+  warmEp1(s);
   if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
   detailId = id;
   renderDetail();
