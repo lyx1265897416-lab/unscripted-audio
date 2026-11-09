@@ -9,7 +9,7 @@
   const EX = {
     // tabs / navigation
     'Home': '首页', 'Explore': '发现', 'Library': '书架', 'Rewards': '福利', 'Main': '主导航', 'Series': '剧集', 'Player': '播放器', 'Profile': '我的',
-    'Back': '返回', 'Pause': '暂停', 'Resume': '继续播放', 'Close': '关闭', 'Search': '搜索', 'Share': '分享', 'Done': '完成', 'Cancel': '取消', 'Save': '保存', 'Remove': '移除', 'Delete': '删除',
+    'Back': '返回', '(stayed silent)': '（没有说话）', 'Preparing Ep 1…': '正在准备第 1 集…', 'Share link ready:': '分享链接：', 'Pause': '暂停', 'Resume': '继续播放', 'Close': '关闭', 'Search': '搜索', 'Share': '分享', 'Done': '完成', 'Cancel': '取消', 'Save': '保存', 'Remove': '移除', 'Delete': '删除',
     'Clear': '清空', 'Clear all': '全部清空', 'Continue': '继续', 'Choose': '去选择', 'Claim': '领取', 'Go': '去完成', 'Send': '发送', 'Play': '播放', 'Retry': '重试',
     'See all': '查看全部', 'Show less': '收起', 'More': '展开', 'Less': '收起', 'Featured': '精选', 'Genres': '分类', 'All series': '全部剧集', 'Browse genres': '按分类浏览',
     'Continue Listening': '继续收听', 'Top 10 this week': '本周 Top 10', 'New Releases': '新上架', 'More like this': '相似推荐', 'Episodes': '剧集', 'About': '简介', 'Cast': '角色',
@@ -95,6 +95,8 @@
   Object.assign(EX, GENRE, { 'Bingeworthy': '一口气听完', 'New Releases': '新上架' });
   Object.keys(GENRE).forEach((g) => { EX[g.toLowerCase()] = GENRE[g]; });
   const RX = [
+    [/^(\d+) calls?$/, '$1 通'], [/^(\d+) lines?$/, '$1 句'], [/^(\d+) results?( in ([\s\S]+))?$/, (m, n, x, g) => (g ? `「${tr(g)}」里有 ${n} 部` : `${n} 个结果`)],
+    [/^Written for you · ([\s\S]+?)( ·)?$/, (m, r, d) => `为你而写 · ${tr(r)}${d ? ' ·' : ''}`], [/^you stayed silent$/, '你没有说话'], [/^(\d+) min$/, '$1 分钟'],
     [/^Voice: ([\s\S]+)$/, '配音：$1'], [/^\+(\d+) bonus$/, '+$1 赠送'],
     [/^(\d+) min ·$/, '$1 分钟 ·'], [/^Written live from your choice$/, '按你的选择实时生成'], [/^Depends on your choices$/, '取决于你的选择'],
     [/^(\d+) series$/, '$1 部'], [/^([\d.]+) · ([\d.]+[KM]?) plays$/, '$1 · $2 次收听'], [/^Day (\d+) of 7$/, '第 $1 / 7 天'], [/^Day (\d+) claimed · back tomorrow$/, '第 $1 天已签到 · 明天再来'],
