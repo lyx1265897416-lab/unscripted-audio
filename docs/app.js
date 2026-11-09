@@ -271,6 +271,12 @@ const RealAPI = {
   specs(sid) { return this.get('api/specs', { sid }, false); },
   cue(sid, n) { return this.get('api/cue', { sid, n }, false); },
   wish(sid, text) { return this.post('api/wish', { sid, text }); },
+  async asr(blob) {
+    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); return u.toString(); },
+      { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  },
   fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
   callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '' }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
@@ -292,6 +298,7 @@ const MockAPI = {
   async specs() { return { n: 0, specs: {} }; },
   async cue() { await sleep(400); return { url: 'mock/line_a.mp3', text: 'Mock question: this way, or that way?' }; },
   async wish() { return { ok: true }; },
+  async asr() { await sleep(600); return { text: '' }; },
   async fillers() { await sleep(300); return { urls: ['mock/line_c.mp3'], think: ['mock/line_a.mp3', 'mock/line_b.mp3'] }; },
   async callStart({ series, who, direction }) {
     await sleep(200);
@@ -601,6 +608,7 @@ function primeAudio() {
 document.addEventListener('pointerdown', () => primeAudio(), { capture: true, once: false, passive: true });
 
 function loadSrc(url, at) {
+  P.aux = false; P.auxEnd = null; audio.loop = false; audio.volume = 1;  // swap straight from the bed/question to the story (no pause: keeps the lock screen alive)
   P.cur = url;
   audio.src = absUrl(url);
   setAudioRate();
@@ -620,6 +628,7 @@ function doPlay() {
 }
 function doPause() { P.want = false; audio.pause(); updatePlayerUI(); }
 function togglePlay() {
+  primeMic();
   if (P.gen && !P.ep) return;
   if (P.needChoice) { openChoiceSheet(); return; }
   if (!P.ep) return;
@@ -631,7 +640,7 @@ const isPlaying = () => P.want && (!audio.paused || P.waiting);
 
 /** Start an episode (produced: one mp3 + cues; live: sequential lines). */
 function playEpisode(id, ep, opts = {}) {
-  cancelUpNext(); bedStop(); stopAutoCountdown(); hfStop(true);
+  cancelUpNext(); stopAutoCountdown(); hfStop(true);
   P.id = id; P.ep = ep; P.needChoice = false; P.waiting = false; P.loading = false;
   P.idx = opts.line || 0; P.lineStart = 0;
   P.jobDone = ep.kind !== 'live' || ep._done !== false;
@@ -669,7 +678,7 @@ function liveAdvance() {
   for (let i = 0; i < P.idx; i++) P.lineStart += (ep.durs && ep.durs[i]) || 0;
   loadSrc(ln.url, 0);
   if (P.want) doPlay();
-  preloadNext();
+  preloadNext(); warmLines(ep);
   saveProgress();
   setMediaSession();
   updatePlayerUI(true);
@@ -687,6 +696,7 @@ function preloadNext() {
 }
 
 audio.addEventListener('ended', () => {
+  if (P.aux) { const f = P.auxEnd; P.auxEnd = null; if (f) f(); return; }
   if (!P.cur || audio.src.startsWith('data:')) return;
   if (!P.ep) return;
   if (P.ep.kind === 'live') {
@@ -702,7 +712,7 @@ audio.addEventListener('ended', () => {
   }
 });
 audio.addEventListener('loadedmetadata', () => {
-  if (P.ep && P.ep.kind === 'live' && isFinite(audio.duration)) { P.ep.durs = P.ep.durs || {}; P.ep.durs[P.idx] = audio.duration; }
+  if (!P.aux && P.ep && P.ep.kind === 'live' && isFinite(audio.duration)) { P.ep.durs = P.ep.durs || {}; P.ep.durs[P.idx] = audio.duration; }
   updatePlayerUI();
 });
 audio.addEventListener('play', () => updatePlayerUI());
@@ -738,6 +748,7 @@ function maybeSpecs(force) {
   }).catch(() => { /* ignore: falls back to the normal path */ });
 }
 audio.addEventListener('error', () => {
+  if (P.aux) { const f = P.auxEnd; P.auxEnd = null; if (f) f(); return; }
   if (!P.cur || audio.src.startsWith('data:')) return;
   if (P.ep && P.ep.kind === 'live') { P.idx += 1; setTimeout(liveAdvance, 120); }
   else toast('Could not load this episode audio');
@@ -809,7 +820,7 @@ if ('mediaSession' in navigator) {
   h('seekforward', () => skip(10));
   // headphone / lock-screen buttons at a cliffhanger: next = answer by voice (or let it carry on), previous = hear the question again
   h('previoustrack', () => { if (P.needChoice && modeOf() === 'voice') startHandsFree(); else prevEpisode(); });
-  h('nexttrack', () => { if (P.needChoice) { if (SR && modeOf() !== 'tap' && document.visibilityState === 'visible') hfListen(); else continueOnItsOwn(); } else nextEpisode(); });
+  h('nexttrack', () => { if (P.needChoice) { if (VOICE_OK && modeOf() !== 'tap') hfListen(); else continueOnItsOwn(); } else nextEpisode(); });
   h('seekto', (d) => { if (P.ep && P.ep.kind !== 'live' && d && isFinite(d.seekTime)) audio.currentTime = d.seekTime; });
 }
 
@@ -841,7 +852,7 @@ function recordStart(id) {
 
 async function newSession(id) {
   const s = byId(id); if (!s) return;
-  primeAudio();
+  primeAudio(); primeMic();
   cancelGen();
   audio.pause();
   P.id = id; P.ep = null; P.loading = true; P.needChoice = false; P.want = true; P.cur = '';
@@ -994,7 +1005,8 @@ function cancelUpNext() { if (P.upNext) { clearInterval(P.upNext.t); P.upNext = 
 
 /* --- choice sheet --- */
 let recog = null;
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;  // no longer used for input (single-language); kept for reference
+const VOICE_OK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 function openChoiceSheet() {
   if (!P.ep || !P.needChoice) return;
@@ -1022,7 +1034,7 @@ function openChoiceSheet() {
         <input id="ch-text" type="text" maxlength="200" placeholder="Say it your way…" enterkeyhint="send" aria-label="Your answer">
         <button class="ch-send" type="submit" aria-label="Send" disabled>${ic('send')}</button>
       </div>
-      ${SR ? `<button class="ch-mic" type="button" data-act="mic" aria-label="Speak your answer">${ic('mic')}</button>` : ''}
+      ${VOICE_OK ? `<button class="ch-mic" type="button" data-act="mic" aria-label="Speak your answer">${ic('mic')}</button>` : ''}
     </form>
     <div class="ch-foot">
       <span class="lockinfo">${locked ? `${ic('lock', 'xs')} Ep ${nextN} · ${coinIc('sm')} ${PRICE} to unlock` : `${ic('spark', 'xs')} Ep ${nextN} is written live from your answer`}</span>
@@ -1034,41 +1046,31 @@ function openChoiceSheet() {
   const entry = openSheet(html, { cls: 'choice-sheet', kind: 'choice', onClose: () => { stopMic(); hfStop(); stopAutoCountdown(); } });
   const inp = $('#ch-text', entry.el), send = $('.ch-send', entry.el);
   inp.addEventListener('input', () => { send.disabled = !inp.value.trim(); stopAutoCountdown(); });
-  inp.addEventListener('focus', () => { stopAutoCountdown(); hfStop(); });
+  inp.addEventListener('focus', holdForHer);
+  entry.el.addEventListener('pointerdown', (e) => { if (!e.target.closest('[data-act="choose"],[data-act="silent"],.ch-send')) holdForHer(); }, { capture: true });
   $('form', entry.el).addEventListener('submit', (e) => {
     e.preventDefault();
     const t = inp.value.trim(); if (!t) return;
     submitChoice(t, 'free');
   });
 }
-function stopMic() { if (recog) { try { recog.abort(); } catch (e) { /* ignore */ } recog = null; } }
+function stopMic() { if (recog) { const r = recog; recog = null; r.cancel(); } }
 function toggleMic(btn) {
-  if (!SR) return;
-  stopAutoCountdown(); hfStop();
-  if (recog) { stopMic(); btn.classList.remove('rec'); return; }
+  if (!VOICE_OK) return;
+  holdForHer();
+  if (recog) { recog.stop(); return; }
   const inp = $('#ch-text');
-  try {
-    recog = new SR();
-    recog.lang = LANG === 'zh' ? 'zh-CN' : 'en-US';
-    recog.interimResults = true;
-    recog.maxAlternatives = 1;
-    let finalText = '';
-    recog.onresult = (ev) => {
-      let txt = '';
-      for (let i = 0; i < ev.results.length; i++) { txt += ev.results[i][0].transcript; if (ev.results[i].isFinal) finalText = txt; }
-      if (inp) { inp.value = txt; inp.dispatchEvent(new Event('input')); }
-    };
-    recog.onerror = (ev) => { btn.classList.remove('rec'); recog = null; if (ev.error !== 'aborted') toast(ev.error === 'not-allowed' ? 'Microphone permission denied' : "Didn't catch that — try again"); };
-    recog.onend = () => {
-      btn.classList.remove('rec');
-      const t = (finalText || (inp && inp.value) || '').trim();
-      recog = null;
-      if (t) submitChoice(t, 'voice');
-    };
-    if (inp) inp.placeholder = 'Listening…';
-    btn.classList.add('rec');
-    recog.start();
-  } catch (e) { recog = null; btn.classList.remove('rec'); toast('Voice input unavailable'); }
+  btn.classList.add('rec');
+  if (inp) inp.placeholder = 'Listening… (Chinese or English)';
+  const h = recog = recordAnswer({ wait: 8000, max: 20000, onState: (st) => { if (st === 'thinking' && inp) inp.placeholder = 'Got it — one moment…'; if (st === 'denied') toast('Microphone permission denied'); } });
+  h.done.then((r) => {
+    if (recog === h) recog = null;
+    btn.classList.remove('rec');
+    if (inp) inp.placeholder = 'Say it your way…';
+    if (r.canceled) return;
+    if (r.text) { if (inp) { inp.value = r.text; inp.dispatchEvent(new Event('input')); } submitChoice(r.text, 'voice'); }
+    else if (r.spoke) toast("Didn't catch that — try again");
+  });
 }
 
 /* =========================================================================
@@ -1080,13 +1082,12 @@ function toggleMic(btn) {
  * "Talk to the story" (any time) steers what happens next. Calling a character is a separate thing.
  * ========================================================================= */
 const MODES = {
-  voice: { icon: 'mic', name: 'Hands-free', short: 'I ask out loud, you just answer', desc: 'At every cliffhanger the narrator asks out loud and listens. Just answer with your voice — or stay quiet and the story carries on. Eyes closed, phone down.' },
+  voice: { icon: 'mic', name: 'Hands-free', short: 'I ask out loud, you just answer', desc: 'At every choice point the narrator asks out loud and the mic listens for 5 seconds — answer in Chinese or English. Say nothing and the story carries on. Keeps going with the screen locked where your phone allows it.' },
   auto: { icon: 'moon', name: 'Lean back', short: 'The story keeps going on its own', desc: 'No questions. The story keeps moving by itself, episode after episode — for winding down or falling asleep.' },
-  tap: { icon: 'hand', name: 'Tap to choose', short: 'Pick on screen', desc: 'Choose on screen or type your own answer. If you don’t answer, the story carries on after 30 seconds.' },
+  tap: { icon: 'hand', name: 'Tap to choose', short: 'Pick on screen', desc: 'Choose on screen or type your own answer. The story waits 5 seconds — touch the screen and it waits until you\u2019re done.' },
 };
-if (!MODES[S.mode]) S.mode = SR ? 'voice' : 'tap';
-const modeOf = () => (S.mode === 'voice' && !SR ? 'tap' : S.mode);
-const AUTO_WAIT = { tap: 30, voice: 8, auto: 5 };
+if (!MODES[S.mode]) S.mode = VOICE_OK ? 'voice' : 'tap';
+const modeOf = () => (S.mode === 'voice' && !VOICE_OK ? 'tap' : S.mode);
 
 /* earcons + a soft ambient bed while the next episode is being written (WebAudio, no network, no credits) */
 function earcon(kind) {
@@ -1123,12 +1124,6 @@ function bedStop() {
 }
 
 /* narrator's spoken question at the end of an episode (prefetched ~45 s before the end) */
-const cueAudio = new Audio(); cueAudio.preload = 'auto'; cueAudio.setAttribute('playsinline', '');
-document.addEventListener('pointerdown', () => {
-  if (cueAudio.dataset.primed) return;
-  cueAudio.dataset.primed = '1';
-  try { cueAudio.src = SILENT; const p = cueAudio.play(); if (p && p.catch) p.catch(() => { delete cueAudio.dataset.primed; }); } catch (e) { /* ignore */ }
-}, { capture: true, passive: true });
 const CUE = {};
 function fetchCue(sid, n) {
   const k = sid + ':' + n;
@@ -1141,17 +1136,110 @@ function fetchCue(sid, n) {
   return CUE[k];
 }
 
-const HF = { phase: '', recog: null, t: 0, heard: '', key: '', misses: 0 };
+/* ---------- Voice input (11-08): record a few seconds → local faster-whisper on the relay (/api/asr).
+ * Chinese and English both work in either version (the model detects the language); the story answers in the version's language.
+ * In Hands-free the mic stream is opened once (first Play tap) and kept, so she can answer with the screen locked where the
+ * browser allows it (Android Chrome; iOS Safari may suspend capture when locked — then the story simply carries on). */
+const VI = { stream: null, an: null, buf: null, denied: false, primed: false };
+async function micStream() {
+  if (VI.stream && VI.stream.getAudioTracks().some((t) => t.readyState === 'live')) return VI.stream;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) { /* ignore */ }
+  VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  VI.denied = false;
+  unlockCtx();
+  try {
+    if (actx) { const src = actx.createMediaStreamSource(VI.stream); VI.an = actx.createAnalyser(); VI.an.fftSize = 1024; src.connect(VI.an); VI.buf = new Float32Array(VI.an.fftSize); }
+  } catch (e) { VI.an = null; }
+  return VI.stream;
+}
+function micRelease() {
+  if (VI.stream) { VI.stream.getTracks().forEach((t) => t.stop()); VI.stream = null; VI.an = null; }
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* ignore */ }
+}
+function primeMic() {  // inside a tap, so the permission prompt appears now and the stream is ready at the choice point
+  if (VI.primed || !VOICE_OK || modeOf() !== 'voice') return;
+  VI.primed = true;
+  micStream().catch(() => { VI.denied = true; VI.primed = false; });
+}
+function micLevel() {
+  if (!VI.an || !actx || actx.state !== 'running') return -1;
+  VI.an.getFloatTimeDomainData(VI.buf);
+  let s = 0; for (let i = 0; i < VI.buf.length; i++) s += VI.buf[i] * VI.buf[i];
+  return Math.sqrt(s / VI.buf.length);
+}
+/** Record one answer. Waits up to `wait` ms for her to start speaking; after she starts, stops after ~1.1 s of quiet (or `max`).
+ * manual: hold-to-talk (no auto stop; call stop()). When the level meter is unavailable (page locked, audio context asleep)
+ * it records the whole window and lets the recognizer decide whether anything was said. */
+function recordAnswer({ wait = 5000, max = 15000, manual = false, onState } = {}) {
+  let rec = null, chunks = [], t0 = 0, speechAt = 0, lastVoice = 0, timer = 0, finished = false, canceled = false, floor = 0, n = 0, blind = false;
+  let resolve; const done = new Promise((r) => { resolve = r; });
+  const st = (s) => { try { onState && onState(s); } catch (e) { /* ignore */ } };
+  const finish = async (spoke) => {
+    if (finished) return; finished = true; clearInterval(timer);
+    if (rec && rec.state !== 'inactive') {
+      await new Promise((r) => { rec.onstop = () => r(); try { rec.stop(); } catch (e) { r(); } setTimeout(r, 900); });
+    }
+    if (canceled) { resolve({ text: '', spoke: false, canceled: true }); return; }
+    if (!spoke || !chunks.length) { resolve({ text: '', spoke: false }); return; }
+    st('thinking');
+    try {
+      const r = await API.asr(new Blob(chunks, { type: (rec && rec.mimeType) || 'audio/webm' }));
+      resolve({ text: ((r && r.text) || '').trim(), lang: r && r.lang, spoke: true });
+    } catch (e) { resolve({ text: '', spoke: true, error: e.message }); }
+  };
+  (async () => {
+    try { await micStream(); } catch (e) { VI.denied = true; st('denied'); resolve({ text: '', spoke: false, denied: true }); finished = true; return; }
+    if (finished) return;
+    const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/aac'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+    try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { st('denied'); resolve({ text: '', spoke: false, denied: true }); finished = true; return; }
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.start(250);
+    t0 = Date.now(); st('listening');
+    timer = setInterval(() => {
+      const now = Date.now(), lv = micLevel();
+      if (lv < 0) blind = true;
+      else {
+        n += 1; if (n <= 4) floor = Math.max(floor, lv);
+        if (n > 2 && lv > Math.max(0.02, floor * 2.4)) { if (!speechAt) { speechAt = now; st('speaking'); } lastVoice = now; }
+      }
+      if (manual) { if (now - t0 > max) finish(true); return; }
+      if (blind) { if (now - t0 > wait + 1500) finish(true); return; }  // can't hear levels: send the whole window, the recognizer decides
+      if (!speechAt && now - t0 > wait) { finish(false); return; }
+      if (speechAt && (now - lastVoice > 1100 || now - t0 > max)) finish(true);
+    }, 100);
+  })();
+  return { done, stop: () => finish(true), cancel: () => { canceled = true; finish(false); } };
+}
+
+/* ---------- main-audio helpers: the narrator's question and a quiet ambient bed play on the SAME <audio> element as the story,
+ * so the lock-screen media session never stops between episodes (a separate element can't start while the phone is locked). */
+function playAux(url, { loop = false, volume = 1 } = {}) {
+  return new Promise((res) => {
+    P.aux = true; P.auxEnd = loop ? null : res;
+    audio.loop = loop; audio.volume = volume;
+    audio.src = absUrl(url); audio.playbackRate = 1;
+    const p = audio.play();
+    if (p && p.catch) p.catch(() => { if (P.auxEnd === res) { P.auxEnd = null; res(); } });
+    if (loop) res();
+  });
+}
+function keepAlive() { if (!P.aux || !audio.loop) playAux('bed.mp3', { loop: true, volume: 0.6 }); }
+function stopAux() { if (P.aux) { P.aux = false; P.auxEnd = null; audio.loop = false; audio.volume = 1; try { audio.pause(); } catch (e) { /* ignore */ } } }
+function bedStart() { keepAlive(); }
+function bedStop() { stopAux(); }
+
+const HF = { phase: '', rec: null, heard: '', key: '', ask: '' };
 let autoT = 0, autoLeft = 0;
+const WAIT = 5;  // every choice point waits 5 s (touching the screen pauses it until she's done)
 
 function endOfEpisodeFlow() {
   const m = modeOf();
   openChoiceSheet();
-  if (m === 'voice') startHandsFree();
-  else if (m === 'auto') startAutoCountdown(AUTO_WAIT.auto, 'Lean back · the story continues in');
-  else { startAutoCountdown(AUTO_WAIT.tap, 'No answer? The story continues in'); maybeIncomingCall(); }
+  if (m === 'voice' && VOICE_OK && !VI.denied) { startHandsFree(); return; }
+  keepAlive();
+  startAutoCountdown(WAIT, m === 'auto' ? 'Lean back · the story continues in' : 'The story continues in');
 }
-function startAutoCountdown(sec, label) {
+function startAutoCountdown(sec, label, visualOnly) {
   stopAutoCountdown();
   autoLeft = sec;
   const n = P.ep && P.ep.n;
@@ -1164,77 +1252,70 @@ function startAutoCountdown(sec, label) {
   autoT = setInterval(() => {
     if (!P.needChoice || !P.ep || P.ep.n !== n) { stopAutoCountdown(); return; }
     autoLeft -= 1;
-    if (autoLeft <= 0) { stopAutoCountdown(); continueOnItsOwn(); return; }
+    if (autoLeft <= 0) { stopAutoCountdown(); if (!visualOnly) continueOnItsOwn(); return; }
     paint();
   }, 1000);
 }
 function stopAutoCountdown() { clearInterval(autoT); autoT = 0; const el = $('#ch-auto'); if (el) { el.hidden = true; el.innerHTML = ''; } }
-function continueOnItsOwn() {
+/** She touched the choice sheet: stop the clock and the mic, wait for her to pick or finish typing. */
+function holdForHer() {
+  if (!P.needChoice) return;
+  const was = autoT || HF.rec;
+  stopAutoCountdown(); hfStop();
+  if (was) { const el = $('#ch-auto'); if (el) { el.hidden = false; el.innerHTML = `${ic('hand', 'sm')}<span>Paused — take your time</span>`; } }
+}
+function continueOnItsOwn(why) {
   if (!P.needChoice) return;
   earcon('ok');
-  toast(`${ic('spark', 'sm')} The story carries on…`);
+  toast(`${ic('spark', 'sm')} ${why === 'unclear' ? 'Didn’t catch that — the story carries on' : 'The story carries on…'}`);
   submitChoice('', 'auto');
 }
 
 async function startHandsFree() {
   const ss = getSess(P.id), ep = P.ep; if (!ss || !ep) return;
   hfStop(true);
-  HF.key = ss.sid + ':' + ep.n; HF.misses = 0;
+  HF.key = (ss.sid || 'x') + ':' + ep.n;
   const key = HF.key;
-  HF.phase = 'ask'; paintHF();
-  doPause(); P.needChoice = true;
+  HF.phase = 'ask'; HF.ask = ''; paintHF();
+  P.want = false; P.needChoice = true;
   let d = null;
-  try { d = await Promise.race([fetchCue(ss.sid, ep.n), sleep(9000).then(() => null)]); } catch (e) { d = null; }
+  try { d = await Promise.race([ss.sid ? fetchCue(ss.sid, ep.n) : null, sleep(4000).then(() => null)]); } catch (e) { d = null; }
   if (HF.key !== key || !P.needChoice) return;
-  if (d && d.text) HF.ask = d.text;
-  if (d && d.url) {
-    cueAudio.onended = cueAudio.onerror = () => { cueAudio.onended = cueAudio.onerror = null; if (HF.key === key && P.needChoice && HF.phase === 'ask') hfListen(); };
-    cueAudio.src = absUrl(d.url); cueAudio.playbackRate = 1;
-    const p = cueAudio.play();
-    paintHF();
-    if (p && p.catch) p.catch(() => { if (HF.key === key && HF.phase === 'ask') hfListen(); });
-  } else hfListen();
+  if (d && d.text) { HF.ask = d.text; paintHF(); }
+  if (d && d.url) await playAux(d.url);  // the narrator asks (on the story's own audio element)
+  if (HF.key !== key || !P.needChoice || HF.phase !== 'ask') return;
+  hfListen();
 }
 function hfListen() {
-  if (!P.needChoice || !SR) return;
-  try { cueAudio.pause(); } catch (e) { /* ignore */ }
+  if (!P.needChoice || !VOICE_OK) return;
   stopAutoCountdown();
-  if (HF.recog) { try { HF.recog.abort(); } catch (e) { /* ignore */ } HF.recog = null; }
+  if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
+  keepAlive();
   HF.phase = 'listen'; HF.heard = ''; paintHF();
   earcon('open');
   const key = HF.key;
-  setTimeout(() => {
-    if (HF.key !== key || HF.phase !== 'listen') return;
-    let finalText = '', denied = false;
-    try {
-      const r = HF.recog = new SR();
-      r.lang = LANG === 'zh' ? 'zh-CN' : 'en-US'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
-      r.onresult = (ev) => {
-        let t = ''; for (let i = 0; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) finalText = t; }
-        HF.heard = t; clearTimeout(HF.t); HF.t = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 6000); paintHF();
-      };
-      r.onerror = (ev) => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') denied = true; };
-      r.onend = () => {
-        clearTimeout(HF.t);
-        if (HF.recog !== r) return;
-        HF.recog = null;
-        const t = (finalText || HF.heard || '').trim();
-        if (HF.key !== key || !P.needChoice) return;
-        if (t) { HF.phase = 'heard'; HF.heard = t; paintHF(); earcon('ok'); setTimeout(() => { if (HF.key === key && P.needChoice) submitChoice(t, 'voice'); }, 650); return; }
-        if (denied) { HF.phase = 'denied'; paintHF(); startAutoCountdown(12, 'Mic is off · the story continues in'); return; }
-        HF.misses += 1; HF.phase = 'quiet'; paintHF();
-        startAutoCountdown(HF.misses > 1 ? 3 : 5, 'Quiet night? The story continues in');
-      };
-      r.start();
-      HF.t = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 12000);
-    } catch (e) { HF.recog = null; HF.phase = 'denied'; paintHF(); startAutoCountdown(12, 'The story continues in'); }
-  }, 380);
+  startAutoCountdown(WAIT, 'Listening · the story continues in', true);
+  const h = HF.rec = recordAnswer({
+    wait: WAIT * 1000, max: 15000,
+    onState: (s) => {
+      if (HF.rec !== h) return;
+      if (s === 'speaking') { stopAutoCountdown(); HF.phase = 'speaking'; paintHF(); }
+      else if (s === 'thinking') { stopAutoCountdown(); HF.phase = 'thinking'; paintHF(); }
+    },
+  });
+  h.done.then((r) => {
+    if (HF.rec !== h) return;
+    HF.rec = null;
+    if (HF.key !== key || !P.needChoice || r.canceled) return;
+    stopAutoCountdown();
+    if (r.text) { HF.phase = 'heard'; HF.heard = r.text; paintHF(); earcon('ok'); setTimeout(() => { if (HF.key === key && P.needChoice) submitChoice(r.text, 'voice'); }, 500); return; }
+    if (r.denied) { HF.phase = 'denied'; paintHF(); startAutoCountdown(WAIT, 'Mic is off · the story continues in'); return; }
+    continueOnItsOwn(r.spoke ? 'unclear' : 'quiet');  // nothing said, or nothing recognizable → the fallback path, no pause
+  });
 }
 function hfStop(silent) {
-  clearTimeout(HF.t);
-  if (HF.recog) { const r = HF.recog; HF.recog = null; try { r.abort(); } catch (e) { /* ignore */ } }
-  try { if (!cueAudio.src.startsWith('data:')) cueAudio.pause(); } catch (e) { /* ignore */ }
-  cueAudio.onended = cueAudio.onerror = null;
+  if (HF.rec) { const r = HF.rec; HF.rec = null; r.cancel(); }
+  if (P.aux && !audio.loop && P.auxEnd) { const f = P.auxEnd; P.auxEnd = null; try { audio.pause(); } catch (e) { /* ignore */ } f(); }
   if (!silent) { HF.phase = ''; paintHF(); }
 }
 function paintHF() {
@@ -1245,23 +1326,27 @@ function paintHF() {
   const label = {
     ask: `${ic('headphones', 'sm')} The narrator is asking…`,
     listen: 'Listening — just say it',
+    speaking: 'I’m listening…',
+    thinking: 'Got it — one moment…',
     heard: 'Got it',
-    quiet: 'I didn’t hear anything',
     denied: 'Microphone is off',
   }[ph];
-  const sub = ph === 'ask' ? esc(HF.ask || '') : ph === 'listen' ? (HF.heard ? `“${esc(HF.heard)}”` : 'Answer with one of the two — or anything you want to happen.')
-    : ph === 'heard' ? `“${esc(HF.heard)}”` : ph === 'quiet' ? 'Tap the mic to answer, or let the story carry on.' : 'Allow the microphone to answer by voice, or tap a choice.';
-  el.className = 'ch-hf ' + ph;
+  const sub = ph === 'ask' ? esc(HF.ask || '')
+    : ph === 'listen' ? 'Say one of the two — or anything you want to happen. Chinese or English.'
+    : ph === 'speaking' ? 'Keep going, I’ll wait till you finish.'
+    : ph === 'thinking' ? ''
+    : ph === 'heard' ? `“${esc(HF.heard)}”` : 'Allow the microphone to answer by voice, or tap a choice.';
+  el.className = 'ch-hf ' + (ph === 'speaking' || ph === 'thinking' ? 'listen' : ph);
   el.innerHTML = `
-    <button class="hf-orb" data-act="${ph === 'listen' ? 'hf-stop' : 'hf-again'}" aria-label="${ph === 'listen' ? 'Stop listening' : 'Answer by voice'}">${ic('mic')}<i></i><i></i></button>
-    <div class="hf-t"><b>${label}</b><span>${sub}</span></div>`;
+    <button class="hf-orb" data-act="${ph === 'listen' || ph === 'speaking' ? 'hf-stop' : 'hf-again'}" aria-label="${ph === 'listen' || ph === 'speaking' ? 'Stop listening' : 'Answer by voice'}">${ic('mic')}<i></i><i></i></button>
+    <div class="hf-t"><b>${label}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
 }
 
 /* Talk to the story (any time while listening): steers the next episode. Not a call with a character. */
-let talkRecog = null;
+let talkRec = null;
 function openTalkSheet() {
   const s = byId(P.id); if (!s || !P.ep) return;
-  if (P.needChoice) { if (SR && modeOf() !== 'tap') { hfListen(); return; } openChoiceSheet(); return; }
+  if (P.needChoice) { if (VOICE_OK) { holdForHer(); hfListen(); return; } openChoiceSheet(); return; }
   const wasPlaying = isPlaying();
   if (wasPlaying) doPause();
   const lead = shortName(callerOf(s));
@@ -1269,32 +1354,32 @@ function openTalkSheet() {
     <div class="sh-h"><div><h3>Talk to the story</h3><p>Say what you want to happen next — Episode ${P.ep.n + 1} will follow it.</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="ch-hf listen" id="tk-hf">
       <button class="hf-orb" data-act="talk-mic" aria-label="Speak">${ic('mic')}<i></i><i></i></button>
-      <div class="hf-t"><b id="tk-l">${SR ? 'Listening…' : 'Type it below'}</b><span id="tk-s">e.g. “I want him to finally admit it.” “Take me somewhere with just us.”</span></div>
+      <div class="hf-t"><b id="tk-l">${VOICE_OK ? 'Listening…' : 'Type it below'}</b><span id="tk-s">e.g. “I want him to finally admit it.” “Take me somewhere with just us.”</span></div>
     </div>
     <form class="ch-input" data-form="wish" autocomplete="off"><div class="fld"><input id="tk-text" type="text" maxlength="200" placeholder="Or type it…" enterkeyhint="send" aria-label="What should happen"><button class="ch-send" type="submit" aria-label="Send">${ic('send')}</button></div></form>
     <p class="tk-note">${ic('phone', 'xs')} Want to talk to ${esc(lead)} himself? That’s a call — tap the phone at the top.</p>`, { kind: 'talk', onClose: () => { stopTalk(); if (wasPlaying && !P.needChoice) { P.want = true; P.ep.kind === 'live' && (P.waiting || !P.cur) ? liveAdvance() : doPlay(); } } });
   entry.wasPlaying = wasPlaying;
-  if (SR) talkListen();
+  const inp = $('#tk-text', entry.el); if (inp) inp.addEventListener('focus', stopTalk);
+  if (VOICE_OK) talkListen();
 }
-function stopTalk() { if (talkRecog) { const r = talkRecog; talkRecog = null; try { r.abort(); } catch (e) { /* ignore */ } } }
+function stopTalk() { if (talkRec) { const r = talkRec; talkRec = null; r.cancel(); } }
 function talkListen() {
   stopTalk(); earcon('open');
   const l = $('#tk-l'), sub = $('#tk-s'), box = $('#tk-hf');
   if (box) box.className = 'ch-hf listen';
   if (l) l.textContent = 'Listening…';
-  let fin = '', heard = '';
-  try {
-    const r = talkRecog = new SR();
-    r.lang = LANG === 'zh' ? 'zh-CN' : 'en-US'; r.interimResults = true; r.maxAlternatives = 1;
-    r.onresult = (ev) => { let t = ''; for (let i = 0; i < ev.results.length; i++) { t += ev.results[i][0].transcript; if (ev.results[i].isFinal) fin = t; } heard = t; if (sub) sub.textContent = `“${t}”`; };
-    r.onend = () => {
-      if (talkRecog !== r) return; talkRecog = null;
-      const t = (fin || heard).trim();
-      if (t) sendWish(t);
-      else { if (box) box.className = 'ch-hf quiet'; if (l) l.textContent = 'Tap the mic and say it'; }
-    };
-    r.start();
-  } catch (e) { talkRecog = null; if (l) l.textContent = 'Type it below'; }
+  const h = talkRec = recordAnswer({
+    wait: 7000, max: 20000,
+    onState: (s) => { if (talkRec !== h) return; if (s === 'speaking' && l) l.textContent = 'I’m listening…'; if (s === 'thinking' && l) l.textContent = 'Got it — one moment…'; },
+  });
+  h.done.then((r) => {
+    if (talkRec !== h) return; talkRec = null;
+    if (r.canceled) return;
+    if (r.text) { sendWish(r.text); return; }
+    if (box) box.className = 'ch-hf quiet';
+    if (l) l.textContent = r.denied ? 'Microphone is off' : r.spoke ? 'Didn’t catch that — tap the mic and try again' : 'Tap the mic and say it';
+    if (sub) sub.textContent = r.denied ? 'Allow the microphone, or type it below.' : 'Chinese or English both work.';
+  });
 }
 async function sendWish(text) {
   const ss = getSess(P.id); if (!ss || !text) return;
@@ -1311,13 +1396,14 @@ function openModeSheet() {
   openSheet(`
     <div class="sh-h"><div><h3>How do you want to listen?</h3><p>Switch any time. Calls with characters work in every mode.</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="mode-list">
-      ${Object.entries(MODES).map(([k, m]) => `<button class="mode-opt ${cur === k ? 'on' : ''}" data-act="set-mode" data-m="${k}" ${k === 'voice' && !SR ? 'disabled' : ''}>
-        <span class="mo-ic">${ic(m.icon)}</span><span class="mo-t"><b>${m.name}${k === 'voice' && !SR ? ' · not supported in this browser' : ''}</b><small>${m.desc}</small></span>${cur === k ? ic('check') : ''}</button>`).join('')}
+      ${Object.entries(MODES).map(([k, m]) => `<button class="mode-opt ${cur === k ? 'on' : ''}" data-act="set-mode" data-m="${k}" ${k === 'voice' && !VOICE_OK ? 'disabled' : ''}>
+        <span class="mo-ic">${ic(m.icon)}</span><span class="mo-t"><b>${m.name}${k === 'voice' && !VOICE_OK ? ' · not supported in this browser' : ''}</b><small>${m.desc}</small></span>${cur === k ? ic('check') : ''}</button>`).join('')}
     </div>`, { kind: 'mode' });
 }
 function setMode(m) {
-  if (!MODES[m] || (m === 'voice' && !SR)) return;
+  if (!MODES[m] || (m === 'voice' && !VOICE_OK)) return;
   S.mode = m; save();
+  if (m === 'voice') primeMic(); else micRelease();
   closeSheet(); toast(`${ic(MODES[m].icon, 'sm')} ${MODES[m].name}`);
   updateModePill();
   if (P.needChoice) { closeAllSheets(); hfStop(); stopAutoCountdown(); endOfEpisodeFlow(); }
@@ -1356,7 +1442,7 @@ async function sendNext(id, text, via) {
   ss.chosen[P.ep.n] = via === 'silence' ? '' : text;
   ensureToday(); S.tasks.choices += 1;
   P.needChoice = false;
-  audio.pause(); P.cur = '';
+  if (!P.aux) audio.pause(); P.cur = '';
   const specText = via === 'auto' ? ((P.ep.choices || [])[0] || '') : text;
   const sp = (via === 'option' || via === 'auto') && SPEC.key === ss.sid + ':' + nextN ? SPEC.map[specText] : null;
   if (sp && sp.ep && sp.ep.n === nextN && sp.ep.lines && sp.ep.lines[0] && sp.ep.lines[0].url) {
@@ -1986,27 +2072,22 @@ function cycleCallSpeed() {
 
 /* hold-to-talk */
 function startCallMic(btn) {
-  if (!SR || !C || C.phase !== 'your-turn' || callRecog) return;
+  if (!VOICE_OK || !C || C.phase !== 'your-turn' || callRecog) return;
   const inp = $('#cl-text');
-  try {
-    callRecog = new SR();
-    callRecog.lang = LANG === 'zh' ? 'zh-CN' : 'en-US';
-    callRecog.interimResults = true;
-    let txt = '';
-    callRecog.onresult = (ev) => { txt = ''; for (let i = 0; i < ev.results.length; i++) txt += ev.results[i][0].transcript; if (inp) { inp.value = txt; inp.dispatchEvent(new Event('input')); } };
-    callRecog.onerror = (ev) => { if (ev.error === 'not-allowed') toast('Microphone permission denied'); };
-    callRecog.onend = () => {
-      btn.classList.remove('rec'); callRecog = null;
-      const t = (txt || (inp && inp.value) || '').trim();
-      if (t && C && C.phase === 'your-turn') sendCallTurn(t, 'voice');
-    };
-    btn.classList.add('rec');
-    if (inp) inp.placeholder = 'Listening… release to send';
-    callRecog.start();
-  } catch (e) { callRecog = null; btn.classList.remove('rec'); toast('Voice input unavailable'); }
+  btn.classList.add('rec');
+  if (inp) inp.placeholder = 'Listening… release to send';
+  const h = callRecog = recordAnswer({ manual: true, max: 30000, onState: (st) => { if (st === 'thinking' && inp) inp.placeholder = 'Got it — one moment…'; if (st === 'denied') toast('Microphone permission denied'); } });
+  h.done.then((r) => {
+    if (callRecog === h) callRecog = null;
+    btn.classList.remove('rec');
+    if (inp) inp.placeholder = 'Your reply';
+    if (r.canceled) return;
+    if (r.text && C && C.phase === 'your-turn') sendCallTurn(r.text, 'voice');
+    else if (r.spoke) toast("Didn't catch that — try again");
+  });
 }
-function releaseCallMic() { if (callRecog) { try { callRecog.stop(); } catch (e) { /* ignore */ } } }
-function stopCallMic() { if (callRecog) { try { callRecog.abort(); } catch (e) { /* ignore */ } callRecog = null; } }
+function releaseCallMic() { if (callRecog) callRecog.stop(); }
+function stopCallMic() { if (callRecog) { const r = callRecog; callRecog = null; r.cancel(); } }
 
 /* ---------- call screens ---------- */
 function hideCall() {
@@ -2110,7 +2191,7 @@ function renderCallUI(force) {
             <div class="cl-chips">${call.choices.map((c, i) => `<button class="cl-chip" data-act="call-choice" data-i="${i}">${esc(c)}</button>`).join('')}</div>
             <form class="cl-input" data-form="call" autocomplete="off">
               <div class="fld"><input id="cl-text" type="text" maxlength="300" placeholder="Say it your way…" enterkeyhint="send" aria-label="Your reply"><button class="ch-send" type="submit" aria-label="Send" disabled>${ic('send')}</button></div>
-              ${SR ? `<button class="ch-mic" type="button" id="cl-mic" aria-label="Hold to talk">${ic('mic')}</button>` : ''}
+              ${VOICE_OK ? `<button class="ch-mic" type="button" id="cl-mic" aria-label="Hold to talk">${ic('mic')}</button>` : ''}
             </form>
           </div>` : ''}
           <div class="cl-ctrl">
@@ -2232,7 +2313,7 @@ function refreshCallLists() {
 const callsFor = (sid) => CALLS.filter((r) => r.mode === (MOCK ? 'm' : 'r') && (!sid || r.series === sid) && byId(r.series));
 const recById = (rid) => CALLS.find((r) => r.rid === rid);
 const recLines = (r) => r.turns.reduce((n, t) => n + t.him.length + (t.her ? 1 : 0), 0);
-const fmtWhen = (t) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const fmtWhen = (t) => new Date(t).toLocaleString(LANG === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 function transcriptHtml(r) {
   if (!r || !r.turns.some((t) => t.her || t.him.length)) return '<p class="cl-tr-empty">No conversation yet.</p>';
   return r.turns.map((t) => (t.her ? `<div class="tr-row you"><span>You</span><p>${t.her.via === 'silence' || !t.her.text ? '<em>(stayed silent)</em>' : esc(t.her.text)}</p></div>` : '')
@@ -2729,7 +2810,7 @@ function renderRewards() {
     <section class="panel">
       <div class="panel-h"><h3>Coin history</h3><span>${S.ledger.length} records</span></div>
       ${S.ledger.length ? S.ledger.slice(0, 30).map((h) => `
-        <div class="hist-row"><span>${esc(h.l)}<small>${new Date(h.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></span><b class="${h.d >= 0 ? 'plus' : 'minus'}">${h.d >= 0 ? '+' : ''}${h.d}</b></div>`).join('') : '<div class="empty" style="padding:16px">No coin activity yet.</div>'}
+        <div class="hist-row"><span>${esc(h.l)}<small>${new Date(h.t).toLocaleString(LANG === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></span><b class="${h.d >= 0 ? 'plus' : 'minus'}">${h.d >= 0 ? '+' : ''}${h.d}</b></div>`).join('') : '<div class="empty" style="padding:16px">No coin activity yet.</div>'}
     </section>`;
 }
 
@@ -3117,6 +3198,7 @@ function tickUI() {
   const f = P.needChoice ? 1 : epFraction();
   const mb = $('#mini-bar'); if (mb) mb.style.width = (f * 100).toFixed(2) + '%';
   if (!playerOpen && !$('#player').classList.contains('on')) return;
+  if (P.scrubF != null) return;
   if (!ep || P.gen || P.loading) { $('#pl-el').textContent = '0:00'; $('#pl-tot').innerHTML = P.gen ? '<span class="live"><span class="dots-pulse"><i></i><i></i><i></i></span> LIVE</span>' : '--:--'; $('#pl-fill').style.width = '0%'; $('#pl-knob').style.left = '0%'; return; }
   if (ep.kind !== 'live') {
     const d = audio.duration || ep.dur || 0, t = P.needChoice ? d : audio.currentTime || 0;
@@ -3146,17 +3228,32 @@ function tickUI() {
 function bindScrub(bar) {
   let drag = false;
   const at = (e) => { const r = bar.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1); };
+  const preview = (f) => {  // move the knob and the time only; seeking on every pointermove made the audio stutter
+    const ep = P.ep; if (!ep || !P.cur || P.needChoice || P.gen) return;
+    P.scrubF = f;
+    $('#pl-fill').style.width = (f * 100) + '%'; $('#pl-knob').style.left = (f * 100) + '%';
+    if (ep.kind !== 'live') { const d = audio.duration || ep.dur || 0; $('#pl-el').textContent = fmtTime(f * d); }
+  };
   const apply = (f) => {
+    P.scrubF = null;
     const ep = P.ep; if (!ep || !P.cur || P.needChoice || P.gen) return;
     if (ep.kind !== 'live') { const d = audio.duration || ep.dur; if (d) { audio.currentTime = f * d; tickUI(); } return; }
     const lines = ep.lines || [];
-    const i = Math.floor(f * lines.length);
+    const i = Math.min(lines.length - 1, Math.floor(f * lines.length));
     if (i !== P.idx && lines[i] && lines[i].url) { P.idx = i; liveAdvance(); }
   };
-  bar.addEventListener('pointerdown', (e) => { drag = true; try { bar.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } if (P.ep && P.ep.kind !== 'live') apply(at(e)); });
-  bar.addEventListener('pointermove', (e) => { if (drag && P.ep && P.ep.kind !== 'live') apply(at(e)); });
-  bar.addEventListener('pointerup', (e) => { if (drag && P.ep && P.ep.kind === 'live') apply(at(e)); drag = false; });
-  bar.addEventListener('pointercancel', () => { drag = false; });
+  bar.addEventListener('pointerdown', (e) => { drag = true; try { bar.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } preview(at(e)); });
+  bar.addEventListener('pointermove', (e) => { if (drag) preview(at(e)); });
+  bar.addEventListener('pointerup', (e) => { if (drag) { drag = false; apply(at(e)); } });
+  bar.addEventListener('pointercancel', () => { drag = false; P.scrubF = null; tickUI(); });
+}
+const LINE_WARM = new Map();
+function warmLines(ep) {  // every line of a live episode is its own small file: preload them all so jumping around is instant
+  (ep && ep.lines || []).forEach((l) => {
+    if (!l.url || LINE_WARM.has(l.url)) return;
+    try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.src = absUrl(l.url); a.load(); LINE_WARM.set(l.url, a); } catch (e) { /* ignore */ }
+  });
+  while (LINE_WARM.size > 40) { const k = LINE_WARM.keys().next().value; LINE_WARM.delete(k); }
 }
 
 function openPlayer() {
@@ -3284,10 +3381,10 @@ document.addEventListener('click', (e) => {
     case 'mode-sheet': openModeSheet(); break;
     case 'set-mode': setMode(el.dataset.m); break;
     case 'talk': openTalkSheet(); break;
-    case 'talk-mic': if (SR) { if (talkRecog) stopTalk(); else talkListen(); } break;
+    case 'talk-mic': if (VOICE_OK) { if (talkRec) talkRec.stop(); else talkListen(); } break;
     case 'hf-again': hfListen(); break;
-    case 'hf-stop': if (HF.recog) { try { HF.recog.stop(); } catch (e) { /* ignore */ } } break;
-    case 'ch-wait': stopAutoCountdown(); hfStop(); toast('Take your time'); break;
+    case 'hf-stop': if (HF.rec) HF.rec.stop(); break;
+    case 'ch-wait': holdForHer(); break;
     case 'me-chip': { const t = $('#pf-me'); if (t) { t.value = (t.value ? t.value.trim() + ' ' : '') + el.dataset.t; t.focus(); } break; }
     case 'ul-coins': {
       const t = topSheet(); if (!t || t.kind !== 'unlock') break;

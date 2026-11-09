@@ -4,7 +4,7 @@
 - 第 2 集起：她选了什么 → 编剧层按世界卡（data/world/<id>.json）写下一集，逐行流式输出，每写完一句就送去合成。
   编剧：DIRECTOR_CLI 设了就用本机 Claude Code（Opus 5.5），失败退回 OpenRouter（WRITER_FALLBACK，默认 GLM-5.3-prime）。
 用法：python3 unscripted_audio_server.py <token> <port>（名字故意起得独一无二：别的会话会按 server.py 之类的通用名批量杀进程）"""
-import json, os, queue, random, re, string, subprocess, sys, threading, time, traceback, base64
+import json, os, queue, shutil, random, re, string, subprocess, sys, threading, time, traceback, base64
 import urllib.request as U
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -160,8 +160,12 @@ def ep1_script(series, lang):
 
 
 def ep1_cached(series, lang):
+    """第 1 集成品。音频走 App 同域名（app/ep1/，Pages 的 CDN）：云存储首字节约 3 秒、拖进度条每次都要等，同域名秒开、拖动不卡。"""
     f = CACHE / 'ep1' / f'{series}.{lang}.json'
-    return json.load(open(f)) if f.exists() else None
+    if not f.exists(): return None
+    ep = json.load(open(f))
+    if (APP / 'ep1' / f'{series}.{lang}.mp3').exists(): ep = dict(ep, audio=f'ep1/{series}.{lang}.mp3', audio_cdn=ep.get('audio'))
+    return ep
 
 
 def produce_ep1(series, lang, job=None):
@@ -200,6 +204,7 @@ def produce_ep1(series, lang, job=None):
         out = CACHE / 'ep1' / f'{series}.{lang}.mp3'
         subprocess.run([FF, '-v', 'error', '-y', *inputs, '-filter_complex', fc, '-map', '[o]', '-ar', '44100', '-ac', '1', '-b:a', '96k', str(out)], check=True)
         url = upload(out)
+        (APP / 'ep1').mkdir(exist_ok=True); shutil.copy(out, APP / 'ep1' / out.name)  # 同域名一份（publish.sh 推到 Pages）
         ep = {'n': 1, 'title': s['title'], 'kind': 'produced', 'audio': url, 'dur': round(dur(out), 1), 'cues': cues, 'prompt': s['prompt'], 'choices': s['choices']}
         json.dump(ep, open(CACHE / 'ep1' / f'{series}.{lang}.json', 'w'), ensure_ascii=False, indent=1)
         return ep
@@ -214,6 +219,7 @@ RULES = {
 - 所有旁白和台词都用中文，只有人名保留英文；不要英文句子，不要“亲爱的/宝贝”。
 - 先接住她上一集结尾的选择/她说的话（第一句就回应），再往前推一步剧情（按 story_map，她有明确导向时按她的来，不插预设事件、不替她说身份）。
 - 一集 9–13 句，旁白和台词交替，每句不超过 45 个字；有一个小高潮，结尾停在角色出的招上。
+- 她可能用中文也可能用英文回答（打字或说话，语音识别可能有错字），都照样理解她的意思；你的输出始终全部用中文。
 - 可以在句首少量用音频标签：[softly] [quietly] [low] [sighs] [exhales] [chuckles softly] [tense] [urgent] [whispering]，每 4 句最多 1 个。''',
  'en': '''Writing rules (English serialized audio drama, 60–90 seconds per episode):
 - Pure audio; the listener IS the heroine "you". Narrator NARR in second person, present tense, short, close to the ear; sound, smell, touch, distance.
@@ -221,6 +227,7 @@ RULES = {
 - Characters call her by her name "{name}" (not the name in the source material), once or twice per episode.
 - First line answers her choice/what she said at the end of the last episode; then move the story one step (follow story_map, but if she steers, follow her; never invent her identity).
 - 9–13 lines per episode, alternate narrator and dialogue, each line under 30 words; one small peak; end on a move the character makes.
+- She may answer in English or Chinese (typed or spoken; speech recognition may have typos). Understand her either way; your output is always entirely in English.
 - Sparse ElevenLabs tags at line start: [softly] [quietly] [low] [sighs] [exhales] [chuckles softly] [tense] [urgent] [whispering], at most 1 per 4 lines. No "baby/darling".'''}
 
 FORMAT = '''OUTPUT FORMAT — plain lines only, in this order, nothing else:
@@ -615,7 +622,7 @@ CALL_RULES = {
 - 严格按人设和说话方式说话；只说他这时候知道的事，世界卡里的真相按节奏透露，不一次说破。
 - 记得你们在剧里经历过的事（见“剧里到目前为止”），可以提起具体细节；她有明确想聊的方向就跟着她。
 - 每轮往前推一点：问她一个问题、提出一个约定、说出一点心里话或一个小秘密。偶尔叫她的名字，不要每句都叫。
-- 一律中文（人名保留英文），不要“亲爱的/宝贝”。可以在句首少量用 [softly] [quietly] [sighs] [chuckles softly] [exhales]，每轮最多 1 个。
+- 她可能说中文也可能说英文（语音识别可能有错字），照样听懂；你一律用中文回（人名保留英文），不要“亲爱的/宝贝”。可以在句首少量用 [softly] [quietly] [sighs] [chuckles softly] [exhales]，每轮最多 1 个。
 - 通话到第 10 轮左右自然收尾，给一个让她想再打来的钩子，HANGUP: yes。""",
  'en': """This is a phone call, voice only. You play only {who} ({role}); on the other end is her (the listener), named "{name}".
 - Write only what {who} says into the phone: short, natural late-night phone talk; no narration, no actions, no brackets.
@@ -623,6 +630,7 @@ CALL_RULES = {
 - Stay strictly in character; only say what he knows now; reveal the world-card truths gradually, never all at once.
 - Remember what you've been through in the story (see "story so far") and bring up specifics; if she steers, follow her.
 - Each turn moves things a little: ask her something, make a promise, admit a feeling or a small secret. Use her name now and then, not every line.
+- She may speak English or Chinese (speech recognition may have typos); understand her either way and always answer in English.
 - No "baby/darling". Sparse tags at line start allowed: [softly] [quietly] [sighs] [chuckles softly] [exhales], at most one per turn.
 - Around turn 10, wrap up naturally with a hook that makes her want to call again, HANGUP: yes."""}
 CALL_FORMAT = """OUTPUT FORMAT — plain lines only, nothing else:
@@ -851,6 +859,17 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == '/api/asr':  # 手机录的几秒语音 → 本机 faster-whisper（unscripted_asr.py，8917），中英文自动判断
+            q = parse_qs(u.query)
+            if q.get('k', [''])[0] != TOKEN: return self._send(403, {'error': 'bad key'})
+            n = int(self.headers.get('Content-Length') or 0)
+            data = self.rfile.read(n) if 0 < n <= 8_000_000 else b''
+            if not data: return self._send(400, {'error': 'empty'})
+            try:
+                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0]})
+                return self._send(200, json.loads(op.open(req, timeout=30).read()))
+            except Exception as e:
+                return self._send(200, {'text': '', 'error': 'asr unavailable: ' + repr(e)[:120]})
         try: body = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)) or b'{}')
         except Exception: return self._send(400, {'error': 'bad json'})
         if body.get('k') != TOKEN: return self._send(403, {'error': 'bad key'})
