@@ -1,4 +1,8 @@
 {
  "base": "https://textbook-cameron-helps-steel.trycloudflare.com",
- "updated": "2026-11-06T00:59:49-0800"
+ "bases": [
+  "https://textbook-cameron-helps-steel.trycloudflare.com",
+  "https://moss-numerous-accompanied-session.trycloudflare.com"
+ ],
+ "updated": "2026-11-09T01:57:02-0800"
 }
