@@ -1476,7 +1476,15 @@ function hfListen() {
     HF.rec = null;
     if (HF.key !== key || !P.needChoice || r.canceled) return;
     stopAutoCountdown();
-    if (r.text) { HF.phase = 'heard'; HF.heard = r.text; paintHF(); earcon('ok'); setTimeout(() => { if (HF.key === key && P.needChoice) submitChoice(r.text, 'voice'); }, 500); return; }
+    if (r.text) {
+      // heard her (also on the lock screen): the story goes her way right away, and the narrator says so out loud
+      HF.phase = 'heard'; HF.heard = r.text; paintHF(); earcon('ok');
+      submitChoice(r.text, 'voice');
+      // only while her episode is being written (a pre-written one starts playing at once and must not be talked over);
+      // afterwards the quiet bed again, so the lock-screen audio never stops before the new episode arrives
+      if (P.gen) playAux(`ack.${LANG}.mp3`).then(() => { if (P.gen) keepAlive(); });
+      return;
+    }
     if (r.denied) { HF.phase = 'denied'; paintHF(); startAutoCountdown(WAIT, 'Mic is off · the story continues in'); return; }
     continueOnItsOwn(r.spoke ? 'unclear' : 'quiet');  // nothing said, or nothing recognizable → the fallback path, no pause
   });
@@ -4078,7 +4086,7 @@ async function boot() {
   // drop live sessions with a different language/mode? keys already include both.
   if (location.hash === '#/player') history.replaceState(null, '', location.pathname + location.search + '#/home');
   if (!S.onboarded) { renderOnboard(); showTab('home'); }
-  else { route(); primeMicOnEntry(); }
+  else { route(); primeMicOnEntry(); if (modeOf() === 'voice') fetchLocalBlob(`ack.${LANG}.mp3`); }
   if (TTS !== 'v4') setTimeout(() => toast(LANG === 'zh' ? `配音测试：${TTS === 'turbo' ? 'Eleven v4 Turbo（低延迟）' : 'Eleven Turbo v2.5（实时）'} · 第 2 集起生效` : `Voice test: ${TTS === 'turbo' ? 'Eleven v4 Turbo (low latency)' : 'Eleven Turbo v2.5 (realtime)'} · from Episode 2`), 900);
   renderMini();
 }

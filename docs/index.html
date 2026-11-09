@@ -20,7 +20,7 @@
 window.__relayP = fetch('relay.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
 try { var b = localStorage.getItem('ua.relay'); if (b) { b = JSON.parse(b); var l = document.createElement('link'); l.rel = 'preconnect'; l.href = b; l.crossOrigin = ''; document.head.appendChild(l); } } catch (e) {}
 </script>
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -59,7 +59,7 @@ try { var b = localStorage.getItem('ua.relay'); if (b) { b = JSON.parse(b); var 
   <audio id="voice" preload="auto" playsinline webkit-playsinline></audio>
 </div>
 
-<script src="i18n.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="i18n.js?v=28"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>
