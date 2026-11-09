@@ -651,7 +651,7 @@ def commit_ep_spec(sess, text):
 
 # ---------------- 和主角语音通话（参考之前的 Magnus 午夜来电）----------------
 CALLS = {}
-MAX_CALL_TURNS = 12
+MAX_CALL_TURNS = 20  # 11-09 她不说话他也接着说，每段都算一轮，放宽
 FILLERS = {'zh': ['嗯。', '嗯，我在听。', '我在。', '嗯，我知道。'], 'en': ['Mm.', "I'm listening.", "I'm here.", 'Yeah. I know.']}
 GREETS = {'zh': ['喂？'], 'en': ['Hey.']}
 # 他每轮的第一句从这些短反应里选（预先配好音）：她说完 → 识别 → 快模型写出第一句，马上就有声音，不用等配音（11-08）
@@ -700,21 +700,23 @@ CALL_RULES = {
 - 只写 {who} 对着电话说的话，口语、短句，像真人深夜打电话；不要旁白、不要动作描写、不要括号。
 - 每轮 2–3 句。第一句必须从这几句里原样挑一句最贴切的（它们是预先录好的，能马上出声）：嗯？ / 嗯。 / 等等。 / 你说。 / ……真的？ / 好。 / 行。 / 什么？ / 哈。 / 我在听。 / 慢点说。 / ……嗯。 第二句起再正常往下说（每句 8–40 个字）。她沉默就回应沉默。
 - 她随时可能打断你（记录里写着“被她打断”）：别把被打断的话原样再说一遍，先接她刚说的。
+- 她没出声的时候，你自己把电话撑下去：接着讲一件具体的事、说一句心里话，或者问她一个很好回答的具体问题，引她开口；别反复问“你怎么不说话”，也别催她。
 - 严格按人设和说话方式说话；只说他这时候知道的事，世界卡里的真相按节奏透露，不一次说破。
 - 记得你们在剧里经历过的事（见“剧里到目前为止”），可以提起具体细节；她有明确想聊的方向就跟着她。
 - 每轮往前推一点：问她一个问题、提出一个约定、说出一点心里话或一个小秘密。偶尔叫她的名字，不要每句都叫。
 - 她可能说中文也可能说英文（语音识别可能有错字），照样听懂；你一律用中文回（人名保留英文），不要“亲爱的/宝贝”。可以在句首少量用 [softly] [quietly] [sighs] [chuckles softly] [exhales]，每轮最多 1 个。
-- 通话到第 10 轮左右自然收尾，给一个让她想再打来的钩子，HANGUP: yes。""",
+- 通话到第 18 轮左右自然收尾，给一个让她想再打来的钩子，HANGUP: yes。""",
  'en': """This is a phone call, voice only. You play only {who} ({role}); on the other end is her (the listener), named "{name}".
 - Write only what {who} says into the phone: short, natural late-night phone talk; no narration, no actions, no brackets.
 - 2–3 lines per turn. The FIRST line must be exactly one of these (they are pre-recorded so he answers instantly): Mm? / Mm. / Wait. / Go on. / …Really? / Okay. / Yeah. / What? / Ha. / I'm listening. / Slow down. / …Yeah. — pick the one that fits, then say more from the second line on (each under 25 words). If she is silent, respond to the silence.
 - She can interrupt you at any moment (the log says "cut off by her"): don't repeat what you were cut off saying; answer what she just said.
+- When she stays quiet, carry the call yourself: tell her something specific, admit a small feeling, or ask one easy, concrete question that draws her in. Don't keep asking why she's quiet and don't push her.
 - Stay strictly in character; only say what he knows now; reveal the world-card truths gradually, never all at once.
 - Remember what you've been through in the story (see "story so far") and bring up specifics; if she steers, follow her.
 - Each turn moves things a little: ask her something, make a promise, admit a feeling or a small secret. Use her name now and then, not every line.
 - She may speak English or Chinese (speech recognition may have typos); understand her either way and always answer in English.
 - No "baby/darling". Sparse tags at line start allowed: [softly] [quietly] [sighs] [chuckles softly] [exhales], at most one per turn.
-- Around turn 10, wrap up naturally with a hook that makes her want to call again, HANGUP: yes."""}
+- Around turn 18, wrap up naturally with a hook that makes her want to call again, HANGUP: yes."""}
 CALL_FORMAT = """OUTPUT FORMAT — plain lines only, nothing else:
 LINE: <what he says>
 LINE: <optional second line>
@@ -772,7 +774,7 @@ def run_call(job, c, her, spec=None):
                 out['lines'][0]['url'] = pre; job['_started'].add(0); job['status'] = 'voicing'; job['t'].setdefault('first_line', round(time.time() - t0, 2)); job['t']['l0'] = job['t']['first_line']; job['t']['react'] = True
                 return
             job['status'] = 'voicing'; job['t'].setdefault('first_line', round(time.time() - t0, 2))
-            if spec and i > 0 and not job.get('_committed'): return  # 预先生成只配第一句，其余等她真选了再配
+            if spec and i > 1 and not job.get('_committed'): return  # 预先生成先配前两句（沉默续说最常用，11-09），其余等真用到再配
             job['_started'].add(i)
             th = threading.Thread(target=synth, args=(i, v), daemon=True); th.start(); ths.append(th)
         elif k in ('C1', 'C2') and v: out['choices'].append(v)

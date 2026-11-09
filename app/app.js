@@ -534,6 +534,20 @@ const GENRE_TILE = {
   Werewolf: '#6B4E16', Billionaire: '#2F4A3A', Romance: '#8A2E3B', Fantasy: '#2D3F7A',
   Mystery: '#3B3550', Thriller: '#4A2A2A', 'Reality show': '#7A4A1C', Cozy: '#6E5532',
 };
+/** how well a series fits the tastes she picked in onboarding (first pick weighs most) + what she's been listening to */
+function prefScore(s) {
+  let n = 0;
+  (S.genres || []).forEach((g, i) => {
+    const w = i === 0 ? 1.5 : 1;   // her first pick weighs most
+    if ((s.genres || []).indexOf(g) >= 0) n += 4 * w;                 // the series is literally that genre (Fantasy → the merman)
+    else if ((s.genres || [])[0] && (GENRE_MAP[g] || []).indexOf(s.genres[0]) >= 0) n += 2.5 * w;  // its main genre belongs to it
+    else if (matchGenre(s, g)) n += 1.5 * w;                          // a side tag belongs to it
+  });
+  const played = Object.values(S.progress || {}).map((x) => byId(x.id)).filter(Boolean);
+  if (played.some((p) => p.id !== s.id && (p.genres || []).some((g) => (s.genres || []).indexOf(g) >= 0))) n += 0.5;
+  return n;
+}
+const byPref = (list) => list.map((s, i) => [s, prefScore(s), i]).sort((a, b) => b[1] - a[1] || a[2] - b[2]).map((x) => x[0]);
 const matchGenre = (s, g) => {
   const keys = GENRE_MAP[g] || [g];
   return (s.genres || []).some((x) => keys.indexOf(x) >= 0) || (s.tags || []).some((t) => keys.indexOf(t) >= 0);
@@ -660,6 +674,16 @@ function fetchBlob(u) {
   return r.p;
 }
 const blobNow = (u) => { const r = BLOB.get(u); return r && r.obj; };
+/** Episode 1 lives next to the page (ep1/<id>.<lang>.mp3, ~2 MB): fetch the whole file into memory ahead of the tap,
+ * so "Play now" starts with zero network (11-09: phones still waited on the first range request). Max 4 kept. */
+const EP1_KEEP = [];
+function fetchLocalBlob(u) {
+  if (MOCK || !u || /^https?:/.test(u) || BLOB.has(u)) return;
+  const r = { obj: null }; BLOB.set(u, r);
+  r.p = fetch(absUrl(u)).then((x) => (x.ok ? x.blob() : null)).then((b) => { if (b && b.size) r.obj = URL.createObjectURL(b.type ? b : new Blob([b], { type: 'audio/mpeg' })); return r.obj; }).catch(() => { BLOB.delete(u); return null; });
+  EP1_KEEP.push(u);
+  while (EP1_KEEP.length > 4) { const k = EP1_KEEP.shift(); const o = BLOB.get(k); if (o && o.obj && k !== P.cur) { URL.revokeObjectURL(o.obj); BLOB.delete(k); } }
+}
 const srcFor = (u) => blobNow(u) || absUrl(u);
 function loadSrc(url, at) {
   P.aux = false; P.auxEnd = null; audio.loop = false; audio.volume = 1;  // swap straight from the bed/question to the story (no pause: keeps the lock screen alive)
@@ -1240,7 +1264,10 @@ async function micStream() {
   VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   VI.denied = false;
   // iOS switches the audio session when the mic opens and may pause the story that is playing: pick it straight back up
-  [150, 700].forEach((ms) => setTimeout(() => { if (((P.want && P.cur && !P.waiting) || (P.aux && audio.loop)) && audio.paused && !callActive()) audio.play().catch(() => {}); }, ms));
+  [150, 700].forEach((ms) => setTimeout(() => {
+    if (((P.want && P.cur && !P.waiting) || (P.aux && audio.loop)) && audio.paused && !callActive()) audio.play().catch(() => {});
+    if (callActive() && callAudio.paused && (callAudio.dataset.loop || (C && (C.playing || C.fillerPlaying) && !C.held))) callAudio.play().catch(() => {});  // ring / his line
+  }, ms));
   unlockCtx();
   try {
     if (actx) { const src = actx.createMediaStreamSource(VI.stream); VI.an = actx.createAnalyser(); VI.an.fftSize = 1024; src.connect(VI.an); VI.buf = new Float32Array(VI.an.fftSize); }
@@ -1250,7 +1277,7 @@ async function micStream() {
 /** Mic off unless something is listening right now (11-09): on iPhone an open mic puts the page in play-and-record,
  * and the story's <audio> could then sit at 0:00 "playing" with no sound. Permission stays granted for the page. */
 let micBusy = 0;
-const lockHold = () => LOCK_VOICE_OK && modeOf() === 'voice' && !!P.id && (P.want || P.needChoice || !!P.gen || (Date.now() - (P.pausedAt || 0) < 60000));
+const lockHold = () => LOCK_VOICE_OK && modeOf() === 'voice' && S.onboarded && !VI.denied;  // Safari + Hands-free: mic stays on from opening the app (switching it on at Play delayed the start)
 function micPark() {
   if (callActive() || HF.rec || callRecog || talkRec || micBusy || lockHold()) return;
   micRelease();
@@ -1923,7 +1950,7 @@ function langUrl(l) {
  * ========================================================================= */
 const CALL_PRICE = 20;
 const tz = (en, zh) => (LANG === 'zh' ? zh : en);
-const CALL_WAIT = 9000;   // after he finishes: how long the mic waits for her to start talking before he carries on
+const CALL_WAIT = 3500;   // 11-09: a real call doesn't wait for "your turn" — if she says nothing he carries on / draws her in   // after he finishes: how long the mic waits for her to start talking before he carries on
 const MIN_RING = 2600;    // an outgoing call rings at least this long before he picks up (feels like a real call; covers his first line)
 const callAudio = new Audio();
 callAudio.preload = 'auto';
@@ -1994,6 +2021,7 @@ function primeCallAudio() {
 }
 let callGain = null, callSrcTok = 0;
 function callRoute() {
+  return;  // 11-09: disabled — routing <audio> through WebAudio made the ring/his voice silent whenever iOS suspended the AudioContext
   if (callGain || !actx) return;
   try { const src = actx.createMediaElementSource(callAudio); callGain = actx.createGain(); src.connect(callGain); callGain.connect(actx.destination); } catch (e) { callGain = null; }
 }
@@ -2269,6 +2297,7 @@ function toggleCallSpeaker() {
   const call = C; if (!call) return;
   call.speaker = call.speaker === false;
   applyCallVolume(); renderCallUI(true);
+  if (IOS) toast(call.speaker === false ? tz('Earpiece: hold the phone to your ear and turn the volume down', '听筒：把手机贴近耳朵，用侧边音量键调小') : tz('Speaker on', '免提已打开'));
 }
 
 /* ---------- full-duplex call ear (11-08): the mic listens for the whole call. She can talk any time — over him too:
@@ -2405,8 +2434,8 @@ async function sendCallTurn(text, via) {
   recHer(call, text, via);
   const turn = call.turn;
   Object.assign(call, { lines: [], idx: 0, jobDone: false, choices: [], logged: new Set(), caption: null, phase: 'thinking', waiting: true });
-  playFiller();
-  if (!call.fillerPlaying) scheduleThink(call, turn); // no filler available: count from the send
+  if (!silent) playFiller();   // when she stayed quiet he just carries on — no "Mm." first
+  if (!call.fillerPlaying && !silent) scheduleThink(call, turn); // no filler available: count from the send
   renderCall();
   try {
     const r = await API.callTurn({ cid: call.cid, text: silent ? '' : text, via });
@@ -2546,6 +2575,9 @@ function renderCallUI(force) {
       key = 'think' + call.turn + (call.greeting ? 'g' : '') + (call.t0 ? 't' : '');
       html = call.greeting ? `<span class="who">${esc(name)}</span><p class="txt fade">${esc(tz('Hey.', '喂？'))}</p>`
         : `<div class="cl-think">${!call.t0 ? tz('Connecting', '正在接通') : call.direction === 'outgoing' && call.turn === 0 ? tz(`${esc(name)} picked up`, `${esc(name)} 接起来了`) : tz(`${esc(name)} is thinking`, `${esc(name)} 在想`)}<span class="dots-pulse"><i></i><i></i><i></i></span></div>`;
+    } else if (call.phase === 'your-turn' && EAR.on) {
+      key = 'live' + call.turn + ':' + call.idx;
+      html = `${call.said ? `<p class="cl-you">${tz('You', '你')}：${esc(call.said)}</p>` : ''}${call.caption ? `<span class="who">${esc(name)}</span><p class="txt dim">${esc(call.caption.text)}</p>` : ''}<p class="cl-hint2">${call.muted ? tz('Mic muted', '麦克风已静音') : tz('On the call — talk any time', '通话中 · 随时可以说话')}</p>`;
     } else if (call.phase === 'your-turn') {
       const ls = call.listen || 'listening';
       key = 'you' + call.turn + ls;
@@ -2942,16 +2974,17 @@ let heroTimer = 0;
 function renderHome() {
   const el = $('#v-home');
   const order = ['magnus', 'rian', 'island', 'lena', 'rafael', 'rowan', 'mii'];
-  const sorted = order.map(byId).filter(Boolean).concat(SERIES.filter((s) => order.indexOf(s.id) < 0));
+  const sorted = byPref(order.map(byId).filter(Boolean).concat(SERIES.filter((s) => order.indexOf(s.id) < 0)));  // her picked tastes first
   const heroes = sorted.slice(0, 5);
   const cont = continueItems();
   setTimeout(() => cont.slice(0, 2).forEach((x) => warmResume(x.id || (x.s && x.s.id))), 400);  // the top "continue" rows start instantly
+  setTimeout(() => heroes.slice(0, 2).forEach((s) => warmEp1(s)), 900);  // "Play now" on the first featured stories starts from memory
   const fav = (S.genres && S.genres[0]) || 'Werewolf';
   const becauseLabel = fav === 'Werewolf' ? 'werewolf romance' : fav.toLowerCase();
   const because = SERIES.filter((s) => (S.genres.length ? S.genres.some((g) => matchGenre(s, g)) : matchGenre(s, 'Werewolf') || matchGenre(s, 'Romance')));
-  const becauseList = because.concat(SERIES.filter((s) => because.indexOf(s) < 0));
+  const becauseList = byPref(because).concat(SERIES.filter((s) => because.indexOf(s) < 0));
   const top = SERIES.slice().sort((a, b) => parseFloat(rankScore(b)) - parseFloat(rankScore(a)));
-  const fresh = ['lena', 'rian', 'island', 'mii', 'rowan', 'rafael', 'magnus'].map(byId).filter(Boolean);
+  const fresh = byPref(['lena', 'rian', 'island', 'mii', 'rowan', 'rafael', 'magnus'].map(byId).filter(Boolean));
   const binge = SERIES.slice().sort((a, b) => ((b.stats || {}).rating || 0) - ((a.stats || {}).rating || 0));
   el.innerHTML = `
     ${topbar()}
@@ -2984,7 +3017,7 @@ function renderHome() {
           <div class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></div>
         </button>`; }).join('')}</div>
     </section>` : ''}
-    <div class="chips" role="list">${GENRES.map((g) => `<button class="chip" data-act="genre" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+    <div class="chips" role="list">${(S.genres || []).filter((g) => GENRES.indexOf(g) >= 0).concat(GENRES.filter((g) => (S.genres || []).indexOf(g) < 0)).map((g) => `<button class="chip" data-act="genre" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
     <section class="shelf">
       <div class="shelf-h"><h3>Top 10 this week</h3></div>
       <div class="row">${top.slice(0, 10).map((s, i) => `
@@ -3017,6 +3050,7 @@ function setupHero() {
   const upd = () => {
     const w = track.clientWidth; if (!w) return;
     i = Math.round(track.scrollLeft / (track.firstElementChild.clientWidth + 10));
+    const sl = track.children[i]; if (sl && sl.dataset.id) warmEp1(byId(sl.dataset.id));
     dots.forEach((d, k) => d.classList.toggle('on', k === i));
   };
   track.addEventListener('scroll', () => { requestAnimationFrame(upd); }, { passive: true });
@@ -3204,7 +3238,8 @@ function warmResume(id) {
 }
 function warmEp1(s) {
   const u = s && s.ep1 && s.ep1.audio;
-  if (!u || MOCK || getSess(s.id) || WARM.some((a) => a.dataset.u === u)) return;
+  if (u && !getSess(s.id)) fetchLocalBlob(u);
+  if (!u || MOCK || getSess(s.id) || /^ep1\//.test(u) || WARM.some((a) => a.dataset.u === u)) return;
   try {
     const a = new Audio(); a.preload = 'auto'; a.muted = true; a.dataset.u = u; a.src = absUrl(u); a.load();
     WARM.push(a); while (WARM.length > 2) { const o = WARM.shift(); o.removeAttribute('src'); o.load(); }
@@ -3962,14 +3997,14 @@ function renderOnboard() {
       </div>
       <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">Get started</button></div>`;
   } else if (obStep === 1) {
-    const m = byId('magnus') || SERIES[0];
+    const m = byId('rian') || SERIES[0];
     body = `
       <form class="ob-body" data-form="ob-name" autocomplete="off">
         <p class="ob-step-l">Step 2 of 3</p>
         <h1 class="ob-title">What should they call you?</h1>
         <p class="ob-sub">Characters will say your name in the story.</p>
         <div class="ob-name"><input id="ob-name" maxlength="24" placeholder="Your name" value="${esc(S.name)}" autocomplete="given-name" enterkeyhint="next" aria-label="Your name"></div>
-        <div class="ob-bubble"><img src="${esc(avatarOf(m))}" alt=""><p id="ob-preview" translate="no">${LANG === 'zh' ? `“十分钟。我只有十分钟了，<b>${esc(S.name || '…')}</b>。”` : `“Ten minutes. That's all I have, <b>${esc(S.name || '…')}</b>.”`}</p></div>
+        <div class="ob-bubble"><img src="${esc(avatarOf(m))}" alt=""><p id="ob-preview" translate="no">${LANG === 'zh' ? `“别松开我的手。从现在起，你是我未来的新娘，<b>${esc(S.name || '…')}</b>。”` : `“Don't let go of my hand. As of now, you're my future bride, <b>${esc(S.name || '…')}</b>.”`}</p></div>
       </form>
       <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">Continue</button><button class="link-btn" data-act="ob-next" data-skip="1">Skip for now</button></div>`;
   } else {
