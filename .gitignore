@@ -19,3 +19,5 @@ data/ep1/dorian.*
 data/ep1/hear.*
 data/ep1/mask.*
 data/ep1/milo.*
+qa/**/*.mp3
+qa/**/*.wav
