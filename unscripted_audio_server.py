@@ -51,6 +51,10 @@ def ep1_with_visuals(ep, series, lang):
 STATS = {'magnus': ('2.4M', 4.9), 'rafael': ('1.1M', 4.8), 'rowan': ('640K', 4.7), 'rian': ('890K', 4.8), 'island': ('1.6M', 4.7), 'lena': ('720K', 4.8), 'mii': ('530K', 4.9),
          'kael': ('1.9M', 4.9), 'villa': ('1.4M', 4.8), 'dorian': ('2.1M', 4.9), 'hear': ('980K', 4.8), 'mask': ('760K', 4.7), 'milo': ('610K', 4.8)}  # perhaps-worlds 6 部  # 展示用
 MODEL_TTS = 'elevenlabs/eleven-v4'
+# 配音引擎（11-08 测试开关，链接带 &tts=）：v4 默认；turbo = Eleven v4 Turbo（低延迟版，同一批声线，中文测试用）；flash = Eleven Turbo v2.5（实时向）。
+# 11-08 同一句中文经 MCP 各测 3 次：v4 7.3–9.0 秒、v4-turbo 6.0–8.5、turbo-v2.5 4.8–8.1（Waku 批量任务本身约 4–5 秒，模型差别被盖住）
+TTS_ENGINES = {'v4': 'elevenlabs/eleven-v4', 'turbo': 'elevenlabs/eleven-v4-turbo', 'flash': 'elevenlabs/turbo-v2.5'}
+def tts_engine(x): return x if x in TTS_ENGINES else 'v4'
 FALLBACK = os.environ.get('WRITER_FALLBACK', 'z-ai/glm-5.3-prime')
 MAX_EPS = 12
 
@@ -108,7 +112,7 @@ def get_sess(sid):
             if r.get('start'):
                 if r.get('series') not in BASE: return None
                 lang = r.get('lang') or 'en'; sc = ep1_script(r['series'], lang)
-                sess = {'sid': sid, 'series': r['series'], 'lang': lang, 'name': r.get('name') or '', 'me': r.get('me') or '', '_full': {},
+                sess = {'sid': sid, 'series': r['series'], 'lang': lang, 'name': r.get('name') or '', 'me': r.get('me') or '', 'tts': tts_engine(r.get('tts')), '_full': {},
                         'eps': [{'n': 1, 'title': sc['title'], 'lines': [{'who': l['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', l['text'])} for l in sc['lines']], 'prompt': sc['prompt'], 'choices': sc['choices']}]}
             elif not sess: continue
             elif 'her' in r and 'via' in r:
@@ -154,13 +158,15 @@ def waku(model, params, timeout=120):
         POOL.put(m)
 
 
-def tts(series, who, text, lang):
+def tts(series, who, text, lang, engine='v4'):
     vid, lead = voice_of(series, who, lang)
     params = dict(text=tts_text(text, lead, lang), voice_id=vid, stability=0.4, similarity=0.8)
+    if engine == 'flash': params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', params['text']), voice_id=vid)  # v2.5 不认表演标签，会念出来
+    model = TTS_ENGINES.get(engine, MODEL_TTS)
     err = None
     for attempt in range(3):
         try:
-            r = waku(MODEL_TTS, params)
+            r = waku(model, params)
             if r.get('asset_url'): return r['asset_url']
             err = r.get('error') or r
         except Exception as e:
@@ -169,13 +175,13 @@ def tts(series, who, text, lang):
     raise RuntimeError(f'tts failed: {str(err)[:200]}')
 
 
-def tts_hedged(series, who, text, lang, n):
+def tts_hedged(series, who, text, lang, n, engine='v4'):
     """同一句发 n 条，谁先好用谁"""
     done = threading.Event(); box = {}; errs = []
 
     def one():
         try:
-            u = tts(series, who, text, lang)
+            u = tts(series, who, text, lang, engine)
             if not done.is_set(): box['u'] = u; done.set()
         except Exception as e:
             errs.append(e)
@@ -486,7 +492,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
     def synth(i, who, text):
         first = i == 0
         try:
-            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if (i == 1 and not spec) or (spec and i == SPEC_LINES) else 1))
+            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if (i == 1 and not spec) or (spec and i == SPEC_LINES) else 1), sess.get('tts', 'v4'))
             ep['lines'][i]['url'] = u
             threading.Thread(target=cache_line, args=(u,), daemon=True).start()
         except Exception:
@@ -625,7 +631,7 @@ def make_cue(sess, n):
     if f and f.exists():
         CUE_OK[key] = json.load(open(f)); return CUE_OK[key]
     t = cue_text(sess, ep, n + 1)
-    u = tts_hedged(sess['series'], 'NARR', t, sess['lang'], 2)
+    u = tts_hedged(sess['series'], 'NARR', t, sess['lang'], 2, sess.get('tts', 'v4'))
     d = {'url': u, 'text': t, 'n': n}
     CUE_OK[key] = d
     if f: f.parent.mkdir(parents=True, exist_ok=True); json.dump(d, open(f, 'w'), ensure_ascii=False)
@@ -733,7 +739,7 @@ def run_call(job, c, her, spec=None):
     job['_raws'] = raws; job['_her'] = her; job['_n'] = n; job['_ths'] = ths; job['_started'] = set()
 
     def synth(i, text):
-        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, (2 if spec else 3) if i == 0 else 1)
+        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, (2 if spec else 3) if i == 0 else 1, c.get('tts', 'v4'))
         except Exception: out['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
     job['_synth'] = synth
@@ -952,9 +958,9 @@ class H(BaseHTTPRequestHandler):
             name = (body.get('name') or ('你' if lang == 'zh' else 'you')).strip()[:24]
             sid = time.strftime('%m%d%H%M') + rid(4)
             sc = ep1_script(series, lang)
-            sess = SESS[sid] = {'sid': sid, 'series': series, 'lang': lang, 'name': name, 'me': (body.get('me') or '').strip()[:400],
+            sess = SESS[sid] = {'sid': sid, 'series': series, 'lang': lang, 'name': name, 'me': (body.get('me') or '').strip()[:400], 'tts': tts_engine(body.get('tts')),
                                 'eps': [{'n': 1, 'title': sc['title'], 'lines': [{'who': l['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', l['text'])} for l in sc['lines']], 'prompt': sc['prompt'], 'choices': sc['choices']}]}
-            log(sid, {'start': True, 'series': series, 'lang': lang, 'name': name, 'me': sess['me'], 'at': time.strftime('%F %T')})
+            log(sid, {'start': True, 'series': series, 'lang': lang, 'name': name, 'me': sess['me'], 'tts': sess['tts'], 'at': time.strftime('%F %T')})
             c = ep1_cached(series, lang)
             if not body.get('prewarm'): threading.Thread(target=start_ep_specs, args=(sess,), daemon=True).start()  # 她听第 1 集的 3 分钟里，第 2 集已经按两个选项写好（批量预热第 1 集时不做）
             return self._send(200, {'sid': sid, 'ep': ep1_with_visuals(c, series, lang)} if c else {'sid': sid, 'job': start_job(ep1_job, series, lang)})
@@ -966,7 +972,8 @@ class H(BaseHTTPRequestHandler):
             sess = get_sess(body.get('sid'))
             cid = 'c' + time.strftime('%m%d%H%M') + rid(4)
             c = CALLS[cid] = {'cid': cid, 'series': series, 'lang': lang, 'name': name, 'who': who, 'me': (body.get('me') or (sess or {}).get('me') or '').strip()[:400], 'sid': sess['sid'] if sess and sess['series'] == series else None,
-                              'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': []}
+                              'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': [],
+                              'tts': tts_engine(body.get('tts') or (sess or {}).get('tts'))}
             log('call-' + cid, {'start': True, 'series': series, 'who': who, 'lang': lang, 'name': name, 'sid': c['sid'], 'direction': c['direction'], 'at': time.strftime('%F %T')})
             return self._send(200, {'cid': cid, 'who': who, 'job': start_job(run_call, c, '')})
         if u.path == '/api/call/turn':

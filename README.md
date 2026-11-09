@@ -64,3 +64,9 @@ Eleven v4 每句 15、环境声 40、上传 4。第 1 集约 35 句 ≈ 560；�
 - **锁屏不断**：旁白提问、等待时的铺底音（app/bed.mp3，很轻的环境声循环）和下一集都在同一个 `<audio>` 上切换（`playAux`/`keepAlive`），中间不暂停，锁屏媒体会话一直在；Hands-free 在点播放时就请求麦克风并保持（`primeMic`），这样锁屏时也有可能录到。限制：iOS Safari 锁屏后通常会暂停网页的麦克风，那时就按 5 秒兜底往下走；安卓 Chrome 锁屏可以录；要 iPhone 锁屏也稳定录音，得做原生 App 壳。iPhone 开着麦克风时外放音量可能变小（系统切到通话音频模式），戴耳机不受影响。
 - **拖动进度条不卡**：第 1 集音频放到 App 同域名（app/ep1/，Pages CDN 支持分段加载），拖动时只动进度条和时间、松手才跳（以前每移动一下就跳一次，在首字节 3 秒的云存储上会卡）；实时集预载整集每句。实测跳转 2–5 毫秒、跳完立即续播。
 - **中文版界面全中文**（`app/i18n.js`，`?lang=zh` 时生效）：把 app.js 的英文界面文案（含 placeholder、aria-label、title、confirm）按 EX 查表 / RX 正则换成中文，剧情、人名、她输入的话不动（`translate="no"` 的元素跳过）。新增界面文案要在 i18n.js 补中文。日期按 zh-CN 格式。英文版不变。
+
+## 配音引擎测试开关（11-08）
+- 链接带 `&tts=flash`：实时集、选择点旁白、通话改用 **Eleven Turbo v2.5**（ElevenLabs 的低延迟/实时向模型，同一批声线；不认 `[quietly]` 这类表演标签，会自动去掉）。`&tts=turbo` = Eleven v4 Turbo，`&tts=v4` 回到默认。按语言记住；测试引擎的故事和普通故事分开存（会话键带引擎名），切过去就是新故事。第 1 集是预制的，仍是 v4。
+- 测速（同一 Magnus 中文声线，经 MCP 各 6 句）：v4 中位 5.2 秒/句、v4 Turbo 5.3、Turbo v2.5 3.4；端到端自由输入第一句可播 v4 11.6 秒 → Turbo v2.5 7.1 秒，整集配完 23.3 → 18.2 秒。本机转写抽查两者错字率相当（主要是 whisper small 的同音字）。
+- Waku 真流式 TTS（`pv.speech.stream`，profile `tts-eleven-flash-v1`）只能在 Waku playable 里、用户手势中调用，本应用（Pages）接不了；这里用的是批量接口，每句仍有约 3 秒任务开销。
+- 测速脚本在 `qa/zh-rt/`（lat3.py 单句、e2e.py 端到端）。

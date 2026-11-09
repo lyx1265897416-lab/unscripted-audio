@@ -45,6 +45,10 @@ if (Q.has('k')) {
   history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
 const TOKEN = store.get('ua.k', '') || '';
+// Voice engine test switch (11-08): &tts=turbo (Eleven v4 Turbo, low-latency) / flash (Eleven Turbo v2.5) / v4 (default). Remembered per language.
+// Stories voiced with a test engine are kept apart from the normal ones (own session key), so switching starts fresh.
+if (Q.has('tts')) store.set('ua.tts.' + LANG, ['turbo', 'flash'].includes(Q.get('tts')) ? Q.get('tts') : 'v4');
+const TTS = store.get('ua.tts.' + LANG, 'v4') || 'v4';
 document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
 
 /* =========================================================================
@@ -185,7 +189,7 @@ const save = (now) => {
 window.addEventListener('pagehide', () => save(true));
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(true); });
 
-const skey = (id) => `${MOCK ? 'm' : 'r'}:${id}:${LANG}`;
+const skey = (id) => `${MOCK ? 'm' : 'r'}:${id}:${LANG}${TTS !== 'v4' ? ':' + TTS : ''}`;
 const getSess = (id) => SESS[skey(id)] || null;
 
 function ensureToday() {
@@ -274,7 +278,7 @@ const RealAPI = {
   },
   series() { return this.get('api/series', null, true); },
   seriesDetail(id) { return this.get('api/series/' + encodeURIComponent(id), null, true); },
-  play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, me: S.me || '' }); },
+  play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, me: S.me || '', tts: TTS }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
   job(id) { return this.get('api/job', { id }, false); },
   ep(sid, n) { return this.get('api/ep', { sid, n }, false); },
@@ -288,7 +292,7 @@ const RealAPI = {
     return r.json();
   },
   fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
-  callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '' }); },
+  callStart({ series, who, sid, direction }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '', tts: TTS }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
   callEnd({ cid, seconds }) { return this.post('api/call/end', { cid, seconds }); },
 };
@@ -3758,6 +3762,7 @@ async function boot() {
   if (location.hash === '#/player') history.replaceState(null, '', location.pathname + location.search + '#/home');
   if (!S.onboarded) { renderOnboard(); showTab('home'); }
   else { route(); primeMicOnEntry(); }
+  if (TTS !== 'v4') setTimeout(() => toast(LANG === 'zh' ? `配音测试：${TTS === 'turbo' ? 'Eleven v4 Turbo（低延迟）' : 'Eleven Turbo v2.5（实时）'} · 第 2 集起生效` : `Voice test: ${TTS === 'turbo' ? 'Eleven v4 Turbo (low latency)' : 'Eleven Turbo v2.5 (realtime)'} · from Episode 2`), 900);
   renderMini();
 }
 boot();
