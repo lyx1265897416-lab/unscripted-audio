@@ -153,4 +153,4 @@ Eleven v4 每句 15、环境声 40、上传 4。第 1 集约 35 句 ≈ 560；�
 - 网页：一句播完下一句还没配好 → 1.4 秒后垫一句“让我想想”（每轮最多一次）；她说完的静音判定 0.7→0.6 秒。
 - 识别：通话里英文 Whisper 最多等 2.5 秒，超时用 SenseVoice 结果（`X-Fast`）。
 - 实测（本机）：她说完到他开口 0.2–0.3 秒（中文）/ 约 2 秒（英文，含识别）；第一句正文 5–7 秒，之后各句基本已配好。
-- 额度守护：`tools/credit-guard/credit_guard.py`，launchd `com.vicky.waku-credit-guard` 每 3 分钟查余额（`waku credit ledger --limit 1`，3 秒），低于 1500 充 30usd；配音报 insufficient_credit 时中转立即触发一次。
+- 额度守护：`tools/credit-guard/credit_guard.py`，launchd `com.vicky.waku-credit-guard` 每 3 分钟查余额（`waku credit ledger --limit 1`，3 秒），低于 2000 充 30usd（launchd PATH 需含 ~/.local/bin）；配音报 insufficient_credit 时中转立即触发一次。
