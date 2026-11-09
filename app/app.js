@@ -216,10 +216,11 @@ function markUnlocked(id, n) { (S.unlocks[id] = S.unlocks[id] || []).push(n); sa
 let API_BASE = '';
 async function loadRelay() {
   try {
-    const r = await fetch('relay.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) { API_BASE = ''; return false; }
-    const j = await r.json();
+    let j = null;
+    if (window.__relayP) { j = await window.__relayP; window.__relayP = null; }  // started in index.html, before app.js loaded
+    else { const r = await fetch('relay.json?t=' + Date.now(), { cache: 'no-store' }); j = r.ok ? await r.json() : null; }
     API_BASE = j && j.base ? String(j.base).trim().replace(/\/+$/, '') : '';
+    if (API_BASE) store.set('ua.relay', API_BASE);
     return !!API_BASE;
   } catch (e) { API_BASE = ''; return false; }
 }
@@ -627,6 +628,8 @@ document.addEventListener('pointerdown', () => primeAudio(), { capture: true, on
  * Now every line is fetched once through the relay (/api/a, cached on the relay) into a local blob ahead of time;
  * the main element plays the blob with no network. Same-origin files (Episode 1, bed) play directly. */
 const BLOB = new Map();
+let lastTap = 0;
+document.addEventListener('pointerdown', () => { lastTap = Date.now(); }, { capture: true, passive: true });
 const blobable = (u) => !MOCK && !!u && /^https:\/\/storage\.googleapis\.com\//.test(u);
 function fetchBlob(u) {
   if (!blobable(u)) return Promise.resolve(null);
@@ -670,10 +673,12 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { P.want = false; audio.pause(); updatePlayerUI(); }
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic();
-  if (P.gen && !P.ep) return;
-  if (P.needChoice) { openChoiceSheet(); return; }
+  if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
+  // at a choice point the narrator's question / the quiet bed are on the player: a tap stops them (and the 5 s countdown) and opens the choices
+  if (P.needChoice) { holdForHer(); if (P.aux) { try { audio.pause(); } catch (e) { /* ignore */ } } openChoiceSheet(); updatePlayerUI(); return; }
   if (!P.ep) return;
   if (P.want && (!audio.paused || P.waiting)) { doPause(); return; }
   if (P.ep.kind === 'live' && (P.waiting || !P.cur)) { P.want = true; liveAdvance(); updatePlayerUI(); return; }
@@ -716,7 +721,7 @@ function liveAdvance() {
   }
   const ln = lines[P.idx];
   if (!ln.url) { P.waiting = true; updatePlayerUI(); return; }
-  if (blobable(ln.url) && !blobNow(ln.url) && P.blobWait !== ln.url) {  // its local copy is on the way: wait up to 4 s for it (a direct download is no faster and would compete with it)
+  if (blobable(ln.url) && !blobNow(ln.url) && P.blobWait !== ln.url && Date.now() - lastTap > 1200) {  // its local copy is on the way: wait up to 4 s for it (a direct download is no faster and would compete with it)
     P.blobWait = ln.url; P.waiting = true; updatePlayerUI();
     const ep0 = ep, i0 = P.idx;
     Promise.race([fetchBlob(ln.url), sleep(4000)]).then(() => { if (P.ep === ep0 && P.idx === i0 && P.waiting) liveAdvance(); });
@@ -1199,6 +1204,8 @@ async function micStream() {
   try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) { /* ignore */ }
   VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   VI.denied = false;
+  // iOS switches the audio session when the mic opens and may pause the story that is playing: pick it straight back up
+  [150, 700].forEach((ms) => setTimeout(() => { if (P.want && P.cur && audio.paused && !P.waiting && !callActive()) audio.play().catch(() => {}); }, ms));
   unlockCtx();
   try {
     if (actx) { const src = actx.createMediaStreamSource(VI.stream); VI.an = actx.createAnalyser(); VI.an.fftSize = 1024; src.connect(VI.an); VI.buf = new Float32Array(VI.an.fftSize); }
@@ -2731,7 +2738,7 @@ const shelf = (title, items, more) => items.length ? `
 
 function continueItems() {
   return Object.keys(S.progress)
-    .filter((k) => k.startsWith(`${MOCK ? 'm' : 'r'}:`) && k.endsWith(`:${LANG}`) && SESS[k] && byId(S.progress[k].id))
+    .filter((k) => SESS[k] && S.progress[k] && byId(S.progress[k].id) && k === skey(S.progress[k].id))  // same language and voice engine as this link
     .map((k) => S.progress[k]).sort((a, b) => b.at - a.at);
 }
 function progressLabel(pr) {
@@ -2747,6 +2754,7 @@ function renderHome() {
   const sorted = order.map(byId).filter(Boolean).concat(SERIES.filter((s) => order.indexOf(s.id) < 0));
   const heroes = sorted.slice(0, 5);
   const cont = continueItems();
+  setTimeout(() => cont.slice(0, 2).forEach((x) => warmResume(x.id || (x.s && x.s.id))), 400);  // the top "continue" rows start instantly
   const fav = (S.genres && S.genres[0]) || 'Werewolf';
   const becauseLabel = fav === 'Werewolf' ? 'werewolf romance' : fav.toLowerCase();
   const because = SERIES.filter((s) => (S.genres.length ? S.genres.some((g) => matchGenre(s, g)) : matchGenre(s, 'Werewolf') || matchGenre(s, 'Romance')));
@@ -2994,6 +3002,15 @@ let detailId = null, detailTab = 'episodes', synOpen = false;
 const isDetailOpen = (id) => $('#detail').classList.contains('on') && (!id || detailId === id);
 /* Episode 1 audio lives on cloud storage whose first byte takes ~3 s; warm it as soon as she opens a series so Play starts at once */
 const WARM = [];
+/** her saved story: fetch the line she resumes from (and the next few) into local blobs, so Continue starts at once */
+function warmResume(id) {
+  const ss = getSess(id); if (!ss || !ss.eps || !ss.eps.length) return;
+  const pr = S.progress[skey(id)] || {};
+  const ep = ss.eps.find((e) => e.n === pr.ep) || ss.eps[ss.eps.length - 1];
+  if (!ep) return;
+  if (ep.kind === 'live') (ep.lines || []).slice(pr.ep === ep.n ? pr.line || 0 : 0).filter((l) => l.url).slice(0, 4).forEach((l) => fetchBlob(l.url));
+  else if (ep.audio && !WARM.some((a) => a.dataset.u === ep.audio)) { try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.dataset.u = ep.audio; a.src = absUrl(ep.audio); a.load(); WARM.push(a); while (WARM.length > 3) { const o = WARM.shift(); o.removeAttribute('src'); o.load(); } } catch (e) { /* ignore */ } }
+}
 function warmEp1(s) {
   const u = s && s.ep1 && s.ep1.audio;
   if (!u || MOCK || getSess(s.id) || WARM.some((a) => a.dataset.u === u)) return;
@@ -3004,7 +3021,7 @@ function warmEp1(s) {
 }
 async function showDetail(id) {
   const s = byId(id); if (!s) { location.hash = '#/home'; return; }
-  warmEp1(s);
+  warmEp1(s); warmResume(id);
   if (s.visuals) [...((s.ep1 && s.ep1.visuals) || []).slice(0, 3).map((x) => x.clip), ...(s.visuals.pool || []).slice(0, 1)].forEach((c) => s.visuals.clips[c] && clipBlob(s.visuals.clips[c]));  // first pictures ready before Play
   if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
   detailId = id;
@@ -3795,8 +3812,10 @@ async function boot() {
   setAudioRate();
   try {
     if (MOCK) throw new Error('mock');
-    await loadRelay();
-    const ck = 'ua.series.' + LANG, cachedList = store.get(ck, null);
+    const ck = 'ua.series.' + LANG, cachedList = store.get(ck, null), lastRelay = store.get('ua.relay', '');
+    // Seen this app before on this phone: open from the cached list + last relay address at once, check relay.json in the background
+    if (Array.isArray(cachedList) && cachedList.length && lastRelay) { API_BASE = lastRelay; loadRelay().then((ok) => { if (!ok) API_BASE = lastRelay; }); }
+    else await loadRelay();
     const fresh = RealAPI.series().then((list) => {
       if (!Array.isArray(list) || !list.length) throw new Error('empty');
       store.set(ck, list);
