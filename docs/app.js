@@ -672,16 +672,17 @@ function loadSrc(url, at) {
   }
 }
 function doPlay() {
-  if (callActive()) { P.want = false; updatePlayerUI(); toast('On a call'); return; }
+  if (callActive()) { P.want = false; updatePlayerUI(); toast(tz('On a call', '正在通话')); return; }
   P.want = true;
+  if (P.cur && (audio.error || audio.networkState === 3 || WD.stuck)) { WD.stuck = false; reloadCurrent('tap'); updatePlayerUI(); return; }  // the element got stuck: start it fresh inside this tap
   const p = audio.play();
   if (p && p.catch) p.catch((err) => {
-    if (err && err.name === 'NotAllowedError') { P.want = false; updatePlayerUI(); toast('Tap play to start listening'); }
+    if (err && err.name === 'NotAllowedError') { P.want = false; updatePlayerUI(); toast(tz('Tap play to start listening', '点一下播放开始收听')); }
   });
   updatePlayerUI();
 }
-function doPause() { P.want = false; audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; } };  // ?debug=1: inspect player state from the console
+function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; audio.pause(); updatePlayerUI(); }
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; } };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic();
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -819,6 +820,25 @@ audio.addEventListener('error', () => {
   if (P.ep && P.ep.kind === 'live') { P.idx += 1; setTimeout(liveAdvance, 120); }
   else toast('Could not load this episode audio');
 });
+
+/* Watchdog (11-09): "playing" but the clock hasn't moved for 4 s (stalled load, iOS audio-session hiccup) → reload the same
+ * audio at the same spot; the second time, try the other copy of Episode 1 (storage) if there is one. */
+const WD = { t: -1, n: 0, tries: 0 };
+function reloadCurrent(why) {
+  if (!P.cur) return;
+  const ep = P.ep, t = audio.currentTime || 0, keep = P.cur;
+  WD.tries += 1; WD.n = 0;
+  const url = WD.tries >= 2 && ep && ep.kind !== 'live' && ep.audio_cdn && keep === ep.audio ? ep.audio_cdn : keep;
+  if (WD.tries === 1 && why !== 'tap') toast(tz('Connection hiccup — reloading the audio…', '网络卡了一下，正在重新加载…'));
+  loadSrc(url, t > 0.5 ? t : 0); P.cur = keep;
+  if (P.want) { const p = audio.play(); if (p && p.catch) p.catch(() => {}); }
+}
+setInterval(() => {
+  const on = P.want && P.cur && !P.aux && !P.waiting && !audio.paused && !audio.src.startsWith('data:');
+  if (!on) { WD.n = 0; WD.t = -1; return; }
+  if (Math.abs(audio.currentTime - WD.t) < 0.05) { if (++WD.n >= 4) reloadCurrent(); }
+  else { WD.n = 0; WD.t = audio.currentTime; if (audio.currentTime > 1) WD.tries = 0; }
+}, 1000);
 
 /* Listening time (task), sleep timer, progress persistence */
 let lastTick = 0;
@@ -1213,12 +1233,19 @@ async function micStream() {
   VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   VI.denied = false;
   // iOS switches the audio session when the mic opens and may pause the story that is playing: pick it straight back up
-  [150, 700].forEach((ms) => setTimeout(() => { if (P.want && P.cur && audio.paused && !P.waiting && !callActive()) audio.play().catch(() => {}); }, ms));
+  [150, 700].forEach((ms) => setTimeout(() => { if (((P.want && P.cur && !P.waiting) || (P.aux && audio.loop)) && audio.paused && !callActive()) audio.play().catch(() => {}); }, ms));
   unlockCtx();
   try {
     if (actx) { const src = actx.createMediaStreamSource(VI.stream); VI.an = actx.createAnalyser(); VI.an.fftSize = 1024; src.connect(VI.an); VI.buf = new Float32Array(VI.an.fftSize); }
   } catch (e) { VI.an = null; }
   return VI.stream;
+}
+/** Mic off unless something is listening right now (11-09): on iPhone an open mic puts the page in play-and-record,
+ * and the story's <audio> could then sit at 0:00 "playing" with no sound. Permission stays granted for the page. */
+let micBusy = 0;
+function micPark() {
+  if (callActive() || HF.rec || callRecog || talkRec || micBusy) return;
+  micRelease();
 }
 function micRelease() {
   if (VI.stream) { VI.stream.getTracks().forEach((t) => t.stop()); VI.stream = null; VI.an = null; }
@@ -1230,7 +1257,7 @@ function primeMic(force) {
   if (VI.primed || !VOICE_OK || modeOf() !== 'voice') return;
   if (VI.denied && !force) return;
   VI.primed = true;
-  micStream().catch((e) => {
+  micStream().then(() => setTimeout(micPark, 300)).catch((e) => {
     VI.primed = false;
     if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
       VI.denied = true;
@@ -1249,7 +1276,7 @@ async function primeMicOnEntry() {
   if (st === 'denied') { VI.denied = true; return; }
   if (st !== 'granted') toast(LANG === 'zh' ? `${ic('mic', 'sm')} Hands-free 需要麦克风：到选择点直接说出你的回答` : `${ic('mic', 'sm')} Hands-free uses your mic: just say your answer at each choice`);
   VI.primed = true;
-  micStream().catch((e) => { VI.primed = false; if (st === 'prompt' && e && e.name === 'NotAllowedError') VI.denied = true; });
+  micStream().then(() => setTimeout(micPark, 300)).catch((e) => { VI.primed = false; if (st === 'prompt' && e && e.name === 'NotAllowedError') VI.denied = true; });
 }
 document.addEventListener('pointerdown', () => { if (S.onboarded) primeMic(); }, { capture: true, passive: true });
 function micLevel() {
@@ -1265,11 +1292,13 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState } = {}
   let rec = null, chunks = [], t0 = 0, speechAt = 0, lastVoice = 0, timer = 0, finished = false, canceled = false, floor = 0, n = 0, blind = false;
   let resolve; const done = new Promise((r) => { resolve = r; });
   const st = (s) => { try { onState && onState(s); } catch (e) { /* ignore */ } };
+  micBusy++;
   const finish = async (spoke) => {
     if (finished) return; finished = true; clearInterval(timer);
     if (rec && rec.state !== 'inactive') {
       await new Promise((r) => { rec.onstop = () => r(); try { rec.stop(); } catch (e) { r(); } setTimeout(r, 900); });
     }
+    micBusy = Math.max(0, micBusy - 1); setTimeout(micPark, 50);
     if (canceled) { resolve({ text: '', spoke: false, canceled: true }); return; }
     if (!spoke || !chunks.length) { resolve({ text: '', spoke: false }); return; }
     st('thinking');
@@ -2377,7 +2406,7 @@ function hangUp() {
 function endCall(reason) {
   const call = C;
   if (!call || call.phase === 'ended') return;
-  stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT); clearTimeout(call.silentT); earStop();
+  stopRing(); stopCallPoll(); stopCallMic(); clearTimeout(call.thinkT); clearTimeout(call.silentT); earStop(); setTimeout(micPark, 100);
   try { callAudio.pause(); } catch (e) { /* ignore */ }
   clearInterval(call.timer);
   const base = call.t0 || call.acceptedAt;  // 计时从他开口算；没开口就从接通算，不会记成 0:00
