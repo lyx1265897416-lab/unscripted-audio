@@ -3544,7 +3544,7 @@ function renderOnboard() {
         <h1 class="ob-title">What should they call you?</h1>
         <p class="ob-sub">Characters will say your name in the story.</p>
         <div class="ob-name"><input id="ob-name" maxlength="24" placeholder="Your name" value="${esc(S.name)}" autocomplete="given-name" enterkeyhint="next" aria-label="Your name"></div>
-        <div class="ob-bubble"><img src="${esc(avatarOf(m))}" alt=""><p id="ob-preview">“Ten minutes. That's all I have, <b>${esc(S.name || '…')}</b>.”</p></div>
+        <div class="ob-bubble"><img src="${esc(avatarOf(m))}" alt=""><p id="ob-preview" translate="no">${LANG === 'zh' ? `“十分钟。我只有十分钟了，<b>${esc(S.name || '…')}</b>。”` : `“Ten minutes. That's all I have, <b>${esc(S.name || '…')}</b>.”`}</p></div>
       </form>
       <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">Continue</button><button class="link-btn" data-act="ob-next" data-skip="1">Skip for now</button></div>`;
   } else {
