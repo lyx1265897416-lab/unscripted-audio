@@ -232,11 +232,16 @@ const apiUrl = (path) => (API_BASE ? API_BASE + '/' + path.replace(/^\//, '') : 
 /** Server-relative media URLs ("/x.mp3") must hit the API host when the page is on Pages. */
 const absUrl = (u) => (u && API_BASE && u[0] === '/' && u[1] !== '/' ? API_BASE + u : u);
 /** fetch with one retry after re-reading relay.json when the tunnel may have rotated (network error only). */
+function withTimeout(init) {  // a stalled tunnel request must not hang the player forever (phones wait 60 s+ by default)
+  if (init && init.signal) return init;
+  const c = new AbortController(); setTimeout(() => c.abort(), (init && init.method === 'POST') ? 45000 : 15000);
+  return Object.assign({}, init, { signal: c.signal });
+}
 async function apiFetch(build, init) {
-  try { return await fetch(build(), init); } catch (e) {
-    if (e && e.name === 'AbortError') throw e;
+  try { return await fetch(build(), withTimeout(init)); } catch (e) {
+    if (e && e.name === 'AbortError' && init && init.signal) throw e;
     await reconnect();
-    return fetch(build(), init);
+    return fetch(build(), withTimeout(init));
   }
 }
 const RealAPI = {
@@ -249,7 +254,11 @@ const RealAPI = {
       return u.toString();
     };
     const r = await apiFetch(build, { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) {
+      let msg = 'HTTP ' + r.status;
+      try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (e) { /* ignore */ }
+      throw new Error(msg);
+    }
     return r.json();
   },
   async post(path, body) {
@@ -268,6 +277,7 @@ const RealAPI = {
   play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, me: S.me || '' }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
   job(id) { return this.get('api/job', { id }, false); },
+  ep(sid, n) { return this.get('api/ep', { sid, n }, false); },
   specs(sid) { return this.get('api/specs', { sid }, false); },
   cue(sid, n) { return this.get('api/cue', { sid, n }, false); },
   wish(sid, text) { return this.post('api/wish', { sid, text }); },
@@ -296,6 +306,7 @@ const MockAPI = {
   },
   calls: new Map(),
   async specs() { return { n: 0, specs: {} }; },
+  async ep() { throw new Error('no episode'); },
   async cue() { await sleep(400); return { url: 'mock/line_a.mp3', text: 'Mock question: this way, or that way?' }; },
   async wish() { return { ok: true }; },
   async asr() { await sleep(600); return { text: '' }; },
@@ -1451,7 +1462,7 @@ async function sendNext(id, text, via) {
     SPEC.key = '';
     const ep = Object.assign({ durs: {} }, sp.ep, { kind: 'live' });
     ss.eps = ss.eps.filter((e) => e.n !== nextN); ss.eps.push(ep); ss.eps.sort((a, b) => a.n - b.n);
-    ss.job = { id: sp.job, n: nextN, text };
+    ss.job = { id: sp.job, n: nextN, text, via };
     ep._done = false; P.gen = null; save();
     playEpisode(id, ep, { autoplay: true });
     P.jobDone = false;
@@ -1461,7 +1472,7 @@ async function sendNext(id, text, via) {
       else if (res && res.job) { // relay could not use the pre-written episode: fall back to the fresh one
         ss.eps = ss.eps.filter((e) => e !== ep); audio.pause(); P.cur = ''; P.ep = null;
         P.gen = { n: nextN, text, via, status: 'writing', err: null };
-        ss.job = { id: res.job, n: nextN, text }; save();
+        ss.job = { id: res.job, n: nextN, text, via }; save();
         startGeneration(res.job, nextN, text, false);
       }
     }).catch((e) => { console.warn(e); startGeneration(sp.job, nextN, text, false, true); });
@@ -1474,7 +1485,7 @@ async function sendNext(id, text, via) {
   try {
     const res = await API.next({ sid: ss.sid, text: via === 'silence' ? '' : text, via });
     if (!res || !res.job) throw new Error('No job returned');
-    ss.job = { id: res.job, n: nextN, text }; save();
+    ss.job = { id: res.job, n: nextN, text, via }; save();
     startGeneration(res.job, nextN, text, false);
   } catch (e) {
     console.warn(e);
@@ -1497,11 +1508,47 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
   updatePlayerUI(); renderMini();
   const ss = getSess(id);
   let started = !!alreadyPlaying;
+  let fails = 0;
+  const getJob = async () => {
+    try { const j = await API.job(jobId); fails = 0; return j; } catch (e) {
+      if (!/no job/i.test(e.message || '')) { fails++; return null; }
+      // The relay restarted and forgot this job. If the episode was finished, the relay still has it (rebuilt from its log).
+      try { const r = await API.ep(ss.sid, n); if (r && r.ep) return { status: 'done', error: null, ep: r.ep }; } catch (e2) { /* not finished */ }
+      return { status: 'lost' };
+    }
+  };
   const poll = async () => {
     if (my !== genToken && started === false) return;
-    let j;
-    try { j = await API.job(jobId); } catch (e) { j = null; }
-    if (!j) { setTimeout(poll, 1200); return; }
+    const j = await getJob();
+    if (!j) {
+      if (fails === 12 && my === genToken && !started) toast(LANG === 'zh' ? '网络有点慢，还在连…' : 'The connection is slow — still trying…');
+      setTimeout(poll, fails > 12 ? 2500 : 1200); return;
+    }
+    if (j.status === 'lost') {
+      const epLive = ss.eps.find((e) => e.n === n);
+      if (started && epLive) { // was already playing the first lines: play what is voiced, then the choice point
+        ss.job = null; save();
+        P.jobDone = true; (epLive.lines || []).forEach((l) => { if (l.url == null) l.url = ''; }); if (P.ep === epLive && P.waiting) liveAdvance();
+        return;
+      }
+      if (my !== genToken) return;
+      // Ask for the episode again (same answer). The relay rebuilds the session from its log if it restarted.
+      const prevEp = ss.eps.find((e) => e.n === n - 1);
+      const via = (ss.job && ss.job.via) || (((prevEp && prevEp.choices) || []).includes(text) ? 'option' : 'free');
+      ss.eps = ss.eps.filter((e) => e.n !== n);
+      try {
+        const res = await API.next({ sid: ss.sid, text: via === 'auto' || via === 'silence' ? '' : text, via });
+        if (!res || !res.job || my !== genToken) throw new Error('No job returned');
+        ss.job = { id: res.job, n, text, via }; save();
+        startGeneration(res.job, n, text, false);
+      } catch (e) {
+        console.warn(e);
+        ss.job = null; P.gen = null; P.needChoice = true; bedStop(); save();
+        updatePlayerUI(); renderMini(); openChoiceSheet();
+        const err = $('#ch-err'); if (err) { err.hidden = false; err.textContent = LANG === 'zh' ? `下一集没接上（${e.message || '出错'}），再选一次试试。` : `Couldn't write the next episode (${e.message || 'error'}). Try again.`; }
+      }
+      return;
+    }
     if (j.status === 'error') {
       if (my === genToken) {
         P.gen = null;

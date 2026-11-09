@@ -67,6 +67,47 @@ def log(sid, rec):
     with open(LOGS / 'sessions' / f'{sid}.jsonl', 'a') as f: f.write(json.dumps(rec, ensure_ascii=False) + '\n')
 
 
+SID_RE = re.compile(r'^[0-9]{8}[a-z0-9]{4}$')
+REVIVE_LOCK = threading.Lock()
+
+
+def get_sess(sid):
+    """会话在内存里就直接用；中转重启后内存丢了，就按 logs/sessions/<sid>.jsonl 重建（她手机上还在听的那条线不会“session expired”/一直转圈）。
+    已写完的集（含每句配音地址）放进 sess['_full']，/api/ep 用它把丢了任务的那集直接还给前端。"""
+    sid = sid or ''
+    if sid in SESS: return SESS[sid]
+    if not SID_RE.match(sid): return None
+    p = LOGS / 'sessions' / f'{sid}.jsonl'
+    if not p.exists(): return None
+    with REVIVE_LOCK:
+        if sid in SESS: return SESS[sid]
+        sess, her = None, None
+        for line in p.read_text().splitlines():
+            try: r = json.loads(line)
+            except Exception: continue
+            if r.get('start'):
+                if r.get('series') not in BASE: return None
+                lang = r.get('lang') or 'en'; sc = ep1_script(r['series'], lang)
+                sess = {'sid': sid, 'series': r['series'], 'lang': lang, 'name': r.get('name') or '', 'me': r.get('me') or '', '_full': {},
+                        'eps': [{'n': 1, 'title': sc['title'], 'lines': [{'who': l['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', l['text'])} for l in sc['lines']], 'prompt': sc['prompt'], 'choices': sc['choices']}]}
+            elif not sess: continue
+            elif 'her' in r and 'via' in r:
+                via, m = r.get('via'), r.get('matched')
+                her = her_said(m, 'option', sess['lang']) if m and via != 'option' else her_said(r.get('her') or '', via, sess['lang'])
+            elif r.get('ep') and r.get('lines') and r['ep'] == len(sess['eps']) + 1:
+                eo = r.get('ep_out') or {}
+                if her is not None: sess['eps'][-1]['her'] = her
+                her = None
+                sess['eps'].append({'n': r['ep'], 'title': eo.get('title') or '', 'lines': [{'who': l['who'], 'text': l['text']} for l in r['lines']], 'prompt': eo.get('prompt') or '', 'choices': eo.get('choices') or []})
+                sess['_full'][r['ep']] = dict(eo, n=r['ep'], kind='live', lines=r['lines'])
+                if eo.get('ending'): sess['eps'][-1]['ending'] = True
+        if not sess: return None
+        SESS[sid] = sess
+        print(time.strftime('%m-%d %H:%M:%S'), 'revived session', sid, 'eps', len(sess['eps']), flush=True)
+    if not sess['eps'][-1].get('ending'): threading.Thread(target=start_ep_specs, args=(sess,), daemon=True).start()
+    return sess
+
+
 # ---------------- 配音 ----------------
 def voice_of(series, who, lang):
     v = VOICES['NARR'] if who == 'NARR' else VOICES[series].get(who) or VOICES['NARR']
@@ -486,6 +527,7 @@ def finish_episode(job, sess):
         if l['url'] is None: l['url'] = ''
     if job.get('_her') is not None: sess['eps'][-1]['her'] = job['_her']
     sess['eps'].append({'n': ep['n'], 'title': ep['title'], 'lines': [{'who': l['who'], 'text': l['text']} for l in ep['lines']], 'prompt': ep['prompt'], 'choices': ep['choices']})
+    sess.setdefault('_full', {})[ep['n']] = {k: v for k, v in ep.items()}
     job['status'] = 'done'
     log(sess['sid'], {'ep': ep['n'], 'writer': job.get('writer'), 'spec': bool(job.get('_committed')), 't': job['t'], 'ep_out': {k: v for k, v in ep.items() if k != 'lines'}, 'lines': [{k: l.get(k) for k in ('who', 'text', 'url', 'clip')} for l in ep['lines']], 'at': time.strftime('%F %T')})
     if not ep.get('ending'): start_ep_specs(sess)
@@ -657,7 +699,7 @@ def call_system(c, lite=False):
 
 
 def call_context(c):
-    sess = SESS.get(c.get('sid') or '')
+    sess = get_sess(c.get('sid'))
     story = story_so_far(sess) if sess else ('（她还没听这部剧，就当你们刚认识不久，按第 1 集的处境打电话）' if c['lang'] == 'zh' else "(She hasn't started the series; call as if you've only just met, in Episode 1's situation.)")
     turns = '\n'.join((f'她：{t["her"]}\n{c["who"]}：' + ' / '.join(t['lines'])) for t in c['turns'])
     return story, turns
@@ -829,13 +871,13 @@ class H(BaseHTTPRequestHandler):
                 try: return self._send(200, call_fillers(sid, who, lang))
                 except Exception as e: return self._send(500, {'error': str(e)[:200]})
             if u.path == '/api/cue':  # 闭眼听模式：集尾旁白把选择点念给她听（第一次约 5–8 秒，前端提前 45 秒取）
-                sess = SESS.get(g('sid') or '')
+                sess = get_sess(g('sid'))
                 if not sess: return self._send(404, {'error': 'session expired'})
                 try: d = make_cue(sess, int(g('n') or len(sess['eps'])))
                 except Exception as e: return self._send(500, {'error': str(e)[:200]})
                 return self._send(200 if d else 404, d or {'error': 'no episode'})
             if u.path == '/api/specs':  # 她还在听这一集时，前端先取两个选项预先写好的下一集（前两句已配音），点选项就本地直接播，省掉公网往返
-                sess = SESS.get(g('sid') or '')
+                sess = get_sess(g('sid'))
                 out = {}
                 for ch, sp in ((sess or {}).get('spec') or {}).items():
                     j = JOBS.get(sp['job'])
@@ -844,6 +886,11 @@ class H(BaseHTTPRequestHandler):
                     if not (L and L[0].get('url')): continue
                     out[ch] = {'job': sp['job'], 'n': j['ep']['n'], 'ep': dict(j['ep'], lines=[dict(x) for x in L])}
                 return self._send(200, {'n': len(sess['eps']) + 1 if sess else 0, 'specs': out})
+            if u.path == '/api/ep':  # 任务丢了（中转重启）但这一集其实写完了：按会话日志把整集（含配音地址）还给前端
+                sess = get_sess(g('sid'))
+                if not sess: return self._send(404, {'error': 'session expired'})
+                ep = (sess.get('_full') or {}).get(int(g('n') or 0))
+                return self._send(200, {'ep': ep}) if ep else self._send(404, {'error': 'no episode'})
             if u.path == '/api/job':
                 j = JOBS.get(g('id'))
                 if j and j.get('status') == 'ready': j = dict(j, status='voicing')  # 预先生成好了但还没被选：对外当作还在合成
@@ -882,7 +929,7 @@ class H(BaseHTTPRequestHandler):
             sc = ep1_script(series, lang)
             sess = SESS[sid] = {'sid': sid, 'series': series, 'lang': lang, 'name': name, 'me': (body.get('me') or '').strip()[:400],
                                 'eps': [{'n': 1, 'title': sc['title'], 'lines': [{'who': l['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', l['text'])} for l in sc['lines']], 'prompt': sc['prompt'], 'choices': sc['choices']}]}
-            log(sid, {'start': True, 'series': series, 'lang': lang, 'name': name, 'at': time.strftime('%F %T')})
+            log(sid, {'start': True, 'series': series, 'lang': lang, 'name': name, 'me': sess['me'], 'at': time.strftime('%F %T')})
             c = ep1_cached(series, lang)
             if not body.get('prewarm'): threading.Thread(target=start_ep_specs, args=(sess,), daemon=True).start()  # 她听第 1 集的 3 分钟里，第 2 集已经按两个选项写好（批量预热第 1 集时不做）
             return self._send(200, {'sid': sid, 'ep': ep1_with_visuals(c, series, lang)} if c else {'sid': sid, 'job': start_job(ep1_job, series, lang)})
@@ -891,7 +938,7 @@ class H(BaseHTTPRequestHandler):
             if series not in BASE: return self._send(404, {'error': 'no series'})
             cs = callers(series); who = body.get('who') if body.get('who') in [x['key'] for x in cs] else cs[0]['key']
             name = (body.get('name') or ('你' if lang == 'zh' else 'you')).strip()[:24]
-            sess = SESS.get(body.get('sid') or '')
+            sess = get_sess(body.get('sid'))
             cid = 'c' + time.strftime('%m%d%H%M') + rid(4)
             c = CALLS[cid] = {'cid': cid, 'series': series, 'lang': lang, 'name': name, 'who': who, 'me': (body.get('me') or (sess or {}).get('me') or '').strip()[:400], 'sid': sess['sid'] if sess and sess['series'] == series else None,
                               'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': []}
@@ -909,7 +956,7 @@ class H(BaseHTTPRequestHandler):
             if c: log('call-' + c['cid'], {'end': True, 'seconds': body.get('seconds'), 'turns': len(c['turns']), 'at': time.strftime('%F %T')})
             return self._send(200, {'ok': True})
         if u.path == '/api/next':
-            sess = SESS.get(body.get('sid'))
+            sess = get_sess(body.get('sid'))
             if not sess: return self._send(404, {'error': 'session expired'})
             text = (body.get('text') or '').strip()[:400]; via = body.get('via') or 'free'
             n = len(sess['eps']) + 1; matched = None
@@ -929,7 +976,7 @@ class H(BaseHTTPRequestHandler):
             sess['wishes'] = []
             return self._send(200, {'job': out, 'matched': matched, 'via': via})
         if u.path == '/api/wish':  # 听的过程中对故事说的话：记下，按它重写两个选项的下一集（仍然秒开）
-            sess = SESS.get(body.get('sid'))
+            sess = get_sess(body.get('sid'))
             if not sess: return self._send(404, {'error': 'session expired'})
             text = (body.get('text') or '').strip()[:300]
             if text:
