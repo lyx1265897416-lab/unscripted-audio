@@ -60,6 +60,8 @@ MAX_EPS = 12
 
 POOL = queue.Queue()
 for _ in range(10): POOL.put(WakuMCP())
+CALL_POOL = queue.Queue()  # 11-09 通话专用配音通道：剧集在后台整集配音时，通话不跟它排队（原来排到 20 秒）
+threading.Thread(target=lambda: [CALL_POOL.put(WakuMCP()) for _ in range(int(os.environ.get('CALL_POOL', '6')))], daemon=True).start()  # 后台建，不拖慢重启
 SESS, JOBS, EP1_LOCK = {}, {}, {}
 CALL_KEYS = {}
 op = U.build_opener(U.ProxyHandler({}))
@@ -147,8 +149,9 @@ def tts_text(text, lead, lang):
     return text.strip()
 
 
-def waku(model, params, timeout=120):
-    m = POOL.get()
+def waku(model, params, timeout=120, pool=None):
+    pool = pool or POOL
+    m = pool.get()
     try:
         return m.tool('multimodal_run_model', {'capability': 'multimodal.generate.audio', 'model_id': model, 'parameters': params}, timeout=timeout)
     except TimeoutError:
@@ -156,10 +159,10 @@ def waku(model, params, timeout=120):
         except Exception: pass
         m = WakuMCP(); raise
     finally:
-        POOL.put(m)
+        pool.put(m)
 
 
-def tts(series, who, text, lang, engine='v4'):
+def tts(series, who, text, lang, engine='v4', pool=None):
     vid, lead = voice_of(series, who, lang)
     params = dict(text=tts_text(text, lead, lang), voice_id=vid, stability=0.4, similarity=0.8)
     if engine == 'flash': params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', params['text']), voice_id=vid)  # v2.5 不认表演标签，会念出来
@@ -167,7 +170,7 @@ def tts(series, who, text, lang, engine='v4'):
     err = None
     for attempt in range(3):
         try:
-            r = waku(model, params)
+            r = waku(model, params, pool=pool)
             if r.get('asset_url'): return r['asset_url']
             err = r.get('error') or r
         except Exception as e:
@@ -176,13 +179,13 @@ def tts(series, who, text, lang, engine='v4'):
     raise RuntimeError(f'tts failed: {str(err)[:200]}')
 
 
-def tts_hedged(series, who, text, lang, n, engine='v4'):
+def tts_hedged(series, who, text, lang, n, engine='v4', pool=None):
     """同一句发 n 条，谁先好用谁"""
     done = threading.Event(); box = {}; errs = []
 
     def one():
         try:
-            u = tts(series, who, text, lang, engine)
+            u = tts(series, who, text, lang, engine, pool)
             if not done.is_set(): box['u'] = u; done.set()
         except Exception as e:
             errs.append(e)
@@ -729,6 +732,15 @@ def greet_url(series, who, lang, make=True):
     json.dump({'url': u}, open(f, 'w')); return u
 
 
+def load_reacts(series, who, lang):
+    """中转重启后内存里的预配短反应没了（11-09 她打电话每轮第一句都要现配音）：从缓存文件读回来"""
+    try:
+        d = json.load(open(CACHE / 'fillers' / f'{series}.{who}.{lang}.json'))
+        if isinstance(d, dict) and d.get('react'): REACT_URLS[(series, who, lang)] = {react_key(k): v for k, v in d['react'].items()}; return True
+    except Exception: pass
+    return False
+
+
 def call_fillers(series, who, lang):
     """垫场声：她说完立刻播一句“嗯，我在听”，盖住他“想”的那几秒（11-05 她说这几句的音色最好）。第一次用时合成，之后缓存。"""
     f = CACHE / 'fillers' / f'{series}.{who}.{lang}.json'
@@ -810,12 +822,13 @@ def call_context(c):
 def run_call(job, c, her, spec=None):
     """一轮通话。spec={'base': 轮数}：预先生成（她还没选）——只合成第一句，不记进通话；她点了这条快捷回复（commit_spec）才补合成其余句并记进通话。"""
     t0 = time.time(); lang = c['lang']; n = len(c['turns']) + 1
+    if (c['series'], c['who'], lang) not in REACT_URLS: load_reacts(c['series'], c['who'], lang)
     out = {'lines': [], 'choices': [], 'hangup': False}; job['call'] = out; job['t'] = {}; ths = []; raws = []
     job['_raws'] = raws; job['_her'] = her; job['_n'] = n; job['_ths'] = ths; job['_started'] = set()
 
     def synth(i, text):
         if job.get('_canceled'): out['lines'][i]['url'] = ''; return  # 她已经打断了这一轮，后面的句子不再配音
-        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, (2 if spec else 3) if i == 0 else 1, c.get('tts', 'v4'))
+        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, 2 if i == 0 else 1, c.get('tts', 'flash'), CALL_POOL)
         except Exception: out['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
     job['_synth'] = synth
@@ -826,6 +839,7 @@ def run_call(job, c, her, spec=None):
                 v = re.sub(r'^\s*(\[[^\]]*\]\s*)?(喂+|嗨|(?:hey|hi|hello)\b)[\s,，。.!！?？—–-]*', lambda m: m.group(1) or '', v, flags=re.I).strip()
                 v = re.sub(r'^((?:\[[^\]]*\]\s*)?)([a-z])', lambda m: m.group(1) + m.group(2).upper(), v)
                 if not v: return
+                if react_key(re.sub(r'\[[^\]]*\]\s*', '', v)) in {react_key(x) for x in REACTS[lang]}: return  # 第 1 轮“喂？”之后不要再接“嗯？”，直接说正事
             i = len(out['lines']); out['lines'].append({'who': c['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None}); raws.append(v)
             pre = (REACT_URLS.get((c['series'], c['who'], lang)) or {}).get(react_key(re.sub(r'\[[^\]]*\]\s*', '', v))) if i == 0 else None
             if pre:  # 预先配好的短反应：不用等配音
@@ -944,6 +958,20 @@ def ear_feed(c, data, ctype):
         bio = io.BytesIO(); w = wave.open(bio, 'wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(done); w.close()
         return bio.getvalue()
     return None
+
+
+BC_ZH = set('嗯 嗯嗯 嗯哼 哦 噢 啊 嗨 喂 好 好的 对 对啊 对对 是 是啊 哈 哈哈 嘿 嗯呢 行 唔 呃'.split())
+BC_EN = set('hi hey hello mm mhm mmhmm hmm yeah yep yes ok okay uh um huh oh ah right sure aha'.split())
+def backchannel(text, lang):
+    """他说着话时她随口应的一声（嗯/对/嗨/Hi/Yeah）：不算插话"""
+    t = re.sub(r'[\s\W_]+', ' ', (text or '').lower()).strip()
+    if not t: return True
+    words = t.split()
+    if all(w in BC_EN for w in words) and len(words) <= 3: return True
+    z = t.replace(' ', '')
+    if len(z) <= 1 or z in BC_ZH: return True
+    if re.fullmatch(r'[嗯哦啊嗨喂好对是哈嘿呃唔]{1,3}', z): return True
+    return False
 
 
 def call_start_turn(c, text, prev, played, cut):
@@ -1120,6 +1148,12 @@ class H(BaseHTTPRequestHandler):
                 except Exception as e: print('call/say asr', repr(e)[:120], flush=True)
             asr_ms = int((time.time() - t0) * 1000)
             if not text: return self._send(200, {'text': '', 'asr_ms': asr_ms})
+            prev_job = JOBS.get(gq('prev') or '') or {}
+            his_now = [l['text'] for l in ((prev_job.get('call') or {}).get('lines') or [])]
+            # 11-09 她说“嗨/嗯/对”或者他自己的声音漏进麦克风，都不该打断他、让他重开一轮（原来每句都重开，他一直没声）
+            if gq('cut') == '1' and (backchannel(text, c['lang']) or echo_of_him(c, text, his_now)):
+                log('call-' + c['cid'], {'say_drop': text, 'asr_ms': asr_ms, 'at': time.strftime('%F %T')})
+                return self._send(200, {'text': '', 'bc': text, 'asr_ms': asr_ms})
             jid = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
             log('call-' + c['cid'], {'say': text, 'asr_ms': asr_ms, 'cut': gq('cut') == '1', 'played': gq('played'), 'at': time.strftime('%F %T')})
             return self._send(200, {'text': text, 'job': jid, 'asr_ms': asr_ms})
@@ -1141,7 +1175,7 @@ class H(BaseHTTPRequestHandler):
             except Exception as e: text = ''; print('call/chunk asr', repr(e)[:120], flush=True)
             prev_job = JOBS.get(gq('prev') or '') or {}
             his_now = [l['text'] for l in ((prev_job.get('call') or {}).get('lines') or [])]
-            if not text or echo_of_him(c, text, his_now):
+            if not text or echo_of_him(c, text, his_now) or (gq('cut') == '1' and backchannel(text, c['lang'])):
                 log('call-' + c['cid'], {'chunk_drop': text, 'at': time.strftime('%F %T')}); return self._send(200, {'text': ''})
             jid = call_start_turn(c, text, gq('prev'), int(gq('played') or 0), gq('cut') == '1')
             log('call-' + c['cid'], {'say': text, 'locked': True, 'asr_ms': int((time.time() - t0) * 1000), 'at': time.strftime('%F %T')})
@@ -1212,6 +1246,8 @@ class H(BaseHTTPRequestHandler):
                               'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': [],
                               'tts': body.get('tts') if body.get('tts') in ('turbo', 'flash') else CALL_TTS}
             log('call-' + cid, {'start': True, 'series': series, 'who': who, 'lang': lang, 'name': name, 'sid': c['sid'], 'direction': c['direction'], 'at': time.strftime('%F %T')})
+            if (series, who, lang) not in REACT_URLS and not load_reacts(series, who, lang):
+                threading.Thread(target=call_fillers, args=(series, who, lang), daemon=True).start()  # 第一次打给这个角色：后台配好短反应
             jid = start_job(run_call, c, '')
             if ck: CALL_KEYS[ck] = (cid, jid)
             g = greet_url(series, who, lang, make=False)

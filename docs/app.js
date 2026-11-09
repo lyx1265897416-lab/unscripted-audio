@@ -2028,6 +2028,7 @@ function langUrl(l) {
 const CALL_PRICE = 20;
 const tz = (en, zh) => (LANG === 'zh' ? zh : en);
 const CALL_WAIT = 3500;   // 11-09: a real call doesn't wait for "your turn" — if she says nothing he carries on / draws her in   // after he finishes: how long the mic waits for her to start talking before he carries on
+const MAX_RING = 9000;    // …but never longer than this: then "Hey." and a "let me think" while his line finishes
 const MIN_RING = 1800;    // an outgoing call rings at least this long before he picks up (feels like a real call; covers his first line)
 const callAudio = new Audio();
 callAudio.preload = 'auto';
@@ -2068,15 +2069,37 @@ function startRing() {
   if (playLoop('ring-in.mp3')) return;
   ringOnce(); if (C) C.ringT = setInterval(ringOnce, 3200);
 }
-function stopRing() { if (C && C.ringT) { clearInterval(C.ringT); C.ringT = 0; } stopLoop(); }
+function stopRing() { if (C && C.ringT) { clearInterval(C.ringT); C.ringT = 0; } if (C) clearInterval(C.ringW); stopLoop(); }
 /** ringtone / ringback on the call element itself (loops until he picks up) */
 function playLoop(url) {
   try {
     callSrcTok++;
     callAudio.loop = true; callAudio.src = url; callAudio.dataset.loop = '1';
-    const p = callAudio.play(); if (p && p.catch) p.catch(() => { if (C && !C.ringT && callAudio.dataset.loop) { delete callAudio.dataset.loop; ringOnce(); C.ringT = setInterval(ringOnce, 3200); } });
+    const p = callAudio.play(); if (p && p.catch) p.catch(() => { if (C && !C.ringT && callAudio.dataset.loop) { delete callAudio.dataset.loop; unlockCtx(); const f = C.direction === 'incoming' ? ringOnce : ringbackOnce; f(); C.ringT = setInterval(f, C.direction === 'incoming' ? 3200 : 4000); } });
     return true;
   } catch (e) { return false; }
+}
+/* 11-09 she heard no ring: iOS can pause the <audio> when the mic is (re)opened for the call. While it rings, keep
+ * checking that the tone is really playing (time moves); if the element won't play, fall back to a WebAudio ringback. */
+function ringbackOnce() {
+  if (!actx || actx.state !== 'running') return;
+  const t = actx.currentTime + 0.03;
+  tone(t, 440, 1.9, 0.07); tone(t, 480, 1.9, 0.07);
+}
+function ringWatch(call) {
+  clearInterval(call.ringW); let last = -1, stuck = 0;
+  call.ringW = setInterval(() => {
+    if (C !== call || call.pickedUp || call.phase === 'ended' || !(call.phase === 'connecting' || call.phase === 'incoming')) { clearInterval(call.ringW); return; }
+    if (call.ringT) return;   // already on the WebAudio fallback
+    const playing = callAudio.dataset.loop && !callAudio.paused && callAudio.currentTime !== last;
+    last = callAudio.currentTime;
+    if (playing) { stuck = 0; return; }
+    stuck += 1;
+    if (stuck <= 2) { try { callAudio.dataset.loop = '1'; callAudio.loop = true; if (!/ring/.test(callAudio.src)) callAudio.src = call.direction === 'incoming' ? 'ring-in.mp3' : 'ringback.mp3'; const p = callAudio.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } return; }
+    unlockCtx();
+    const f = call.direction === 'incoming' ? ringOnce : ringbackOnce;
+    f(); call.ringT = setInterval(f, call.direction === 'incoming' ? 3200 : 4000);
+  }, 600);
 }
 function stopLoop() { if (callAudio.dataset.loop) { delete callAudio.dataset.loop; callAudio.loop = false; try { callAudio.pause(); } catch (e) { /* ignore */ } } }
 function hangupTone() {
@@ -2122,6 +2145,16 @@ function playCallSrcNow(url) {
   if (p && p.catch) p.catch((err) => { if (err && err.name === 'NotAllowedError' && C) { C.blocked = true; renderCallUI(); } });
 }
 callAudio.addEventListener('ended', onCallAudioDone);
+/* 11-09 "he said hi, then nothing": if his line should be playing but the element sits paused (iOS audio-session change
+ * when the mic opens) → play it again; if its time stops moving for 5 s → treat that line as done and go on. */
+const CW = { last: -1, stuck: 0 };
+setInterval(() => {
+  const call = C;
+  if (!call || !call.pickedUp || call.phase === 'ended' || call.held || EAR.utt || callAudio.dataset.loop || !(call.playing || call.fillerPlaying) || callAudio.src.startsWith('data:')) { CW.stuck = 0; CW.last = -1; return; }
+  if (callAudio.paused && !callAudio.ended) { const p = callAudio.play(); if (p && p.catch) p.catch(() => {}); }
+  if (callAudio.currentTime === CW.last) { CW.stuck += 1; if (CW.stuck >= 5) { CW.stuck = 0; onCallAudioDone(); } } else CW.stuck = 0;
+  CW.last = callAudio.currentTime;
+}, 1000);
 callAudio.addEventListener('error', () => { if (!callAudio.src.startsWith('data:') && !callAudio.dataset.loop) onCallAudioDone(); });
 function onCallAudioDone() {
   if (!C || callAudio.src.startsWith('data:') || callAudio.dataset.loop) return;
@@ -2228,22 +2261,30 @@ function startCall(id, who, o) {
   call.dialAt = Date.now();
   renderCall();
   playLoop('ringback.mp3');  // the ringback tone you hear while it rings on his side
+  ringWatch(call);
   prefetchFillers(call);
   beginCallRequest(call);
 }
 /** a voice call needs the mic: ask inside the tap that starts / accepts it, so the prompt never lands mid-call */
-function callMicPrime() { if (VOICE_OK) micStream().catch(() => { VI.denied = true; }); }
+function callMicPrime() {
+  if (!VOICE_OK) return;
+  micStream().then(() => { if (C && !C.pickedUp && callAudio.dataset.loop && callAudio.paused) callAudio.play().catch(() => {}); }).catch(() => { VI.denied = true; });
+}
 /** He picks up: "Hello?" right away (pre-voiced), then his first line as soon as it's voiced. */
 function maybePickUp(call) {
   if (call.pickedUp) return true;
-  const firstReady = call.lines.some((l) => l.url);
+  const l0 = call.lines.find((l) => l.url);
+  const firstReady = !!l0 && (!blobable(l0.url) || !!blobNow(l0.url));   // voiced AND already on the phone → no gap after "Hey."
   const greet = (call.greet || [])[0];
-  if (call.direction === 'outgoing' && Date.now() - (call.dialAt || 0) < MIN_RING) {
-    if (!call.pickT) call.pickT = setTimeout(() => { call.pickT = 0; if (C === call) callAdvance(); }, MIN_RING - (Date.now() - call.dialAt) + 30);
+  // outgoing: it rings ≥1.8 s, and keeps ringing (like a real phone, up to ~7 s) until his first real line is voiced,
+  // so "Hey." is followed straight away by what he has to say instead of a silent gap (11-09)
+  const rang = Date.now() - (call.dialAt || 0);
+  if (call.direction === 'outgoing' && (rang < MIN_RING || (!firstReady && rang < MAX_RING))) {
+    if (!call.pickT) call.pickT = setTimeout(() => { call.pickT = 0; if (C === call) callAdvance(); }, Math.max(200, (rang < MIN_RING ? MIN_RING : MAX_RING) - rang + 30));
     return false;
   }
   if (!greet && !firstReady) return false;
-  call.pickedUp = true; stopLoop();
+  call.pickedUp = true; stopRing();
   if (!call.t0) { call.t0 = Date.now(); call.timer = setInterval(updateCallTimer, 1000); }
   if (greet) { call.fillerPlaying = true; call.greeting = true; playCallSrc(greet); renderCallUI(); return false; }
   return true;
@@ -2253,7 +2294,7 @@ function showIncoming(id, who, sid) {
   if (callActive()) return;
   const call = newCall(id, who, 'incoming', sid);
   renderCall();
-  startRing();
+  startRing(); ringWatch(call);
   prefetchFillers(call);
   beginCallRequest(call);
 }
@@ -2292,6 +2333,7 @@ function pollCall(jobId, turn) {
     if (j.status === 'error') { toast(`Call dropped: ${esc(j.error || 'error')}`); endCall('error'); return; }
     if (j.call) {
       call.lines = (j.call.lines || []).map((l) => ({ who: l.who, text: cleanText(l.text), url: l.url }));
+      call.lines.forEach((l) => { if (l.url && blobable(l.url) && !blobNow(l.url)) fetchBlob(l.url).then(() => { if (C === call && !call.pickedUp) callAdvance(); }); });
       if (j.status === 'done') { call.jobDone = true; call.choices = (j.call.choices || []).slice(0, 2); call.hangup = !!j.call.hangup; }
       recSyncHim(call);
     } else if (j.status === 'done') call.jobDone = true;
@@ -2423,7 +2465,7 @@ function earFrame(x) {
   if (!EAR.utt) {
     EAR.pre.push(frame); while (EAR.pre.length * dt > 0.45) EAR.pre.shift();   // keep the start of her first syllable
     if (!over && lv < th) EAR.floor = EAR.floor * 0.95 + lv * 0.05;
-    if (lv > th) { EAR.above += dt; if (EAR.above >= (over ? 0.2 : 0.12)) earBegin(call, over); } else EAR.above = 0;
+    if (lv > th) { EAR.above += dt; if (EAR.above >= (over ? 0.3 : 0.12)) earBegin(call, over); } else EAR.above = 0;
     return;
   }
   const u = EAR.utt; u.buf.push(frame); u.dur += dt;
@@ -2491,7 +2533,7 @@ function earIdle(call) {
 }
 function earEnd(call) {
   const u = EAR.utt; EAR.utt = null;
-  if (u.voiced < 0.3) { earResume(call); return; }   // a click, a cough
+  if (u.voiced < (u.over ? 0.45 : 0.3)) { earResume(call); return; }   // a click, a cough, a short "mm" over him
   sendCallSay(call, toWav16k(u.buf, EAR.sr), u);
 }
 function toWav16k(chunks, sr) {
