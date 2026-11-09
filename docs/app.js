@@ -214,20 +214,30 @@ function markUnlocked(id, n) { (S.unlocks[id] = S.unlocks[id] || []).push(n); sa
 /* API base: GitHub Pages serves the app statically and puts relay.json ({"base": tunnel URL}) next to it.
  * No relay.json → same origin (the local relay serves the page itself). */
 let API_BASE = '';
+let API_BASES = [];   // 11-09: two independent tunnels; if one drops (they do, for ~10 s at a time) switch to the other at once
 async function loadRelay() {
   try {
     let j = null;
     if (window.__relayP) { j = await window.__relayP; window.__relayP = null; }  // started in index.html, before app.js loaded
     else { const r = await fetch('relay.json?t=' + Date.now(), { cache: 'no-store' }); j = r.ok ? await r.json() : null; }
-    API_BASE = j && j.base ? String(j.base).trim().replace(/\/+$/, '') : '';
+    const clean = (x) => String(x || '').trim().replace(/\/+$/, '');
+    API_BASES = ((j && j.bases) || (j && j.base ? [j.base] : [])).map(clean).filter(Boolean);
+    if (!API_BASES.includes(API_BASE)) API_BASE = API_BASES[0] || '';
     if (API_BASE) store.set('ua.relay', API_BASE);
     return !!API_BASE;
-  } catch (e) { API_BASE = ''; return false; }
+  } catch (e) { API_BASE = API_BASE || ''; return !!API_BASE; }
+}
+function nextBase() {
+  if (API_BASES.length < 2) return false;
+  API_BASE = API_BASES[(API_BASES.indexOf(API_BASE) + 1) % API_BASES.length];
+  store.set('ua.relay', API_BASE);
+  return true;
 }
 let relayP = null;
 function reconnect() {
+  if (nextBase()) return Promise.resolve(true);   // the other tunnel: no wait
   if (!relayP) {
-    toast('Reconnecting…');
+    toast(tz('Reconnecting…', '正在重新连接…'));
     relayP = loadRelay();
     relayP.finally(() => setTimeout(() => { relayP = null; }, 4000));
   }
@@ -237,16 +247,20 @@ const apiUrl = (path) => (API_BASE ? API_BASE + '/' + path.replace(/^\//, '') : 
 /** Server-relative media URLs ("/x.mp3") must hit the API host when the page is on Pages. */
 const absUrl = (u) => (u && API_BASE && u[0] === '/' && u[1] !== '/' ? API_BASE + u : u);
 /** fetch with one retry after re-reading relay.json when the tunnel may have rotated (network error only). */
-function withTimeout(init) {  // a stalled tunnel request must not hang the player forever (phones wait 60 s+ by default)
+function withTimeout(init, ms) {  // a stalled tunnel request must not hang the player (phones wait 60 s+ by default); short, so we fail over fast
   if (init && init.signal) return init;
-  const c = new AbortController(); setTimeout(() => c.abort(), (init && init.method === 'POST') ? 45000 : 15000);
+  const c = new AbortController(); setTimeout(() => c.abort(), ms || ((init && init.method === 'POST') ? 25000 : 9000));
   return Object.assign({}, init, { signal: c.signal });
 }
-async function apiFetch(build, init) {
-  try { return await fetch(build(), withTimeout(init)); } catch (e) {
+async function apiFetch(build, init, ms) {
+  try {
+    const r = await fetch(build(), withTimeout(init, ms));
+    if (r.status === 502 || r.status === 530 || r.status === 1033) throw new Error('tunnel ' + r.status);   // Cloudflare: tunnel is down
+    return r;
+  } catch (e) {
     if (e && e.name === 'AbortError' && init && init.signal) throw e;
     await reconnect();
-    return fetch(build(), withTimeout(init));
+    return fetch(build(), withTimeout(init, ms));
   }
 }
 const RealAPI = {
@@ -258,7 +272,7 @@ const RealAPI = {
       Object.entries(params || {}).forEach(([k, v]) => { if (v != null) u.searchParams.set(k, v); });
       return u.toString();
     };
-    const r = await apiFetch(build, { cache: 'no-store' });
+    const r = await apiFetch(build, { cache: 'no-store' }, params && params.wait ? 14000 : 9000);
     if (!r.ok) {
       let msg = 'HTTP ' + r.status;
       try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (e) { /* ignore */ }
@@ -755,7 +769,12 @@ function liveAdvance() {
     return;
   }
   const ln = lines[P.idx];
-  if (!ln.url) { P.waiting = true; updatePlayerUI(); return; }
+  if (!ln.url) {
+    P.waiting = true; updatePlayerUI();
+    const e0 = ep, i0 = P.idx;
+    setTimeout(() => { if (P.ep === e0 && P.idx === i0 && P.waiting && P.want && !lines[i0].url) keepAlive(); }, 700);   // no dead air while the line is voiced
+    return;
+  }
   if (blobable(ln.url) && !blobNow(ln.url) && P.blobWait !== ln.url && Date.now() - lastTap > 1200) {  // its local copy is on the way: wait up to 4 s for it (a direct download is no faster and would compete with it)
     P.blobWait = ln.url; P.waiting = true; updatePlayerUI();
     const ep0 = ep, i0 = P.idx;
@@ -863,7 +882,7 @@ function reloadCurrent(why) {
 setInterval(() => {
   const on = P.want && P.cur && !P.aux && !P.waiting && !audio.paused && !audio.src.startsWith('data:');
   if (!on) { WD.n = 0; WD.t = -1; return; }
-  if (Math.abs(audio.currentTime - WD.t) < 0.05) { if (++WD.n >= 4) reloadCurrent(); }
+  if (Math.abs(audio.currentTime - WD.t) < 0.05) { if (++WD.n >= (audio.currentTime < 0.05 ? 2 : 4)) reloadCurrent(); }   // stuck at 0:00 → rebuild after 2 s
   else { WD.n = 0; WD.t = audio.currentTime; if (audio.currentTime > 1) WD.tries = 0; }
 }, 1000);
 
@@ -975,7 +994,7 @@ async function newSession(id) {
   // or audio-only from the series list) and merge the session / cues / choices when /api/play comes back through the tunnel.
   const k1 = 'ua.ep1.' + id + '.' + LANG;
   const cached = store.get(k1, null);
-  const audioUrl = (s.ep1 && s.ep1.audio) || (cached && cached.audio);
+  const audioUrl = (s.ep1 && s.ep1.audio) || (cached && cached.audio) || (!MOCK ? `ep1/${id}.${LANG}.mp3` : null);
   let early = null;
   if (!MOCK && audioUrl) {
     early = (cached && cached.audio === audioUrl) ? JSON.parse(JSON.stringify(cached))
@@ -1686,14 +1705,14 @@ async function sendNext(id, text, via) {
       if (res && res.job === sp.job) startGeneration(res.job, nextN, text, false, true);
       else if (res && res.job) { // relay could not use the pre-written episode: fall back to the fresh one
         ss.eps = ss.eps.filter((e) => e !== ep); audio.pause(); P.cur = ''; P.ep = null;
-        P.gen = { n: nextN, text, via, status: 'writing', err: null };
+        P.gen = { n: nextN, text, via, status: 'writing', err: null, t0: Date.now() };
         ss.job = { id: res.job, n: nextN, text, via }; save();
         startGeneration(res.job, nextN, text, false);
       }
     }).catch((e) => { console.warn(e); startGeneration(sp.job, nextN, text, false, true); });
     return;
   }
-  P.gen = { n: nextN, text, via, status: 'writing', err: null };
+  P.gen = { n: nextN, text, via, status: 'writing', err: null, t0: Date.now() };
   save();
   bedStart();
   updatePlayerUI(); renderMini(); openPlayer();
@@ -1717,7 +1736,7 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
   const my = ++genToken;
   const id = P.id;
   if (!alreadyPlaying) {
-    P.gen = P.gen && P.gen.n === n ? P.gen : { n, text, via: 'option', status: 'writing' };
+    P.gen = P.gen && P.gen.n === n ? P.gen : { n, text, via: 'option', status: 'writing', t0: Date.now() };
     P.want = true;
   }
   updatePlayerUI(); renderMini();
@@ -1787,7 +1806,9 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
       if (!started && my === genToken && P.gen && P.gen.n === ep.n) {
         const lines = ep.lines || [];
         let k = 0; while (k < lines.length && lines[k].url === '') k++;
-        if ((lines[k] && lines[k].url) || (j.status === 'done')) {
+        let ready = 0; for (let x = k; x < lines.length && lines[x].url; x++) ready++;
+        const buffered = ready >= 2 || (ready >= 1 && (Date.now() - (P.gen.t0 || 0) > 12000));   // two lines in hand (~7 s of audio) → the rest are voiced before they're needed (cap the wait at 12 s)
+        if ((lines[k] && lines[k].url && buffered) || (j.status === 'done')) {
           started = true;
           P.gen = null;
           ep._done = j.status === 'done' ? undefined : false;

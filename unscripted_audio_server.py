@@ -533,7 +533,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
     def synth(i, who, text):
         first = i == 0
         try:
-            eng = 'flash' if (not spec and i < 2) else sess.get('tts', 'v4')  # 11-09 她说完现写的那集：前两句用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒）
+            eng = 'flash' if not spec else sess.get('tts', 'v4')  # 11-09 她说完现写的那集：整集用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒），句句赶在播放前配好
             u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (2 if (i == 1 and not spec) or (spec and i == SPEC_LINES) else 1), eng)
             ep['lines'][i]['url'] = u
             threading.Thread(target=cache_line, args=(u,), daemon=True).start()
