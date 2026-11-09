@@ -653,7 +653,12 @@ def commit_ep_spec(sess, text):
 CALLS = {}
 MAX_CALL_TURNS = 12
 FILLERS = {'zh': ['嗯。', '嗯，我在听。', '我在。', '嗯，我知道。'], 'en': ['Mm.', "I'm listening.", "I'm here.", 'Yeah. I know.']}
-GREETS = {'zh': ['喂？'], 'en': ['Hey.']}  # 接通那一刻马上说的第一声（预先配好），盖住他第一句话的生成时间
+GREETS = {'zh': ['喂？'], 'en': ['Hey.']}
+# 他每轮的第一句从这些短反应里选（预先配好音）：她说完 → 识别 → 快模型写出第一句，马上就有声音，不用等配音（11-08）
+REACTS = {'zh': ['嗯？', '嗯。', '等等。', '你说。', '……真的？', '好。', '行。', '什么？', '哈。', '我在听。', '慢点说。', '……嗯。'],
+          'en': ['Mm?', 'Mm.', 'Wait.', 'Go on.', '…Really?', 'Okay.', 'Yeah.', 'What?', 'Ha.', "I'm listening.", 'Slow down.', '…Yeah.']}
+react_key = lambda t: re.sub(r'[\s\W_]+', '', (t or '').lower())
+REACT_URLS = {}  # (series, who, lang) -> {key: url}  # 接通那一刻马上说的第一声（预先配好），盖住他第一句话的生成时间
 THINKS = {'zh': ['让我想想。', '你这么问……', '嗯……我在想怎么跟你说。', '……这个问题。'], 'en': ['Let me think.', 'You asking me that…', "Mm… I'm figuring out how to say this.", '…That question.']}
 
 
@@ -672,7 +677,9 @@ def call_fillers(series, who, lang):
     f = CACHE / 'fillers' / f'{series}.{who}.{lang}.json'
     if f.exists():
         d = json.load(open(f))
-        if isinstance(d, dict) and d.get('greet'): return d
+        if isinstance(d, dict) and d.get('greet') and d.get('react'):
+            REACT_URLS[(series, who, lang)] = {react_key(k): v for k, v in d['react'].items()}
+            return d
         if not isinstance(d, dict): d = {'urls': d}  # 旧缓存只有垫场声，补上思考声
     else: d = None
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -681,15 +688,18 @@ def call_fillers(series, who, lang):
     with cf.ThreadPoolExecutor(4) as ex:
         urls = d['urls'] if d else list(ex.map(say, FILLERS[lang]))
         think = (d or {}).get('think') or list(ex.map(say, THINKS[lang]))
-        greet = list(ex.map(say, GREETS[lang]))
-    d = {'urls': urls, 'think': think, 'greet': greet}
+        greet = (d or {}).get('greet') or list(ex.map(say, GREETS[lang]))
+        react = (d or {}).get('react') or dict(zip(REACTS[lang], ex.map(say, REACTS[lang])))
+    d = {'urls': urls, 'think': think, 'greet': greet, 'react': react}
+    REACT_URLS[(series, who, lang)] = {react_key(k): v for k, v in react.items()}
     json.dump(d, open(f, 'w')); return d
 
 
 CALL_RULES = {
  'zh': """这是一通电话，纯语音。你只演 {who}（{role}），对面是她（听众本人），她叫「{name}」。
 - 只写 {who} 对着电话说的话，口语、短句，像真人深夜打电话；不要旁白、不要动作描写、不要括号。
-- 每轮 1–3 句，每句 8–40 个字；第一句先接住她刚说的话（她沉默就回应沉默）。
+- 每轮 2–3 句。第一句必须从这几句里原样挑一句最贴切的（它们是预先录好的，能马上出声）：嗯？ / 嗯。 / 等等。 / 你说。 / ……真的？ / 好。 / 行。 / 什么？ / 哈。 / 我在听。 / 慢点说。 / ……嗯。 第二句起再正常往下说（每句 8–40 个字）。她沉默就回应沉默。
+- 她随时可能打断你（记录里写着“被她打断”）：别把被打断的话原样再说一遍，先接她刚说的。
 - 严格按人设和说话方式说话；只说他这时候知道的事，世界卡里的真相按节奏透露，不一次说破。
 - 记得你们在剧里经历过的事（见“剧里到目前为止”），可以提起具体细节；她有明确想聊的方向就跟着她。
 - 每轮往前推一点：问她一个问题、提出一个约定、说出一点心里话或一个小秘密。偶尔叫她的名字，不要每句都叫。
@@ -697,7 +707,8 @@ CALL_RULES = {
 - 通话到第 10 轮左右自然收尾，给一个让她想再打来的钩子，HANGUP: yes。""",
  'en': """This is a phone call, voice only. You play only {who} ({role}); on the other end is her (the listener), named "{name}".
 - Write only what {who} says into the phone: short, natural late-night phone talk; no narration, no actions, no brackets.
-- 1–3 lines per turn, each under 25 words; the first line answers what she just said (if she is silent, respond to the silence).
+- 2–3 lines per turn. The FIRST line must be exactly one of these (they are pre-recorded so he answers instantly): Mm? / Mm. / Wait. / Go on. / …Really? / Okay. / Yeah. / What? / Ha. / I'm listening. / Slow down. / …Yeah. — pick the one that fits, then say more from the second line on (each under 25 words). If she is silent, respond to the silence.
+- She can interrupt you at any moment (the log says "cut off by her"): don't repeat what you were cut off saying; answer what she just said.
 - Stay strictly in character; only say what he knows now; reveal the world-card truths gradually, never all at once.
 - Remember what you've been through in the story (see "story so far") and bring up specifics; if she steers, follow her.
 - Each turn moves things a little: ask her something, make a promise, admit a feeling or a small secret. Use her name now and then, not every line.
@@ -731,7 +742,8 @@ def call_system(c, lite=False):
 def call_context(c):
     sess = get_sess(c.get('sid'))
     story = story_so_far(sess) if sess else ('（她还没听这部剧，就当你们刚认识不久，按第 1 集的处境打电话）' if c['lang'] == 'zh' else "(She hasn't started the series; call as if you've only just met, in Episode 1's situation.)")
-    turns = '\n'.join((f'她：{t["her"]}\n{c["who"]}：' + ' / '.join(t['lines'])) for t in c['turns'])
+    cut = '（说到这里被她打断）' if c['lang'] == 'zh' else ' (cut off by her)'
+    turns = '\n'.join((f'她：{t["her"]}\n{c["who"]}：' + ' / '.join(t['lines']) + (cut if t.get('cut') else '')) for t in c['turns'])
     return story, turns
 
 
@@ -742,6 +754,7 @@ def run_call(job, c, her, spec=None):
     job['_raws'] = raws; job['_her'] = her; job['_n'] = n; job['_ths'] = ths; job['_started'] = set()
 
     def synth(i, text):
+        if job.get('_canceled'): out['lines'][i]['url'] = ''; return  # 她已经打断了这一轮，后面的句子不再配音
         try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, (2 if spec else 3) if i == 0 else 1, c.get('tts', 'v4'))
         except Exception: out['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
@@ -754,6 +767,10 @@ def run_call(job, c, her, spec=None):
                 v = re.sub(r'^((?:\[[^\]]*\]\s*)?)([a-z])', lambda m: m.group(1) + m.group(2).upper(), v)
                 if not v: return
             i = len(out['lines']); out['lines'].append({'who': c['who'], 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None}); raws.append(v)
+            pre = (REACT_URLS.get((c['series'], c['who'], lang)) or {}).get(react_key(re.sub(r'\[[^\]]*\]\s*', '', v))) if i == 0 else None
+            if pre:  # 预先配好的短反应：不用等配音
+                out['lines'][0]['url'] = pre; job['_started'].add(0); job['status'] = 'voicing'; job['t'].setdefault('first_line', round(time.time() - t0, 2)); job['t']['l0'] = job['t']['first_line']; job['t']['react'] = True
+                return
             job['status'] = 'voicing'; job['t'].setdefault('first_line', round(time.time() - t0, 2))
             if spec and i > 0 and not job.get('_committed'): return  # 预先生成只配第一句，其余等她真选了再配
             job['_started'].add(i)
@@ -800,10 +817,26 @@ def finish_turn(job, c, ths):
     for l in out['lines']:
         if l['url'] is None: l['url'] = ''
     n = job['_n']; her = job['_her']
-    c['turns'].append({'her': her if n > 1 else '（接通）', 'lines': [l['text'] for l in out['lines']]})
+    with c.setdefault('_tlock', threading.Lock()):
+        if not job.get('_appended'):
+            job['_appended'] = True
+            c['turns'].append({'her': her if n > 1 else '（接通）', 'lines': [l['text'] for l in out['lines']]})
     job['status'] = 'done'
+    if job.get('_canceled'): return
     log('call-' + c['cid'], {'turn': n, 'her': her, 'writer': job.get('writer'), 'spec': bool(job.get('_committed')), 't': job['t'], 'out': out, 'at': time.strftime('%F %T')})
     if not out['hangup'] and c['cid'] in CALLS: start_specs(c, out['choices'])
+
+
+def cut_turn(c, job_id, played):
+    """她插话打断：他这一轮只算她听到的前 played 句，记进通话（标“被她打断”），其余句子不再配音"""
+    job = JOBS.get(job_id or '')
+    with c.setdefault('_tlock', threading.Lock()):
+        if job and job.get('call') is not None and not job.get('_appended') and job.get('_n') == len(c['turns']) + 1:
+            job['_canceled'] = True; job['_appended'] = True
+            n = job['_n']; her = job.get('_her') or ''
+            c['turns'].append({'her': her if n > 1 else '（接通）', 'lines': [l['text'] for l in job['call']['lines'][:max(0, played)]], 'cut': True})
+        elif c['turns'] and played >= 0:
+            t = c['turns'][-1]; t['lines'] = t['lines'][:max(1, played)]; t['cut'] = True
 
 
 def finish_spec(job, c):
@@ -932,6 +965,10 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {'ep': ep}) if ep else self._send(404, {'error': 'no episode'})
             if u.path == '/api/job':
                 j = JOBS.get(g('id'))
+                if j and g('wait') and g('have'):  # 长轮询：等到多一句有了配音、或写完/出错（最多 8 秒），省掉公网反复问
+                    have = int(g('have') or 0); dl = time.time() + min(8, float(g('wait') or 8))
+                    voiced = lambda: sum(1 for l in ((j.get('call') or j.get('ep') or {}).get('lines') or []) if l.get('url') is not None)
+                    while time.time() < dl and j.get('status') not in ('done', 'error', 'ready') and voiced() <= have: time.sleep(0.15)
                 if j and j.get('status') == 'ready': j = dict(j, status='voicing')  # 预先生成好了但还没被选：对外当作还在合成
                 return self._send(200 if j else 404, {k: v for k, v in j.items() if not k.startswith('_')} if j else {'error': 'no job'})
             return self._send(404, {'error': 'not found'})
@@ -945,6 +982,27 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == '/api/call/say':  # 通话里她说的一段话（wav/webm 原始音频）：本机识别 + 打断处理 + 开始他下一轮，一次往返
+            q = parse_qs(u.query); gq = lambda k, d='': q.get(k, [d])[0]
+            if gq('k') != TOKEN: return self._send(403, {'error': 'bad key'})
+            c = CALLS.get(gq('cid'))
+            if not c: return self._send(404, {'error': 'call ended'})
+            n = int(self.headers.get('Content-Length') or 0)
+            data = self.rfile.read(n) if 0 < n <= 8_000_000 else b''
+            t0 = time.time(); text = ''
+            if data:
+                try:
+                    req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/wav', 'X-Lang': c['lang']})
+                    text = (json.loads(op.open(req, timeout=30).read()).get('text') or '').strip()
+                except Exception as e:
+                    print('call/say asr', repr(e)[:120], flush=True)
+            asr_ms = int((time.time() - t0) * 1000)
+            if not text: return self._send(200, {'text': '', 'asr_ms': asr_ms})
+            if gq('cut') == '1' or gq('prev'): cut_turn(c, gq('prev'), int(gq('played') or 0))
+            c['spec'] = {}
+            jid = start_job(run_call, c, her_said(text, 'voice', c['lang']))
+            log('call-' + c['cid'], {'say': text, 'asr_ms': asr_ms, 'cut': gq('cut') == '1', 'played': gq('played'), 'at': time.strftime('%F %T')})
+            return self._send(200, {'text': text, 'job': jid, 'asr_ms': asr_ms})
         if u.path == '/api/asr':  # 手机录的几秒语音 → 本机 faster-whisper（unscripted_asr.py，8917），中英文自动判断
             q = parse_qs(u.query)
             if q.get('k', [''])[0] != TOKEN: return self._send(403, {'error': 'bad key'})

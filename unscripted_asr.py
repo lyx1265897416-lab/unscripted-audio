@@ -61,7 +61,8 @@ class H(BaseHTTPRequestHandler):
         if n <= 0 or n > 8_000_000: return self._send(400, {'error': 'bad size'})
         data = self.rfile.read(n)
         hint = (self.headers.get('X-Lang') or '').strip()
-        ext = '.mp4' if 'mp4' in (self.headers.get('Content-Type') or '') else '.webm'
+        ct = self.headers.get('Content-Type') or ''
+        ext = '.mp4' if 'mp4' in ct else '.wav' if 'wav' in ct else '.mp3' if 'mpeg' in ct else '.webm'
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
             f.write(data); p = f.name
         try:

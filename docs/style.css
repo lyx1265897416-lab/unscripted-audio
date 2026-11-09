@@ -994,3 +994,14 @@ h1, h2, h3, h4, p { margin: 0; }
 .cl-cap .txt.dim { opacity: .55; }
 .cl-ctrl .tool.on { color: var(--b); }
 @media (prefers-reduced-motion: reduce) { .cl-wave b { animation: none; height: 8px; } }
+
+/* 11-08 phone-style call keys (mute / speaker / speed) + live captions */
+.cl-keys { display: flex; justify-content: center; gap: 34px; margin-bottom: 22px; }
+.cl-key { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--sub, rgba(255,255,255,.75)); }
+.cl-key i { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .12); color: #fff; font-style: normal; transition: background .15s, color .15s; }
+.cl-key i svg { width: 26px; height: 26px; }
+.cl-key i b { font-size: 17px; }
+.cl-key.on i { background: #fff; color: #111; }
+.cl-ctrl.one { justify-content: center; }
+.cl-you { font-size: 13px; color: var(--dim); margin-bottom: 8px; line-height: 1.4; }
+.cl-hint2 { font-size: 12px; color: var(--dim); margin-top: 12px; opacity: .8; }
