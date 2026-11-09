@@ -95,6 +95,7 @@
   Object.assign(EX, GENRE, { 'Bingeworthy': '一口气听完', 'New Releases': '新上架' });
   Object.keys(GENRE).forEach((g) => { EX[g.toLowerCase()] = GENRE[g]; });
   const RX = [
+    [/^Ep (\d+) ·$/, '第 $1 集 ·'], [/^Episode (\d+) ·$/, '第 $1 集 ·'],
     [/^(\d+) calls?$/, '$1 通'], [/^(\d+) lines?$/, '$1 句'], [/^(\d+) results?( in ([\s\S]+))?$/, (m, n, x, g) => (g ? `「${tr(g)}」里有 ${n} 部` : `${n} 个结果`)],
     [/^Written for you · ([\s\S]+?)( ·)?$/, (m, r, d) => `为你而写 · ${tr(r)}${d ? ' ·' : ''}`], [/^you stayed silent$/, '你没有说话'], [/^(\d+) min$/, '$1 分钟'],
     [/^Voice: ([\s\S]+)$/, '配音：$1'], [/^\+(\d+) bonus$/, '+$1 赠送'],

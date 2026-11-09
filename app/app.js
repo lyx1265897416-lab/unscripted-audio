@@ -1421,7 +1421,8 @@ function submitChoice(text, via) {
   const id = P.id, nextN = P.ep.n + 1;
   primeAudio();
   if (!isUnlocked(id, nextN)) {
-    if (S.autoUnlock && S.coins >= PRICE) {
+    // eyes-free answers (voice / no answer) never stop for a sheet when she has the coins
+    if ((S.autoUnlock || via === 'auto' || via === 'voice') && S.coins >= PRICE) {
       addCoins(-PRICE, `Auto-unlock Ep ${nextN} · ${byId(id).title}`);
       markUnlocked(id, nextN);
       toast(`${coinIc('sm')} Auto-unlocked Ep ${nextN} (−${PRICE})`);
