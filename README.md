@@ -154,3 +154,9 @@ Eleven v4 每句 15、环境声 40、上传 4。第 1 集约 35 句 ≈ 560；�
 - 识别：通话里英文 Whisper 最多等 2.5 秒，超时用 SenseVoice 结果（`X-Fast`）。
 - 实测（本机）：她说完到他开口 0.2–0.3 秒（中文）/ 约 2 秒（英文，含识别）；第一句正文 5–7 秒，之后各句基本已配好。
 - 额度守护：`tools/credit-guard/credit_guard.py`，launchd `com.vicky.waku-credit-guard` 每 3 分钟查余额（`waku credit ledger --limit 1`，3 秒），低于 2000 充 30usd（launchd PATH 需含 ~/.local/bin）；配音报 insufficient_credit 时中转立即触发一次。
+
+## 英文提速（2026-11-09 04:45）
+- 英文慢在识别：SenseVoice 英文错字多（Kai→KI、necklace→NEGLAES），原来改走 MLX Whisper turbo 要 2.1 秒。
+- MLX 英文：已知是英文就指定 language='en'、只带人名提示，不再做语言检测、不带中文提示词 → 1.05 秒，8 句测试全对。
+- Parakeet-TDT 0.6B v2（sherpa-onnx int8，`~/.local/parakeet/`）：英文首选，SenseVoice 判出是英文后交给它；不可用时退回 MLX。
+- 通话英文写稿单独一组 `CALL_FAST_EN`：deepseek-v4.1-flash / kimi-k3 / qwen3-30b-a3b-instruct-2507 / qwen3.8-flash（英文实测第一句约 1.9 秒；qwen3.6 英文常漏 LINE: 前缀）。

@@ -857,6 +857,7 @@ HANGUP: no"""
 
 CALL_TTS = tts_engine(os.environ.get('CALL_TTS', 'flash'))  # 11-08 通话要像真打电话：默认 Turbo v2.5（每句约 3.4 秒，v4 约 5.2 秒）
 CALL_FAST = tuple(os.environ.get('CALL_FAST_MODEL', 'qwen/qwen3.6-35b-a3b,deepseek/deepseek-v4.1-flash,qwen/qwen3.8-flash,moonshotai/kimi-k3').split(','))  # 11-09 两个同时写，谁先出第一句用谁  # 11-06 实测第一句 2.7 秒（本机 Opus 19–22 秒）
+CALL_FAST_EN = tuple(os.environ.get('CALL_FAST_MODEL_EN', 'deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3,qwen/qwen3-30b-a3b-instruct-2507,qwen/qwen3.8-flash').split(','))  # 11-09 英文实测：deepseek/kimi 第一句约 1.9 秒；qwen3.6 英文常不带 LINE: 前缀
 
 
 def call_system(c, lite=False):
@@ -935,7 +936,7 @@ def run_call(job, c, her, spec=None, bridge=None):
     try:
         c['_got_lines'] = False
         # 11-08：第 1 轮也用快模型（原来 Opus 要 19–22 秒才接通）；第 1 轮用完整世界卡，之后精简
-        write_episode(c, msg, on_line, sysm=call_system(c, lite=n > 1), fast_model=CALL_FAST)
+        write_episode(c, msg, on_line, sysm=call_system(c, lite=n > 1), fast_model=CALL_FAST_EN if lang == 'en' else CALL_FAST)
         job['t']['writer'] = round(time.time() - t0, 2); job['writer'] = c.get('writer')
         if not out['lines']: raise RuntimeError('writer returned no lines')
         if n >= MAX_CALL_TURNS: out['hangup'] = True

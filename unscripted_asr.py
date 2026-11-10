@@ -45,6 +45,10 @@ PROMPT = '以下是简体中文或英文的句子。'
 
 def transcribe_mlx(path, hint, ctx):
     prompt = PROMPT + (ctx or '')
+    if hint == 'en':  # 11-09 已知是英文：跳过语言检测、不带中文提示词（英文从 2.1 秒降下来）
+        r = MLX.transcribe(path, path_or_hf_repo=MLX_REPO, initial_prompt=(ctx or None), condition_on_previous_text=False, temperature=0.0, language='en')
+        segs = [x for x in (r.get('segments') or []) if x.get('no_speech_prob', 0) < 0.7]
+        return ''.join(x.get('text', '') for x in segs).strip(), 'en'
     r = MLX.transcribe(path, path_or_hf_repo=MLX_REPO, initial_prompt=prompt, condition_on_previous_text=False, temperature=0.0)
     lang = r.get('language') or ''
     if lang not in ('zh', 'en'):
@@ -66,6 +70,30 @@ try:
         print('sensevoice ready', _m[-1], flush=True)
 except Exception as e:
     print('sensevoice unavailable', repr(e)[:160], flush=True)
+
+
+PK = None  # 11-09 英文：NVIDIA Parakeet-TDT 0.6B v2（sherpa-onnx int8），约 0.2 秒，准确率和 Whisper large-v3-turbo 相当（Whisper 要 2 秒）
+try:
+    _pd = sorted(glob.glob(os.path.expanduser('~/.local/parakeet/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8')))
+    if _pd and os.path.exists(os.path.join(_pd[-1], 'encoder.int8.onnx')):
+        _d = _pd[-1]
+        PK = sherpa_onnx.OfflineRecognizer.from_transducer(encoder=os.path.join(_d, 'encoder.int8.onnx'), decoder=os.path.join(_d, 'decoder.int8.onnx'),
+                                                           joiner=os.path.join(_d, 'joiner.int8.onnx'), tokens=os.path.join(_d, 'tokens.txt'),
+                                                           num_threads=4, model_type='nemo_transducer')
+        print('parakeet ready', _d, flush=True)
+except Exception as e:
+    print('parakeet unavailable', repr(e)[:160], flush=True)
+
+
+def _pcm16k(path):
+    import numpy as np, subprocess
+    pcm = subprocess.run([os.path.join(_FFDIR, 'ffmpeg'), '-v', 'error', '-i', path, '-ac', '1', '-ar', '16000', '-f', 's16le', '-'], capture_output=True, timeout=20).stdout
+    return np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+
+
+def transcribe_pk(x):
+    st = PK.create_stream(); st.accept_waveform(16000, x); PK.decode_stream(st)
+    return (st.result.text or '').strip()
 
 
 def transcribe_sv(path):
@@ -109,6 +137,12 @@ def transcribe(path, hint, ctx='', fast=False):
                     return {'text': text, 'lang': 'zh' if text else (hint or 'zh'), 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'sensevoice'}
                 hint = 'en'   # English: Whisper below is better at English (and keeps normal casing/punctuation)
                 sv = text
+                if PK:
+                    try:
+                        text = transcribe_pk(_pcm16k(path))
+                        if JUNK.search(text): text = ''
+                        return {'text': text, 'lang': 'en', 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'parakeet'}
+                    except Exception as e: print('parakeet failed', repr(e)[:160], flush=True)
             except Exception as e:
                 print('sensevoice failed', repr(e)[:160], flush=True)
         if MLX:
