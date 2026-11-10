@@ -308,7 +308,7 @@ const RealAPI = {
   cue(sid, n) { return this.get('api/cue', { sid, n }, false); },
   wish(sid, text) { return this.post('api/wish', { sid, text }); },
   async asr(blob) {
-    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid); return u.toString(); },
+    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid); if (P.needChoice) u.searchParams.set('go', '1'); return u.toString(); },
       { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
@@ -849,6 +849,7 @@ function maybeSpecs(force) {
   if (SPEC.key !== key) { SPEC.key = key; SPEC.map = {}; SPEC.n = ep.n + 1; SPEC.warm = []; }
   API.specs(ss.sid).then((r) => {
     if (!r || SPEC.key !== key || r.n !== ep.n + 1) return;
+    if (r.bridge) noteBridge(ss.sid, ep.n, r.bridge);
     Object.entries(r.specs || {}).forEach(([ch, sp]) => {
       if (SPEC.map[ch]) return;
       SPEC.map[ch] = sp;
@@ -1262,12 +1263,31 @@ function bedStop() {
   setTimeout(() => b.oscs.forEach((o) => { try { o.stop(); } catch (e) { /* ignore */ } }), 900);
 }
 
+/* 11-09 the narrator's bridge: the moment she has answered, "Okay — your way." and then one pre-voiced narrator line
+ * about this very moment (it never guesses her answer). Meanwhile the relay is already writing her episode from her words
+ * (it starts as soon as her speech is recognised), so by the end of the bridge the first line is usually voiced. */
+const BRIDGES = {};   // sid:n -> {text, url} (prefetched)
+const BR = { n: 0, url: '', played: false, ackDone: true, t0: 0 };
+function noteBridge(sid, n, b) {
+  if (!b || !b.url) return;
+  BRIDGES[sid + ':' + n] = b;
+  if (blobable(b.url)) fetchBlob(b.url);
+}
+const auxTalking = () => P.aux && !audio.loop && !!P.auxEnd && !audio.paused;   // the ack / bridge is being spoken
+function maybeBridge() {
+  if (!P.gen || P.gen.n !== BR.n || !BR.url || BR.played || !BR.ackDone || Date.now() - BR.t0 > 7000) return false;
+  BR.played = true;
+  playAux(BR.url).then(() => { if (P.gen) keepAlive(); });
+  return true;
+}
+
 /* narrator's spoken question at the end of an episode (prefetched ~45 s before the end) */
 const CUE = {};
 function fetchCue(sid, n) {
   const k = sid + ':' + n;
   if (!CUE[k]) {
     CUE[k] = API.cue(sid, n).then((d) => {
+      if (d && d.bridge) noteBridge(sid, n, d.bridge);
       if (d && d.url) { if (blobable(d.url)) fetchBlob(d.url); else try { const a = new Audio(); a.preload = 'auto'; a.src = absUrl(d.url); a.load(); } catch (e) { /* ignore */ } }
       return d;
     }).catch(() => { delete CUE[k]; return null; });
@@ -1515,7 +1535,7 @@ function hfListenLocked(key) {
       if (r && r.done) {
         stop();
         if (HF.key !== key || !P.needChoice) return;
-        if (r.text) { HF.phase = 'heard'; HF.heard = r.text; paintHF(); submitChoice(r.text, 'voice'); if (P.gen) playAux(`ack.${LANG}.mp3`).then(() => { if (P.gen) keepAlive(); }); }
+        if (r.text) { HF.phase = 'heard'; HF.heard = r.text; paintHF(); submitChoice(r.text, 'voice'); }
         else continueOnItsOwn('unclear');
       } else if (last && ok()) { stop(); continueOnItsOwn(heard ? 'unclear' : 'quiet'); }
     };
@@ -1556,10 +1576,7 @@ function hfListen() {
     if (r.text) {
       // heard her (also on the lock screen): the story goes her way right away, and the narrator says so out loud
       HF.phase = 'heard'; HF.heard = r.text; paintHF(); earcon('ok');
-      submitChoice(r.text, 'voice');
-      // only while her episode is being written (a pre-written one starts playing at once and must not be talked over);
-      // afterwards the quiet bed again, so the lock-screen audio never stops before the new episode arrives
-      if (P.gen) playAux(`ack.${LANG}.mp3`).then(() => { if (P.gen) keepAlive(); });
+      submitChoice(r.text, 'voice');   // sendNext says "Okay — your way" + the bridge while her episode is written (not over a pre-written one)
       return;
     }
     if (r.denied) { HF.phase = 'denied'; paintHF(); startAutoCountdown(WAIT, 'Mic is off · the story continues in'); return; }
@@ -1747,11 +1764,15 @@ async function sendNext(id, text, via) {
   }
   P.gen = { n: nextN, text, via, status: 'writing', err: null, t0: Date.now() };
   save();
-  bedStart();
+  const pre = via !== 'auto' && via !== 'silence' ? BRIDGES[ss.sid + ':' + (nextN - 1)] : null;
+  Object.assign(BR, { n: nextN, url: (pre && pre.url) || '', played: false, ackDone: via !== 'voice', t0: Date.now() });
+  if (via === 'voice') playAux(`ack.${LANG}.mp3`).then(() => { BR.ackDone = true; if (P.gen && !maybeBridge()) keepAlive(); });   // heard her → narrator says so, then the bridge
+  else if (!maybeBridge()) bedStart();
   updatePlayerUI(); renderMini(); openPlayer();
   try {
     const res = await API.next({ sid: ss.sid, text: via === 'silence' ? '' : text, via });
     if (!res || !res.job) throw new Error('No job returned');
+    if (res.bridge && res.bridge.url && BR.n === nextN && !BR.played && res.bridge.url !== BR.url) { BR.url = res.bridge.url; if (BR.ackDone) maybeBridge(); }   // the relay picked a different line (the bespoke one became ready)
     ss.job = { id: res.job, n: nextN, text, via }; save();
     startGeneration(res.job, nextN, text, false);
   } catch (e) {
@@ -1776,8 +1797,13 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
   const ss = getSess(id);
   let started = !!alreadyPlaying;
   let fails = 0;
+  let have = null;   // long-poll: the relay answers as soon as one more line is voiced (no 600 ms polling over the tunnel)
   const getJob = async () => {
-    try { const j = await API.job(jobId); fails = 0; return j; } catch (e) {
+    try {
+      const j = await API.job(jobId, started ? null : have); fails = 0;
+      if (j && j.ep && j.ep.lines) have = j.ep.lines.filter((l) => l.url != null).length; else if (j) have = 0;
+      return j;
+    } catch (e) {
       if (!/no job/i.test(e.message || '')) { fails++; return null; }
       // The relay restarted and forgot this job. If the episode was finished, the relay still has it (rebuilt from its log).
       try { const r = await API.ep(ss.sid, n); if (r && r.ep) return { status: 'done', error: null, ep: r.ep }; } catch (e2) { /* not finished */ }
@@ -1840,8 +1866,10 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
         const lines = ep.lines || [];
         let k = 0; while (k < lines.length && lines[k].url === '') k++;
         let ready = 0; for (let x = k; x < lines.length && lines[x].url; x++) ready++;
-        const buffered = ready >= 2 || (ready >= 1 && (Date.now() - (P.gen.t0 || 0) > 12000));   // two lines in hand (~7 s of audio) → the rest are voiced before they're needed (cap the wait at 12 s)
-        if ((lines[k] && lines[k].url && buffered) || (j.status === 'done')) {
+        // 11-09: start on the first voiced line (the others are being voiced in parallel; the bridge already covered the wait).
+        // Never cut the ack / bridge mid-sentence: check again the moment it ends.
+        if (((lines[k] && lines[k].url && ready >= 1) || j.status === 'done') && auxTalking()) { const w = () => (auxTalking() ? setTimeout(w, 100) : poll()); setTimeout(w, 100); return; }
+        if ((lines[k] && lines[k].url && ready >= 1) || (j.status === 'done')) {
           started = true;
           P.gen = null;
           ep._done = j.status === 'done' ? undefined : false;
@@ -1857,7 +1885,7 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
       if (isDetailOpen(id)) renderDetailEpisodes();
     }
     updatePlayerUI();
-    if (j.status !== 'done') setTimeout(poll, 600);
+    if (j.status !== 'done') setTimeout(poll, started ? 600 : 30);
     else if (P.ep && P.ep.n === n && P.waiting && P.want) liveAdvance();
   };
   poll();
