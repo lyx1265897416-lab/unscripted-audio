@@ -644,7 +644,7 @@ def fast_chat(prompt, max_tokens=200, timeout=8):
 
 
 _LET_ZH = re.compile(r'^(大写)?(我|那)?(就|还是|要)?(选|要|挑|走)?(选项)?(?P<k>a|ａ|b|ｂ|1|2|一|二|第一个|第二个|第一|第二|前面那个|后面那个|前一个|后一个|上面那个|下面那个|左边那个|右边那个)(个|吧|八|8|呀|啊|哦|嘛|了|好了|这个|那个)*$')
-_LET_ZH2 = re.compile(r'^(我|那)?(就|还是|要)?(选|挑)(选项)?(?P<k>诶|欸|哎|比|必|逼|币|笔)(吧|呀|啊|了)*$')  # 中文识别常把单念的 A/B 写成同音字，只在前面有“选”时认
+_LET_ZH2 = re.compile(r'^(我|那)?(就|还是|要)?(选|挑|上|宣|旋|悬|学)(选项)?(?P<k>诶|欸|哎|唉|地|比|必|逼|币|笔|臂|壁|毕|闭|鼻|避|碧|彼)(吧|八|呀|啊|了)*$')  # 中文识别常把单念的 A/B 写成同音字，只在前面有“选”时认
 _LET_EN = re.compile(r"^(i ?(ll|will|d|would)? ?(choose|pick|go with|take|select|say|want)|(let ?s|lets) go with|go with|choose|pick|take|select|maybe)? ?(option|letter|choice|the)? ?(?P<k>a|b|ay|bee|be|1|2|one|two|first|second|first one|second one|top one|bottom one|left one|right one)( one| option)?( please)?$")
 
 
@@ -655,7 +655,7 @@ def pick_letter(text):
     m = _LET_ZH.match(z) or _LET_ZH2.match(z)
     if m:
         k = m.group('k')
-        return 0 if k in ('a', 'ａ', '1', '一', '第一个', '第一', '前面那个', '前一个', '上面那个', '左边那个', '诶', '欸', '哎') else 1
+        return 0 if k in ('a', 'ａ', '1', '一', '第一个', '第一', '前面那个', '前一个', '上面那个', '左边那个', '诶', '欸', '哎', '唉', '地') else 1
     e = re.sub(r'[^a-z0-9 ]+', ' ', t.replace("'", '')); e = re.sub(r'\s+', ' ', e).strip()
     m = _LET_EN.match(e)
     if m:

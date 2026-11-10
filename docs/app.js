@@ -1478,30 +1478,35 @@ async function startHandsFree() {
 }
 /** Lock screen at a choice point (11-09): the page can't hear levels, so instead of recording the whole 6.5 s window,
  * send 1.5 s pieces; the relay stitches them and answers as soon as she has finished her sentence. */
+const LOCK_WAIT = 8000;  // 11-09：锁屏看不到屏幕、每段录音还要走隧道往返（1.3–2.5 秒），给她 8 秒开口
 function hfListenLocked(key) {
-  const t0 = Date.now(); let first = true, heard = false, over = false, rec = null, timer = 0;
+  const t0 = Date.now(); let first = true, heard = false, over = false, rec = null, timer = 0, pending = 0;
   const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
   const stop = () => { over = true; clearTimeout(timer); if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } micBusy = Math.max(0, micBusy - 1); };
   const ok = () => HF.key === key && P.needChoice && !over;
   const piece = () => {
     if (!ok()) return;
-    if (!heard && Date.now() - t0 > WAIT * 1000 + 600) { stop(); continueOnItsOwn('quiet'); return; }   // said nothing → the story carries on
-    if (Date.now() - t0 > 20000) { stop(); continueOnItsOwn('unclear'); return; }
+    // “没说话”只在回包里判断（下面 onstop）：之前在这里按时间判，回包还在隧道上她已经开口了，结果先自动续播、她的话被丢掉（11-09 锁屏“没识别”）
+    if (!heard && Date.now() - t0 > LOCK_WAIT + 9000) { stop(); continueOnItsOwn('quiet'); return; }   // 回包一直不来（断网）
+    if (Date.now() - t0 > 25000) { stop(); continueOnItsOwn('unclear'); return; }
     try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { stop(); continueOnItsOwn('quiet'); return; }
-    const chunks = [];
+    const chunks = [], pStart = Date.now() - t0;
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     rec.onstop = async () => {
       const b = new Blob(chunks, { type: rec.mimeType || type || 'audio/mp4' });
       const f = first; first = false;
-      let r = null;
+      let r = null; pending++;
       try {
         const ss = getSess(P.id);
         const u = new URL(apiUrl('api/asr/chunk')); u.searchParams.set('k', TOKEN); u.searchParams.set('sid', (ss && ss.sid) || ''); if (f) u.searchParams.set('first', '1');
         const res = await fetch(u.toString(), { method: 'POST', headers: { 'Content-Type': b.type || 'audio/mp4' }, body: b });
         r = res.ok ? await res.json() : null;
       } catch (e) { r = null; }
+      pending--;
       if (!ok() && !(r && r.text)) return;
       if (r && (r.speaking || r.heard)) { heard = true; stopAutoCountdown(); HF.phase = 'speaking'; paintHF(); }
+      // 这一段已经录到等待时间之后、还是没声音，而且前面的段都回来了 → 她真的没说话，故事自己往下走
+      else if (r && !r.done && !heard && pStart + 1500 >= LOCK_WAIT && pending === 0) { stop(); continueOnItsOwn('quiet'); return; }
       if (r && r.done) {
         stop();
         if (HF.key !== key || !P.needChoice) return;
@@ -1663,9 +1668,9 @@ function updateModePill() {
 /* 11-09 她要求：语音说“A / 选B / 第一个 / option B / the second one”或直接说出选项内容，和点那个选项一样（预写好的下一集马上开播）。
  * 服务器 pick_letter + match_choice 同样会认（转述也认）；这里先认字母/序号和几乎原样的选项文字，好走本地秒开。 */
 const LET_ZH = /^(大写)?(我|那)?(就|还是|要)?(选|要|挑|走)?(选项)?(?<k>a|ａ|b|ｂ|1|2|一|二|第一个|第二个|第一|第二|前面那个|后面那个|前一个|后一个|上面那个|下面那个|左边那个|右边那个)(个|吧|八|8|呀|啊|哦|嘛|了|好了|这个|那个)*$/;
-const LET_ZH2 = /^(我|那)?(就|还是|要)?(选|挑)(选项)?(?<k>诶|欸|哎|比|必|逼|币|笔)(吧|呀|啊|了)*$/;
+const LET_ZH2 = /^(我|那)?(就|还是|要)?(选|挑|上|宣|旋|悬|学)(选项)?(?<k>诶|欸|哎|唉|地|比|必|逼|币|笔|臂|壁|毕|闭|鼻|避|碧|彼)(吧|八|呀|啊|了)*$/;
 const LET_EN = /^(i ?(ll|will|d|would)? ?(choose|pick|go with|take|select|say|want)|(let ?s|lets) go with|go with|choose|pick|take|select|maybe)? ?(option|letter|choice|the)? ?(?<k>a|b|ay|bee|be|1|2|one|two|first|second|first one|second one|top one|bottom one|left one|right one)( one| option)?( please)?$/;
-const FIRST = new Set(['a', 'ａ', '1', '一', '第一个', '第一', '前面那个', '前一个', '上面那个', '左边那个', '诶', '欸', '哎', 'ay', 'one', 'first', 'first one', 'top one', 'left one']);
+const FIRST = new Set(['a', 'ａ', '1', '一', '第一个', '第一', '前面那个', '前一个', '上面那个', '左边那个', '诶', '欸', '哎', '唉', '地', 'ay', 'one', 'first', 'first one', 'top one', 'left one']);
 function pickSpoken(text, choices) {
   if (!choices || choices.length < 2 || !text) return -1;
   const t = String(text).trim().toLowerCase();

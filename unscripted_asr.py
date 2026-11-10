@@ -147,12 +147,17 @@ def letter_pass(path, lang):
     return ''.join(x.get('text', '') for x in segs).strip()
 
 
+LETTERISH = re.compile(r'(^|[^a-z])[ab]([^a-z]|$)|第[一二]|选项|^(我|那)?(就|还是|要)?(选|挑|上|宣|旋|悬|学)(诶|欸|哎|唉|地|比|必|逼|币|笔|臂|壁|毕|闭|鼻|避|碧|彼)[吧八呀啊了。.!！]*$', re.I)
+
+
 def transcribe(path, hint, ctx='', fast=False, choice=False):
     r = _transcribe(path, hint, ctx, fast)
-    if choice and MLX and r.get('text') is not None and short_answer(r.get('text')) and (r.get('text') or r.get('engine') in ('sensevoice', 'parakeet')):
+    txt0 = (r.get('text') or '').strip()
+    # 已经像字母回答（含“选地/选臂/上臂”这类同音字，中转按同音字认）就不再等 MLX（11-09 MLX 偶尔 2–4 秒，锁屏时拖到超时）
+    if choice and MLX and txt0 and short_answer(txt0) and not LETTERISH.search(txt0.lower()):
         t = time.time()
         try:
-            txt = on_mlx(lambda: letter_pass(path, hint or r.get('lang') or 'en'), 3)
+            txt = on_mlx(lambda: letter_pass(path, r.get('lang') or hint or 'en'), 3)
             if txt and not JUNK.search(txt) and short_answer(txt):
                 r = dict(r, text=txt, engine=r.get('engine', '') + '+letter', fast_text=r.get('text'), ms=r.get('ms', 0) + int((time.time() - t) * 1000))
         except Exception as e:
