@@ -539,5 +539,365 @@
   "cover": "covers/milo.jpg",
   "avatar": "avatars/milo.jpg",
   "name": "Milo"
+ },
+ {
+  "id": "reborn",
+  "pack": "prota:reborn",
+  "source": "prota-top10",
+  "title": {
+   "zh": "带着超强技能重生",
+   "en": "Reborn With an OP Skill"
+  },
+  "lead": {
+   "zh": "菲耶尔 · Pathstriders 的 B 级火系法师，小队的开心果",
+   "en": "Fielle · The Pathstriders' B-rank fire mage and resident comedian"
+  },
+  "hook": {
+   "zh": "你上一段人生已经结束，一个神秘的系统给了你第二次生命，还让你挑一项超强技能。你可以召唤流星、停止时间、号令巨龙、凭空造物，或者打开一座无底宝库，但只有一项会生效。你在一个动荡的奇幻世界醒来，被四个想出名、想发财的冒险者拉进了他们的小队。技能给了你优势，怎么用，由你决定。",
+   "en": "Your old life is over, and a mysterious System has given you a second one, along with a single overpowered skill. You can call down meteors, stop time, command dragons, create anything, or open an endless treasury, but only one will be yours. You wake in an unstable fantasy world and fall in with four adventurers who want fame and fortune. The skill gives you the edge. What you do with it is up to you."
+  },
+  "tags": [
+   {
+    "zh": "转生",
+    "en": "Reincarnation"
+   },
+   {
+    "zh": "超强技能",
+    "en": "OP skill"
+   },
+   {
+    "zh": "冒险小队",
+    "en": "Adventuring party"
+   }
+  ],
+  "genres": [
+   "Fantasy",
+   "Adventure",
+   "Isekai"
+  ],
+  "accent": "#C9A24A",
+  "cover": "covers/reborn.jpg",
+  "avatar": "avatars/reborn.jpg",
+  "name": "Fielle",
+  "stats": [
+   "1.8M",
+   4.8
+  ],
+  "pov": "neutral"
+ },
+ {
+  "id": "hellqueen",
+  "pack": "prota:hellqueen",
+  "source": "prota-top10",
+  "title": {
+   "zh": "和地狱女王一起养娃",
+   "en": "Co-Parenting the Queen of Hell"
+  },
+  "lead": {
+   "zh": "席琳·阿斯塔里尔 · 地狱女王，在人间隐居两年，被分配为你的共同育儿搭档",
+   "en": "Celine Astariel · The Queen of Hell, two years into hiding on Earth, assigned as your co-parenting partner"
+  },
+  "hook": {
+   "zh": "纽约人口激增，政府颁布《共同育儿法令》，要求陌生人同住一屋，共同抚养孤儿。你被分到肯辛顿的一栋两层小楼，搭档是红发女子 Celine Astariel，孩子是七岁、几乎不开口的 Nora。Celine 其实是地狱女王，她厌倦了王座，独自在人间住了两年，只想过普通人的日子，却连微波炉都摆弄不明白。你要和她一起把一个硬凑起来的家，慢慢过成真正的家。",
+   "en": "New York's population is exploding, and the government's Co-Parenting Mandate now requires strangers to live together and raise orphaned children. You're assigned to a two-story house in Kensington with a striking red-haired woman named Celine Astariel and a quiet seven-year-old named Nora. Celine is secretly the Queen of Hell. She is sick of her throne, has spent two years alone on Earth, and wants an ordinary human life, but the microwave keeps beating her. Together, you'll have to turn a household assembled by paperwork into a real home."
+  },
+  "tags": [
+   {
+    "zh": "地狱女王",
+    "en": "Queen of Hell"
+   },
+   {
+    "zh": "合租养娃",
+    "en": "Co-parenting"
+   },
+   {
+    "zh": "日久生情",
+    "en": "Slow burn"
+   }
+  ],
+  "genres": [
+   "Romance",
+   "Fantasy",
+   "Slice of life"
+  ],
+  "accent": "#B5483A",
+  "cover": "covers/hellqueen.jpg",
+  "avatar": "avatars/hellqueen.jpg",
+  "name": "Celine",
+  "stats": [
+   "1.3M",
+   4.9
+  ],
+  "pov": "neutral"
+ },
+ {
+  "id": "crackhigh",
+  "pack": "prota:crackhigh",
+  "source": "prota-top10",
+  "title": {
+   "zh": "克拉克高中：格斗学院",
+   "en": "Crack High: Fight Academy"
+  },
+  "lead": {
+   "zh": "德克兰 · 三年级B班泰拳手，校内排名第3，督察生，谁都愿意交朋友",
+   "en": "Declan · Third-year Fight B Muay Thai fighter, school rank 3, a Prefect who befriends everyone"
+  },
+  "hook": {
+   "zh": "2026年，韩国是全球综合格斗热潮的中心，在这里，拳头能换来金钱、地位和权力。你在新学期第一天踏进克拉克高中，这所学校同时为KMMA职业赛场和见不得光的地下无限制格斗输送人才。学校里每一场比赛都会被直播，每一次输赢都会改写排名，排名前三的人掌握整座学校。你要一路往上打，也要弄清楚自己愿意拿什么去冒险。",
+   "en": "It's 2026, and Korea sits at the center of a global MMA boom where fists buy money, status and power. On the first day of the new semester you walk into Crack High, a school that feeds fighters to the KMMA pro circuit and to the no-rules underground. Every school match is broadcast and every result moves the rankings, and the top three students run the school. You have to climb, and you have to decide what you're willing to risk to do it."
+  },
+  "tags": [
+   {
+    "zh": "格斗学院",
+    "en": "Fight school"
+   },
+   {
+    "zh": "校园排名",
+    "en": "Rankings"
+   },
+   {
+    "zh": "热血",
+    "en": "Action"
+   }
+  ],
+  "genres": [
+   "Action",
+   "Academy",
+   "Romance"
+  ],
+  "accent": "#C0392B",
+  "cover": "covers/crackhigh.jpg",
+  "avatar": "avatars/crackhigh.jpg",
+  "name": "Declan",
+  "stats": [
+   "960K",
+   4.7
+  ],
+  "pov": "neutral"
+ },
+ {
+  "id": "onestat",
+  "pack": "prota:onestat",
+  "source": "prota-top10",
+  "title": {
+   "zh": "一项属性称霸天下",
+   "en": "One Stat to Rule Them All"
+  },
+  "lead": {
+   "zh": "雷恩 · 破晓誓约的近战专精，黑猫亚人，自封小队最强",
+   "en": "Renn · Dawnstrider Oath's close-combat specialist, a black cat demihuman who considers himself the strongest in the party"
+  },
+  "hook": {
+   "zh": "你死后没有走向尽头，而是停在一片蓝光与立柱之间，面前浮着一块属性面板。机械声给你一次离谱的转生强化：力量、敏捷、智力、幸运、体质，选一项拉到 9999，其余四项永久锁死在 1。选完的下一秒，你就被丢进埃林德拉大陆最危险的玻璃荒原，一头连老练冒险者都绕着走的比蒙巨兽正朝你走来。等赶来调查的冒险小队“破晓誓约”看到现场，他们会想知道你是谁。",
+   "en": "You die, and instead of an ending you find yourself among pale pillars and blue light, facing a floating status screen. A mechanical voice offers one absurd rebirth blessing: Strength, Agility, Intelligence, Luck, or Vitality. Pick one and it goes to 9999. The other four stay at 1, permanently. The moment you choose, you're dropped into the Glasswild Expanse on the continent of Elyndra, and a Behemoth that veteran adventurers refuse to touch is coming toward you. When the party Dawnstrider Oath arrives to investigate, they will want to know who you are."
+  },
+  "tags": [
+   {
+    "zh": "9999 属性",
+    "en": "Stat 9999"
+   },
+   {
+    "zh": "冒险小队",
+    "en": "Adventuring party"
+   },
+   {
+    "zh": "亚人",
+    "en": "Demihumans"
+   }
+  ],
+  "genres": [
+   "Fantasy",
+   "Adventure",
+   "Comedy"
+  ],
+  "accent": "#D96BA0",
+  "cover": "covers/onestat.jpg",
+  "avatar": "avatars/onestat.jpg",
+  "name": "Renn",
+  "stats": [
+   "920K",
+   4.8
+  ],
+  "pov": "neutral"
+ },
+ {
+  "id": "mythborne",
+  "pack": "prota:mythborne",
+  "source": "prota-top10",
+  "title": {
+   "zh": "神裔学院",
+   "en": "The Halls of Mythborne"
+  },
+  "lead": {
+   "zh": "索拉 · 兽院二年级狼人，迎新日自告奋勇带新生的热心学姐",
+   "en": "Sora · A second-year werewolf in House Beast who volunteers to guide newcomers on orientation day"
+  },
+  "hook": {
+   "zh": "神裔学院坐落在一个人类、怪物、半血与神明后裔共同生活的现代奇幻世界里。今天是迎新日，你是新生之一。在今晚的迎新仪式上，你要从五个分院中选择一个，与它的守护者缔结魔法契约，获得一份独一无二的天赋。之后你会和谁成为朋友、对手，甚至下课后还想见的人，都由你自己决定。",
+   "en": "Mythborne Academy sits in a modern-fantasy world where humans, monsters, half-bloods, and the descendants of gods live side by side. Today is orientation day, and you are one of the new students. Tonight, at the welcome ceremony, you will choose one of five Houses and bind yourself to its Patron, gaining a Gift unlike any other. Who becomes your friend, your rival, or the person you want to see after class is up to you."
+  },
+  "tags": [
+   {
+    "zh": "魔法学院",
+    "en": "Magic academy"
+   },
+   {
+    "zh": "神裔与怪物",
+    "en": "Gods & monsters"
+   },
+   {
+    "zh": "分院",
+    "en": "Houses"
+   }
+  ],
+  "genres": [
+   "Fantasy",
+   "Academy",
+   "Romance"
+  ],
+  "accent": "#7A9A4A",
+  "cover": "covers/mythborne.jpg",
+  "avatar": "avatars/mythborne.jpg",
+  "name": "Sora",
+  "stats": [
+   "640K",
+   4.8
+  ],
+  "pov": "neutral"
+ },
+ {
+  "id": "heroacad",
+  "pack": "prota:heroacad",
+  "source": "prota-top10",
+  "title": {
+   "zh": "英雄学院：能力与使命",
+   "en": "Hero Academy: Powers & Purpose"
+  },
+  "lead": {
+   "zh": "阿什顿 · 一年A班的S级天才，重力坍缩系念动力者，坐在你旁边的邻座",
+   "en": "Ashton · Class 1-A's S-rank prodigy, a gravity-collapse telekinetic, and your seatmate"
+  },
+  "hook": {
+   "zh": "十几年前，巨兽和变异体毫无征兆地出现在全世界，觉醒能力的英雄成了人类唯一的屏障。你刚刚考进地平线岛上的英雄学院，这里培养下一代职业英雄。入学第一天，你被关进一间狭小的测评室，面前的黑色面板即将测出你的能力和等级。你最强的对手，可能就坐在你旁边。",
+   "en": "Ten-odd years ago, kaiju and mutants appeared across the world without warning, and awakened heroes became humanity's only shield. You've just won a place at Hero Academy on Horizon Isle, where the next generation of pro heroes is trained. On your first morning, you're sealed inside a cramped assessment room, facing a black panel that's about to name your power and your rank. Your toughest rival might be sitting right beside you."
+  },
+  "tags": [
+   {
+    "zh": "英雄学院",
+    "en": "Hero academy"
+   },
+   {
+    "zh": "能力觉醒",
+    "en": "Powers"
+   },
+   {
+    "zh": "A 班 B 班",
+    "en": "Class rivalry"
+   }
+  ],
+  "genres": [
+   "Action",
+   "Academy",
+   "Superpowers"
+  ],
+  "accent": "#E07A2E",
+  "cover": "covers/heroacad.jpg",
+  "avatar": "avatars/heroacad.jpg",
+  "name": "Ashton",
+  "stats": [
+   "590K",
+   4.7
+  ],
+  "pov": "neutral"
+ },
+ {
+  "id": "starmate",
+  "pack": "prota:starmate",
+  "source": "prota-top10",
+  "title": {
+   "zh": "大明星应征了我的室友招募",
+   "en": "A Celebrity Answered My Roommate Ad"
+  },
+  "lead": {
+   "zh": "Sienna Lark · 全国最知名的演员、歌手兼模特，为躲避狗仔和娱乐圈，隐姓埋名搬进你家的新室友",
+   "en": "Sienna Lark · The country's most recognizable actress, singer and model, hiding from paparazzi as your new roommate"
+  },
+  "hook": {
+   "zh": "交租日越来越近，你只想尽快找个人分摊另一半房租。来看房的是一个叫Sienna Lark的年轻女人：要求隐私、要求安静，开口就像在给助理派活。你不知道她是全国最有名的演员、歌手兼模特。对你来说，她只是一个得学会自己洗碗的新室友。",
+   "en": "Rent day is coming and you just need someone to cover the other half. The applicant is a young woman named Sienna Lark. She demands privacy and quiet, and she talks like she's handing out tasks to an assistant. You have no idea she's one of the most famous actresses, singers and models in the country. To you, she's just a new roommate who needs to learn to wash her own dishes."
+  },
+  "tags": [
+   {
+    "zh": "大明星室友",
+    "en": "Celebrity roommate"
+   },
+   {
+    "zh": "秘密同居",
+    "en": "Secret"
+   },
+   {
+    "zh": "狗仔",
+    "en": "Paparazzi"
+   }
+  ],
+  "genres": [
+   "Romance",
+   "Slice of life",
+   "Celebrity"
+  ],
+  "accent": "#C77D8E",
+  "cover": "covers/starmate.jpg",
+  "avatar": "avatars/starmate.jpg",
+  "name": "Sienna",
+  "stats": [
+   "560K",
+   4.8
+  ],
+  "pov": "neutral"
+ },
+ {
+  "id": "academia",
+  "pack": "prota:academia",
+  "source": "prota-top10",
+  "title": {
+   "zh": "学院：我的英雄们",
+   "en": "Academia: My Heroes"
+  },
+  "lead": {
+   "zh": "大丽花 · A级火焰系同届新生，好胜心极强，第一天就把你认定为对手",
+   "en": "Dahlia · A-class Flare user and fellow freshman; fiercely competitive, she marks you as her rival on day one"
+  },
+  "hook": {
+   "zh": "2026年的纽约，极少数人在成年那一刻觉醒超能力，你就是其中之一。你走进全美最大的英雄学院，同学们还没问你的名字，先盯着你的等级。在这里，你要学会把陌生人从废墟里救出来，也要在每周日的排名赛上把嚣张的对手打下去。校门外，明星化的Nova、穷困却坚守的Guardian、只认结果的Legacy，还有想把整套英雄体系掀翻的Reject，都在等你选边站。",
+   "en": "New York, 2026. A tiny fraction of people awaken supernatural powers the moment they come of age, and you are one of them. You walk into America's largest hero academy, where classmates care about your grade before they bother to learn your name. Here you'll learn to pull strangers out of rubble, and to put arrogant rivals on the mat in Sunday ranking matches. Beyond the gates, the celebrity crew Nova, the broke but principled Guardian, the results-only Legacy, and Reject, who want to tear the whole hero system down, are all waiting to see whose side you'll take."
+  },
+  "tags": [
+   {
+    "zh": "英雄学院",
+    "en": "Hero academy"
+   },
+   {
+    "zh": "等级排名",
+    "en": "Rankings"
+   },
+   {
+    "zh": "四大阵营",
+    "en": "Four factions"
+   }
+  ],
+  "genres": [
+   "Action",
+   "Academy",
+   "Superpowers"
+  ],
+  "accent": "#E8C930",
+  "cover": "covers/academia.jpg",
+  "avatar": "avatars/academia.jpg",
+  "name": "Dahlia",
+  "stats": [
+   "540K",
+   4.7
+  ],
+  "pov": "neutral"
  }
 ]

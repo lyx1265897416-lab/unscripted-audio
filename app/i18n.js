@@ -77,13 +77,13 @@
     'Call': '打电话', 'Calling': '正在呼叫', 'Accept': '接听', 'Decline': '拒绝', 'Hang up': '挂断', 'Hanging up…': '正在挂断…', 'Call back': '回拨', 'Call ended': '通话结束', 'call ended': '通话结束', 'Call failed': '通话失败',
     'Incoming call…': '来电…', 'On call now': '通话中', 'Call history': '通话记录', 'Call history cleared': '通话记录已清空', 'Call deleted': '通话已删除', 'Delete call': '删除通话', 'Call transcript': '通话文字记录',
     'Transcript': '文字记录', 'Call speed': '通话语速', 'Replay speed': '回放速度', 'Hold to talk': '按住说话', 'Listening… release to send': '在听… 松开发送', 'Your reply': '你的回复', 'Your turn': '轮到你了',
-    'Quick reply': '快捷回复', 'Who do you want to call?': '你想打给谁？', 'Call a lead from any series page.': '在任意剧集页都能给主角打电话。', 'Call your favorite': '打给你喜欢的他',
+    'Quick reply': '快捷回复', 'Who do you want to call?': '你想打给谁？', 'Call a lead from any series page.': '在任意剧集页都能给主角打电话。', 'Call your favorite': '打给你喜欢的角色',
     'Live call — saved after every turn. Replay unlocks when it ends.': '通话进行中 —— 每轮自动保存，结束后可以回放。', 'Replay is available after the call': '通话结束后可以回放', 'Replay lines': '逐句回放',
     'Nothing was said in this call.': '这通电话里没有说话。', 'No conversation yet.': '还没有对话。', 'No calls yet.': '还没有通话记录。', 'Swipe left on a call to delete': '向左滑动可以删除通话',
     'Can\'t delete a call in progress': '通话进行中，不能删除', 'Delete this call and its transcript?': '删除这通电话和文字记录？', 'This call\'s transcript': '这通电话的文字记录',
     'Transcripts and replay links are removed from this device. This can’t be undone.': '文字记录和回放会从本机删除，删除后无法恢复。', 'Just now': '刚刚', 'You': '你', 'You called.': '你打来的。',
     'Stayed silent ': '没有说话', 'let me think': '让我想想', 'writing next lines…': '正在想下一句…', 'Retry with memory': '带着记忆重试', 'Interrupted': '已中断', 'The caller': '来电者',
-    'Voice call · first call free · he remembers your story': '语音通话 · 第一次免费 · 他记得你们的故事', 'Generation failed': '生成失败', 'Timed out': '超时了',
+    'Voice call · first call free · he remembers your story': '语音通话 · 第一次免费 · 他记得你们的故事', 'Voice call · first call free · she remembers your story': '语音通话 · 第一次免费 · 她记得你们的故事', 'Generation failed': '生成失败', 'Timed out': '超时了',
   };
 
   const GENRE = {
@@ -91,6 +91,7 @@
     'Comedy': '喜剧', 'Countdown': '倒计时', 'Dark romance': '暗黑恋爱', 'Fake dating': '假装恋爱', 'Fake engagement': '假订婚', 'Fated mates': '命定伴侣',
     'Friends to lovers': '友情变爱情', 'Healing': '治愈', 'Love triangle': '三角恋', 'Mafia': '黑帮', 'Masked man': '面具男', 'Merman': '人鱼', 'Pets': '萌宠',
     'Second chance': '破镜重圆', 'Slice of life': '日常', 'Stepbrother': '继兄', 'werewolf romance': '狼人恋爱',
+    'Adventure': '冒险', 'Academy': '学院', 'Action': '热血', 'Isekai': '异世界', 'Superpowers': '超能力', 'Celebrity': '明星',
   };
   Object.assign(EX, GENRE, { 'Bingeworthy': '一口气听完', 'New Releases': '新上架' });
   Object.keys(GENRE).forEach((g) => { EX[g.toLowerCase()] = GENRE[g]; });
@@ -98,6 +99,7 @@
     [/^Ep (\d+) ·$/, '第 $1 集 ·'], [/^Episode (\d+) ·$/, '第 $1 集 ·'],
     [/^(\d+) calls?$/, '$1 通'], [/^(\d+) lines?$/, '$1 句'], [/^(\d+) results?( in ([\s\S]+))?$/, (m, n, x, g) => (g ? `「${tr(g)}」里有 ${n} 部` : `${n} 个结果`)],
     [/^Written for you · ([\s\S]+?)( ·)?$/, (m, r, d) => `为你而写 · ${tr(r)}${d ? ' ·' : ''}`], [/^you stayed silent$/, '你没有说话'], [/^(\d+) min$/, '$1 分钟'],
+    [/^Voice call · (\d+) coins · (he|she) remembers your story$/, (m, n, p) => `语音通话 · ${n} 金币 · ${p === 'she' ? '她' : '他'}记得你们的故事`],
     [/^Voice: ([\s\S]+)$/, '配音：$1'], [/^\+(\d+) bonus$/, '+$1 赠送'],
     [/^(\d+) min ·$/, '$1 分钟 ·'], [/^Written live from your choice$/, '按你的选择实时生成'], [/^Depends on your choices$/, '取决于你的选择'],
     [/^(\d+) series$/, '$1 部'], [/^([\d.]+) · ([\d.]+[KM]?) plays$/, '$1 · $2 次收听'], [/^Day (\d+) of 7$/, '第 $1 / 7 天'], [/^Day (\d+) claimed · back tomorrow$/, '第 $1 天已签到 · 明天再来'],

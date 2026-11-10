@@ -21,3 +21,21 @@ data/ep1/mask.*
 data/ep1/milo.*
 qa/**/*.mp3
 qa/**/*.wav
+# Prota Top10（11-10）：原卡文字和改编出的世界卡、第 1 集剧本只留本机
+data/prota/
+data/world/reborn.json
+data/world/hellqueen.json
+data/world/crackhigh.json
+data/world/onestat.json
+data/world/mythborne.json
+data/world/heroacad.json
+data/world/starmate.json
+data/world/academia.json
+data/ep1/reborn.*
+data/ep1/hellqueen.*
+data/ep1/crackhigh.*
+data/ep1/onestat.*
+data/ep1/mythborne.*
+data/ep1/heroacad.*
+data/ep1/starmate.*
+data/ep1/academia.*

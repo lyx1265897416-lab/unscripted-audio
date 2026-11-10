@@ -1,0 +1,150 @@
+{
+ "clips": [
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：阳光倾洒的温室餐厅里，学生们围坐圆桌用餐，氛围温暖而惬意。",
+   "src": "v/mythborne/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：一位棕发少女在雨夜街头撑着破伞、穿黄雨衣独行，神情倔强而略带忧郁。",
+   "src": "v/mythborne/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：Gunnar Thane在雷雨荒野中手持战斧召唤闪电，神情惊愕又充满力量。",
+   "src": "v/mythborne/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：Leif Korssen在哥特式学院桥边倚栏而立，执伞回眸，清冷氛围中透出淡淡忧郁。",
+   "src": "v/mythborne/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：Danton Coyle在火光熊熊的铁匠铺里，笑着举起一只精致的金属龙雕，神情自信又得意。",
+   "src": "v/mythborne/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：Lira Thandel在阳光明媚的庭院中手持草药，神情温柔而略带羞涩。",
+   "src": "v/mythborne/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s06",
+   "kind": "still",
+   "cap": "剧照：Hinata在喷泉旁被水淋湿，手持折扇与发辫，神情惊愕又无奈。",
+   "src": "v/mythborne/s06.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s07",
+   "kind": "still",
+   "cap": "剧照：Vivienne Lowell在雪夜街头伸手接雪，面带微笑，氛围宁静浪漫。",
+   "src": "v/mythborne/s07.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s08",
+   "kind": "still",
+   "cap": "剧照：Vivienne Lowell在月夜图书馆的暗红扶手椅上托腮阅读，神情清冷而倦怠。",
+   "src": "v/mythborne/s08.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s09",
+   "kind": "still",
+   "cap": "剧照：Rena Ashford在燃烧的靶场中持剑握火，神情冷峻，气氛肃杀。",
+   "src": "v/mythborne/s09.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s10",
+   "kind": "still",
+   "cap": "剧照：Rena在神裔学院喷泉前自信地向镜头伸手，氛围明媚而充满活力。",
+   "src": "v/mythborne/s10.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s11",
+   "kind": "still",
+   "cap": "剧照：淡紫卷发猫耳少女Mio身着米白开衫与格裙，静立白底之上，神情慵懒而安静。",
+   "src": "v/mythborne/s11.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s12",
+   "kind": "still",
+   "cap": "剧照：Vivienne Lowell在阳光明媚的学院长廊里回头竖起中指，神情高傲且带着一丝挑衅。",
+   "src": "v/mythborne/s12.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s13",
+   "kind": "still",
+   "cap": "剧照：Lira Thandel在阳光洒落的书房里，手持书本指向水晶，神情专注而宁静。",
+   "src": "v/mythborne/s13.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s14",
+   "kind": "still",
+   "cap": "剧照：Theodora Voss身着深蓝军装风长外套，在纯白背景中静立，神情沉稳冷峻。",
+   "src": "v/mythborne/s14.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s15",
+   "kind": "still",
+   "cap": "剧照：Leif Korssen在阳光洒落的古典图书馆内抱着古籍比出剪刀手，神情冷峻却透着俏皮。",
+   "src": "v/mythborne/s15.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s16",
+   "kind": "still",
+   "cap": "剧照：Claire Marsh在洒满阳光的教室里托腮微笑，将笔递向镜头，氛围温暖而亲切。",
+   "src": "v/mythborne/s16.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s17",
+   "kind": "still",
+   "cap": "剧照：海沫色乱发的Reef在纯白背景中穿敞怀印花衬衫与沙滩裤，赤足站立，笑容松弛惬意。",
+   "src": "v/mythborne/s17.mp4",
+   "dur": 6.0
+  }
+ ],
+ "pool": [
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "s06",
+  "s07",
+  "s08",
+  "s09",
+  "s10",
+  "s11",
+  "s12",
+  "s13",
+  "s14",
+  "s15",
+  "s16",
+  "s17"
+ ]
+}

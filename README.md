@@ -202,3 +202,11 @@ Eleven v4 每句 15、环境声 40、上传 4。第 1 集约 35 句 ≈ 560；�
 - **主角半句**：过渡说完新一集还没好，主角先接半句（预先配好：问句“你问这个……/……你真想知道？”，否则“……我听见了。/……好。”），不写进剧情；`cache/beats/<剧>.<主角>.<语言>.json`，每部剧第一次用时后台配。
 - **中转启动更稳**：Waku 配音通道（shim）初始化失败会重试、并关掉失败的进程（原来一次失败中转就起不来，launchd 反复重启）。
 - 实测：语音回答到第一句配好 6.0 秒（中文，快写赢）/ 6.5–9 秒（英文）；浏览器打字问句：过渡 0–5.7 秒、主角半句 5.7–7.4 秒、铃底 0.7 秒、第 8 秒新一集开口。剩下的等待主要是 Waku 配音本身（今晚每句 4–6 秒）和 OpenRouter 首字波动（1.3–10 秒）。
+
+## Prota Top 10 的 8 部（2026-11-10 加）
+来源：彭宏博整理的 Prota 游玩数 Top 10 故事包（本机 `~/Downloads/Prota_Top10_完整故事包_2026-11-10`，飞书「故事（55）」表）。#04 宇宙世界模拟器、#07 自选动漫异世界基于现成动漫/游戏 IP，不收。
+id：reborn（带着超强技能重生）、hellqueen（和地狱女王一起养娃）、crackhigh（克拉克高中：格斗学院）、onestat（一项属性称霸天下）、mythborne（神裔学院）、heroacad（英雄学院：能力与使命）、starmate（大明星应征了我的室友招募）、academia（学院：我的英雄们）。
+- 她定的：保持原作性别（Celine、Sienna 等女主角色就是女性），听众“你”不指定性别。世界卡带 `pov: "neutral"`，中转的编剧/快写/通话提示词据此改成性别不限（`neutral()` / `POV_NOTE` / `pov_text()`），第 1 集剧本同理（build_ep1.py 的 `PROTA`）。
+- 流程：`build_prota_src.py`（原卡 → data/prota/<id>.json）→ `build_prota_world.py`（Opus 写音频版世界卡）→ `build_prota_app.py`（声线、剧目卡、封面、头像；`Ms. Holloway`→`Holloway`、`The System`→`System` 方便当声线键）→ `build_ep1.py <ids>`（第 1 集剧本）→ 中转 `/api/play` prewarm 配第 1 集 → `build_prota_visuals.py`（场景图做 6 秒缓推短片，deepseek-v4.1-flash 看图写画面描述）→ `build_ep1_visuals.py`。
+- 原卡文字、改编的世界卡和剧本只留本机（.gitignore）；公开仓库只有封面、头像、画面短片和第 1 集音频。
+- 新题材：Adventure（冒险）、Academy（学院）加进首页题材；Action/Isekai/Superpowers/Celebrity 有中文标签。

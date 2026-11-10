@@ -539,16 +539,18 @@ const waveBars = (n = 18) => `<span class="wave">${Array.from({ length: n }, () 
 let SERIES = [];
 const DETAIL = {};
 const byId = (id) => SERIES.find((s) => s.id === id);
-const GENRES = ['Werewolf', 'Billionaire', 'Romance', 'Fantasy', 'Mystery', 'Thriller', 'Reality show', 'Cozy'];
+const GENRES = ['Werewolf', 'Billionaire', 'Romance', 'Fantasy', 'Adventure', 'Academy', 'Mystery', 'Thriller', 'Reality show', 'Cozy'];  // 11-10 Prota Top10 加冒险、学院
 const GENRE_MAP = {
   Romance: ['Romance', 'Fated mates', 'Friends to lovers', 'Fake dating', 'Fake engagement'],
   Cozy: ['Cozy', 'Healing', 'Pets', 'Slice of life'],
-  Fantasy: ['Fantasy', 'Merman', 'Werewolf'],
+  Fantasy: ['Fantasy', 'Merman', 'Werewolf', 'Isekai'],
+  Adventure: ['Adventure', 'Isekai', 'Action'],
+  Academy: ['Academy', 'Superpowers'],
   Thriller: ['Thriller', 'Countdown'],
 };
 const GENRE_TILE = {
   Werewolf: '#6B4E16', Billionaire: '#2F4A3A', Romance: '#8A2E3B', Fantasy: '#2D3F7A',
-  Mystery: '#3B3550', Thriller: '#4A2A2A', 'Reality show': '#7A4A1C', Cozy: '#6E5532',
+  Mystery: '#3B3550', Thriller: '#4A2A2A', 'Reality show': '#7A4A1C', Cozy: '#6E5532', Adventure: '#5A4A1E', Academy: '#3A4A6E',
 };
 /** how well a series fits the tastes she picked in onboarding (first pick weighs most) + what she's been listening to */
 function prefScore(s) {
@@ -3582,7 +3584,7 @@ function renderDetail() {
           <button class="btn btn-grad" data-act="play-series" data-id="${esc(s.id)}">${cta}</button>
           <button class="btn btn-ghost call-btn" data-act="call-lead" data-id="${esc(s.id)}" aria-label="Call">${ic('phone', 'sm')}<span>${callersOf(s).length > 1 ? 'Call' : `Call ${esc(shortName(callersOf(s)[0]).split(' ')[0])}`}</span></button>
         </div>
-        <p class="call-note">${ic('phone', 'xs')} ${callCost(s.id) ? `Voice call · ${CALL_PRICE} coins` : 'Voice call · first call free'} · he remembers your story</p>
+        <p class="call-note">${ic('phone', 'xs')} ${callCost(s.id) ? `Voice call · ${CALL_PRICE} coins` : 'Voice call · first call free'} · ${((s.callers || [])[0] || {}).gender === 'female' ? 'she' : 'he'} remembers your story</p>
         ${(() => { const cl = callsFor(s.id); return cl.length ? `<button class="hist-btn" data-act="series-calls" data-id="${esc(s.id)}">${ic('clock', 'sm')}<span><b>Call history</b><small>${cl.length} call${cl.length === 1 ? '' : 's'} · latest ${fmtWhen(cl[0].startedAt)} · ${esc(recStatusLabel(cl[0]))}</small></span>${ic('chevR', 'sm')}</button>` : ''; })()}
         ${ss ? `<button class="restart" data-act="restart" data-id="${esc(s.id)}">${ic('restart')} Start a new story from Ep 1</button>` : ''}
       </div>

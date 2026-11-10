@@ -26,27 +26,47 @@ RULES = {
 - No stage directions or bracketed actions, except sparse ElevenLabs audio tags at the start of a line: [softly] [quietly] [low] [sighs] [exhales] [chuckles softly] [tense] [urgent] [whispering] — at most 1 per 4 lines.
 - Pace like a Pocket FM episode 1: into the event within 15 seconds, one escalation in the middle, end on a hook. Total 2.5–3.5 minutes (about 420–560 words, 28–40 lines).'''}
 
+PROTA = {'reborn', 'hellqueen', 'crackhigh', 'onestat', 'mythborne', 'heroacad', 'starmate', 'academia'}  # 11-10 Prota Top10：听众性别不限
+NEUTRAL = {'zh': [('听众就是女主“你”', '听众就是故事主角“你”（性别不限）'), ('女主不配音：她说的话由旁白转述（“你说，你只是路过。”）', '主角（听众）不配音：你说的话由旁白转述（“你说，你只是路过。”）'),
+                  ('第 1 集不能出现女主的名字（每个听众名字不同），角色叫她时', '第 1 集不能出现听众的名字（每个听众名字不同），角色叫你时')],
+           'en': [('the listener IS the heroine "you"', 'the listener IS the protagonist "you" (gender unspecified)'), ('The heroine is not voiced: the narrator reports what she says', 'The protagonist is not voiced: the narrator reports what you say'),
+                  ("must not use the heroine's name", "must not use the listener's name")]}
+POV = {'zh': '\n- 听众性别不限：别给“你”加性别（不用“他/她”“先生/小姐”“男孩/女孩”指代你，旁人提到你时用名字以外的身份说法，如“新生”“新室友”）。其他角色保持原作性别。',
+       'en': '\n- The listener\'s gender is unspecified: never gender "you" (no he/she, sir/miss, boy/girl for the listener; others refer to you by role, e.g. "the new student"). Other characters keep their original genders.'}
+
+
+def rules_for(sid, lang):
+    if sid not in PROTA: return RULES[lang]
+    t = RULES[lang]
+    for a, b in NEUTRAL[lang]: t = t.replace(a, b)
+    return t + POV[lang]
+
+
 def ask(sid, lang):
     out = f'data/ep1/{sid}.{lang}.json'
     if os.path.exists(out) and '--force' not in sys.argv: return sid, lang, 'skip'
     w = json.load(open(f'data/world/{sid}.json')); b = BASE[sid]
     cast = [k for k in V[sid] if not k.startswith('_')]
-    if sid in CID: cues = CAT[CID[sid]].get('live', {}).get('open_cues') or []
+    if sid in PROTA:  # Prota 原卡的开场白（文字聊天版）
+        pr = json.load(open(f'data/prota/{sid}.json'))
+        cues = [{'who': '', 'en': pr.get('opening_en') or '', 'zh': pr.get('opening_zh') or pr.get('opening_en') or ''}]
+    elif sid in CID: cues = CAT[CID[sid]].get('live', {}).get('open_cues') or []
     else:  # perhaps-worlds 的世界：开场台词在原世界卡 intro.captions
         pw = json.load(open(f'data/pw/{sid}.world.json'))
         cues = [{'who': (c.get('who') or '').title(), 'en': c.get('text'), 'zh': c.get('zh') or c.get('text')} for c in (pw.get('intro') or {}).get('captions') or []]
-    cue_txt = '\n'.join(f'{c.get("who","")}: {c.get(lang) or c.get("en")}' for c in cues)[:3000]
+    cue_txt = '\n'.join(f'{c.get("who","")}: {c.get(lang) or c.get("en")}' for c in cues)[:4500]
     sysm = '你是女性向有声连载剧的王牌编剧（Pocket FM 那一类：狼人、霸总、恋爱、悬疑）。只输出一个 JSON 对象。' if lang == 'zh' else 'You are the head writer of a women-focused serialized audio drama app (Pocket FM style). Output one JSON object only.'
+    if sid in PROTA: sysm = '你是有声连载剧的王牌编剧（Pocket FM 那一类：奇幻冒险、学院、恋爱、喜剧）。只输出一个 JSON 对象。' if lang == 'zh' else 'You are the head writer of a serialized audio drama app (Pocket FM style: fantasy adventure, academy, romance, comedy). Output one JSON object only.'
     user = f'''剧名：{b["title"][lang]}
 世界卡（编剧内部资料，真相不能剧透）：
 {json.dumps(w, ensure_ascii=False)}
 
-原视频版开场的台词（第 1 集要覆盖这段剧情，可以改写成适合耳朵听的样子）：
+{"原卡（文字聊天版）的开场白" if sid in PROTA else "原视频版开场的台词"}（第 1 集要覆盖这段剧情，可以改写成适合耳朵听的样子；面板、状态栏、表情符号改成旁白念或台词）：
 {cue_txt or "（无）"}
 
 能配音的角色（who 只能用这些英文名，或 NARR）：{", ".join(cast)}
 
-{RULES[lang]}
+{rules_for(sid, lang)}
 
 写第 1 集「{w["ep1_title_" + lang]}」，按世界卡 story_map 第 1 集推进，结尾停在选择点。输出：
 {{"title":"{w["ep1_title_" + lang]}","amb":"这一集的环境声（英文短语）","lines":[{{"who":"NARR","text":"…"}}],"prompt":"选择点上方的一句局面说明，用“你”/you，提示她要回应什么","choices":["她的回应 A（她第一人称说的话或动作，10-20 字）","她的回应 B"]}}'''

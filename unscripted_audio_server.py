@@ -350,13 +350,30 @@ def me_block(me, lang):
             'details about her, what she achieves, how she is treated. Never quote it back verbatim; not every episode; let her live inside who she wants to be.')
 
 
+# 11-10 Prota Top10 的 8 部：保持原作性别（女主角色是女性），听众“你”不指定性别（世界卡 pov=neutral）
+neutral = lambda sid: (WORLD.get(sid) or {}).get('pov') == 'neutral'
+POV_NOTE = {'zh': '听众性别不限：别给“你”加性别——不用“他/她”“先生/小姐”“男孩/女孩”“兄弟/姐妹”这类词指代你，旁人提到你时用名字或“这位新生/新室友”这类说法。下面资料里写的“她”只是指听众，不代表性别。',
+            'en': 'The listener\'s gender is unspecified: never gender "you" (no he/she, sir/miss, boy/girl, bro/sis for the listener); others refer to you by name or by role ("the new student", "my roommate"). Where these notes say "she/her" they just mean the listener.'}
+
+
+def pov_text(t, lang):
+    """把为女性听众写的规则改成性别不限的说法"""
+    for a, b in (('听众就是女主“你”', '听众就是故事主角“你”（性别不限）'), ('女主不配音：她说的话', '主角（听众）不配音：你说的话'), ('角色叫她时用她的名字', '角色叫你时用你的名字'),
+                 ('the listener IS the heroine "you"', 'the listener IS the protagonist "you" (gender unspecified)'), ('The heroine is not voiced: the narrator reports what she says', 'The protagonist is not voiced: the narrator reports what you say'),
+                 ('Characters call her by her name', 'Characters call you by your name')):
+        t = t.replace(a, b)
+    return t + '\n- ' + POV_NOTE[lang]
+
+
 def system_prompt(sess):
     s, lang, w = sess['series'], sess['lang'], WORLD[sess['series']]
     cast = [k for k in VOICES[s] if not k.startswith('_')]
-    head = ('你是女性向有声连载剧（Pocket FM 那一类）的编剧，正在为一位听众实时写下一集。' if lang == 'zh' else
-            'You are the writer of a women-focused serialized audio drama (Pocket FM style), writing the next episode live for one listener.')
+    nt = neutral(s)
+    head = (('你是有声连载剧（Pocket FM 那一类）的编剧，正在为一位听众实时写下一集。' if nt else '你是女性向有声连载剧（Pocket FM 那一类）的编剧，正在为一位听众实时写下一集。') if lang == 'zh' else
+            ('You are the writer of a serialized audio drama (Pocket FM style), writing the next episode live for one listener.' if nt else 'You are the writer of a women-focused serialized audio drama (Pocket FM style), writing the next episode live for one listener.'))
+    rules = RULES[lang].replace('{name}', sess['name'])
     return '\n\n'.join([head, '世界卡（内部资料，真相按节奏揭晓，不提前剧透）：\n' + json.dumps(w, ensure_ascii=False),
-                        RULES[lang].replace('{name}', sess['name']),
+                        pov_text(rules, lang) if nt else rules,
                         me_block(sess.get('me'), lang),
                         FORMAT.replace('{cast}', ', '.join(cast)).replace('{t}', '，6–10 字' if lang == 'zh' else ', 2–5 words')])
 
@@ -551,14 +568,14 @@ def quick_open(sess, her, done_ev=None):
     lead = (b.get('lead') or {}).get(lang, '') if isinstance(b.get('lead'), dict) else b.get('lead', '')
     hook = (b.get('hook') or {}).get(lang, '') if isinstance(b.get('hook'), dict) else b.get('hook', '')
     if lang == 'zh':
-        sysm = '你是女性向有声连载剧的编剧，正在实时接着写。只输出两行，每行格式“角色名: 台词”，角色名只能用：' + '、'.join(cast + ['NARR']) + '。不要别的文字。'
-        user = (f'剧：{lead}。{hook}\n听众本人就是女主（用“你”称呼）。\n上一集最后几句：\n{tail}\n选择点：{last.get("prompt", "")}\n'
+        sysm = ('你是有声连载剧的编剧' if neutral(s) else '你是女性向有声连载剧的编剧') + '，正在实时接着写。只输出两行，每行格式“角色名: 台词”，角色名只能用：' + '、'.join(cast + ['NARR']) + '。不要别的文字。'
+        user = (f'剧：{lead}。{hook}\n' + ('听众本人就是主角（用“你”称呼，性别不限，别给你加性别）。\n' if neutral(s) else '听众本人就是女主（用“你”称呼）。\n') + f'上一集最后几句：\n{tail}\n选择点：{last.get("prompt", "")}\n'
                 + (f'旁白刚说：「{br["text"]}」\n' if br else '') + f'{her}\n\n'
                 '写这一集最开头的两行：第一行是此刻在场、最该回应她的那个角色（通常是主角）对她这句话的直接回应，12 个字以内，口语、符合人设；'
-                '第二行是 NARR 旁白，写他的一个动作或神情，20 个字以内。不要替她做决定，不要一下推进大剧情。')
+                '第二行是 NARR 旁白，写这个角色的一个动作或神情，20 个字以内。不要替她做决定，不要一下推进大剧情。')
     else:
         sysm = 'You write a women-focused serialized audio drama, live. Output exactly two lines, each "Name: line", names only from: ' + ', '.join(cast + ['NARR']) + '. Nothing else.'
-        user = (f'Show: {lead}. {hook}\nThe listener is the heroine ("you").\nLast lines of the previous episode:\n{tail}\nChoice point: {last.get("prompt", "")}\n'
+        user = (f'Show: {lead}. {hook}\n' + ('The listener is the protagonist ("you"), gender unspecified: never gender them.\n' if neutral(s) else 'The listener is the heroine ("you").\n') + f'Last lines of the previous episode:\n{tail}\nChoice point: {last.get("prompt", "")}\n'
                 + (f'The narrator just said: "{br["text"]}"\n' if br else '') + f'{her}\n\n'
                 'Write the first two lines of the new episode: line 1 is the character in the scene who should answer her (usually the lead), replying directly to what she said, under 10 words, spoken, in character; '
                 'line 2 is NARR: one action or look of his, under 16 words. Don\'t decide for her and don\'t jump the plot ahead.')
@@ -634,6 +651,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
     """写一集并逐句配音。spec={'base': 集数}：预先生成（她还没选）——Opus 慢慢写，只先配前两句，不记进剧情；她点了这个选项（commit_ep_spec）才配完其余句、记进剧情。
     不是预先生成（她自由输入）时用快模型 EP_FAST 写，第一句约 3 秒。"""
     t0 = time.time(); n = len(sess['eps']) + 1; lang = sess['lang']; series = sess['series']
+    job['_bridge'] = ((sess.get('_brsel') or {}).get(n - 1) or {}).get('text') if not spec else None
     job['_her'] = her; job['_n'] = n; job['_started'] = set(); job['_raw'] = {}
     cast = set(k for k in VOICES[series] if not k.startswith('_'))
     ep = {'n': n, 'title': '', 'kind': 'live', 'lines': [], 'prompt': '', 'choices': [], 'ending': False}
@@ -682,7 +700,10 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
         m = re.search(r'\s*\{([A-Za-z0-9_]+)\}\s*$', v); clip = None
         if m:
             v = v[:m.start()].strip(); clip = m.group(1) if VIS.get(series) and m.group(1) in {c['id'] for c in VIS[series]['clips']} else None
-        if len(ep['lines']) >= 16: return
+        if len(ep['lines']) >= 22: return  # 11-10：原来 16 句就截，编剧多写的后半段被丢、选择点却还在说后面的事；放宽到 22
+        if not spec and not ep['lines'] and k.upper() == 'NARR' and job.get('_bridge'):  # 编剧把旁白过渡句又写了一遍：不要，过渡句刚放过
+            import difflib
+            if difflib.SequenceMatcher(None, re.sub(r'\W', '', v), re.sub(r'\W', '', job['_bridge'])).ratio() > 0.55: return
         i = len(ep['lines']); ep['lines'].append({'who': who, 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None, 'clip': clip})
         job['status'] = 'voicing'; job['_got_lines'] = True
         job['t'].setdefault('first_line', round(time.time() - t0, 2))
@@ -1059,7 +1080,7 @@ def callers(sid):
         if key.startswith('_') or not v.get('lead'): continue
         ch = next((c for c in w['characters'] if c['name'].split()[0] == key or c['name'] == key), {})
         av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'  # 11-09：多角色的剧每人一张头像（来电、选人、通话页）
-        out.append({'key': key, 'name': key, 'name_zh': ch.get('name_zh') or key, 'role_zh': ch.get('role_zh', ''), 'role_en': ch.get('role_en', ''), 'avatar': av if (APP / av).exists() else None})
+        out.append({'key': key, 'name': key, 'name_zh': ch.get('name_zh') or key, 'role_zh': ch.get('role_zh', ''), 'role_en': ch.get('role_en', ''), 'avatar': av if (APP / av).exists() else None, 'gender': ch.get('gender') or 'male'})
     return out
 
 
@@ -1152,10 +1173,11 @@ def call_system(c, lite=False):
     ch = next((x for x in w['characters'] if x['name'].split()[0] == c['who'] or x['name'] == c['who']), w['characters'][0])
     if lite: w = {k: w[k] for k in ('premise_zh', 'premise_en', 'her', 'truths', 'tone', 'rules') if k in w}  # 快模型用精简版，提示词短一半
     role = ch.get('role_zh' if lang == 'zh' else 'role_en') or ch.get('role_zh', '')
-    head = (f'你是女性向互动音频剧的角色演员，现在在电话里演 {c["who"]}。' if lang == 'zh' else f'You are voicing {c["who"]} live on a phone call in a women-focused interactive audio drama.')
+    nt = neutral(s)
+    head = (f'你是{"" if nt else "女性向"}互动音频剧的角色演员，现在在电话里演 {c["who"]}。' if lang == 'zh' else f'You are voicing {c["who"]} live on a phone call in a{"n" if nt else " women-focused"} interactive audio drama.')
     return '\n\n'.join([head, '世界卡（内部资料）：\n' + json.dumps(w, ensure_ascii=False),
                         '这个角色：\n' + json.dumps(ch, ensure_ascii=False),
-                        CALL_RULES[lang].format(who=c['who'], role=role, name=c['name']), me_block(c.get('me'), lang), CALL_FORMAT])
+                        CALL_RULES[lang].format(who=c['who'], role=role, name=c['name']) + ('\n- ' + POV_NOTE[lang] if nt else ''), me_block(c.get('me'), lang), CALL_FORMAT])
 
 
 def call_context(c):
@@ -1402,10 +1424,10 @@ def ep1_job(job, series, lang):
 # ---------------- 接口 ----------------
 def series_card(sid, lang):
     b, w = BASE[sid], WORLD[sid]; c = ep1_cached(sid, lang)
-    pl, ra = STATS.get(sid, ('100K', 4.7))
+    pl, ra = STATS.get(sid) or tuple(b.get('stats') or ('100K', 4.7))
     return {'id': sid, 'title': b['title'][lang], 'lead': (b.get('lead') or {}).get(lang, ''), 'hook': b['hook'][lang],
             'tags': [t[lang] for t in b.get('tags', [])], 'genres': b['genres'], 'accent': b['accent'], 'cover': b['cover'], 'avatar': b['avatar'], 'motion': MOTION.get(sid), 'visuals': vis_card(sid),
-            'callers': [{'key': x['key'], 'name': x['name'] if lang == 'en' else x['name_zh'], 'role': x['role_en'] if lang == 'en' else x['role_zh'], 'avatar': x.get('avatar')} for x in callers(sid)],
+            'callers': [{'key': x['key'], 'name': x['name'] if lang == 'en' else x['name_zh'], 'role': x['role_en'] if lang == 'en' else x['role_zh'], 'avatar': x.get('avatar'), 'gender': x.get('gender')} for x in callers(sid)],
             'stats': {'plays': pl, 'rating': ra}, 'ep1': {'title': w[f'ep1_title_{lang}'], 'dur': c['dur'] if c else None, 'ready': bool(c), 'audio': c.get('audio') if c else None,
                     'visuals': (ep1_with_visuals(c, sid, lang) or {}).get('visuals') if c else None}}  # audio：前端点播放先直接放，不等 /api/play 走隧道
 

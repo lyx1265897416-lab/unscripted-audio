@@ -277,5 +277,229 @@
    "zh_name": "Coco Li",
    "en": "Laura"
   }
+ },
+ "reborn": {
+  "Fielle": {
+   "zh": "Ca5bKgudqKJzq8YRFoAz",
+   "zh_name": "Coco Li",
+   "en": "Jessica",
+   "lead": true
+  },
+  "Gareth": {
+   "zh": "MI36FIkp9wRP7cpWKPTl",
+   "zh_name": "Evan Zhao",
+   "en": "Charlie"
+  },
+  "Lenne": {
+   "zh": "9DMBSOAnMDPiFAsz1ZGK",
+   "zh_name": "Xiaoxi",
+   "en": "Lily"
+  },
+  "Sable": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Aria"
+  },
+  "Thalrex": {
+   "zh": "M0TrFmFeBJS9H4xzdk8Z",
+   "zh_name": "Steven Gor",
+   "en": "Bill"
+  }
+ },
+ "hellqueen": {
+  "Celine": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Charlotte",
+   "lead": true
+  },
+  "Nora": {
+   "zh": "hkfHEbBvdQFNX4uWHqRF",
+   "zh_name": "Stacy",
+   "en": "Jessica"
+  },
+  "Malachar": {
+   "zh": "WuLq5z7nEcrhppO0ZQJw",
+   "zh_name": "Martin Li",
+   "en": "Brian"
+  },
+  "Seraphiel": {
+   "zh": "r6qgCCGI7RWKXCagm158",
+   "zh_name": "Anna Su",
+   "en": "Sarah"
+  },
+  "Holloway": {
+   "zh": "Iqi0ix5WGtiSXX9VDZB4",
+   "zh_name": "Helen Sun",
+   "en": "Matilda"
+  }
+ },
+ "crackhigh": {
+  "Declan": {
+   "zh": "DVE92KG0Yd4X7RoMqy8J",
+   "zh_name": "Zicai",
+   "en": "Liam",
+   "lead": true
+  },
+  "Lena": {
+   "zh": "Ca5bKgudqKJzq8YRFoAz",
+   "zh_name": "Coco Li",
+   "en": "Laura"
+  },
+  "Tessa": {
+   "zh": "5mZxJZhSmJTjL7GoYfYI",
+   "zh_name": "Karo Yang",
+   "en": "Aria"
+  },
+  "Asher": {
+   "zh": "D9bZgM9Er0PhIxuW9Jqa",
+   "zh_name": "Xin",
+   "en": "Callum"
+  },
+  "Vivienne": {
+   "zh": "9DMBSOAnMDPiFAsz1ZGK",
+   "zh_name": "Xiaoxi",
+   "en": "Sarah"
+  }
+ },
+ "onestat": {
+  "Renn": {
+   "zh": "4aW8bNY2tSD8eaHmuXZ0",
+   "zh_name": "Chen",
+   "en": "Harry",
+   "lead": true
+  },
+  "Fawn": {
+   "zh": "Ca5bKgudqKJzq8YRFoAz",
+   "zh_name": "Coco Li",
+   "en": "Jessica"
+  },
+  "Seren": {
+   "zh": "Iqi0ix5WGtiSXX9VDZB4",
+   "zh_name": "Helen Sun",
+   "en": "Alice"
+  },
+  "Hilde": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Aria"
+  },
+  "System": {
+   "zh": "tOuLUAIdXShmWH7PEUrU",
+   "zh_name": "Julia",
+   "en": "River"
+  }
+ },
+ "mythborne": {
+  "Sora": {
+   "zh": "5mZxJZhSmJTjL7GoYfYI",
+   "zh_name": "Karo Yang",
+   "en": "Laura",
+   "lead": true
+  },
+  "Rena": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Alice"
+  },
+  "Claire": {
+   "zh": "YxbjaPemDJV2xlfvkiIG",
+   "zh_name": "Yun",
+   "en": "Lily"
+  },
+  "Hinata": {
+   "zh": "Iqi0ix5WGtiSXX9VDZB4",
+   "zh_name": "Helen Sun",
+   "en": "Charlotte"
+  },
+  "Mio": {
+   "zh": "hkfHEbBvdQFNX4uWHqRF",
+   "zh_name": "Stacy",
+   "en": "Sarah"
+  }
+ },
+ "heroacad": {
+  "Ashton": {
+   "zh": "tSv4yoTPFFmCMaJpNf0A",
+   "zh_name": "Ian",
+   "en": "Chris",
+   "lead": true
+  },
+  "Ember": {
+   "zh": "5mZxJZhSmJTjL7GoYfYI",
+   "zh_name": "Karo Yang",
+   "en": "Aria"
+  },
+  "Liora": {
+   "zh": "9DMBSOAnMDPiFAsz1ZGK",
+   "zh_name": "Xiaoxi",
+   "en": "Lily"
+  },
+  "Prism": {
+   "zh": "Ca5bKgudqKJzq8YRFoAz",
+   "zh_name": "Coco Li",
+   "en": "Alice"
+  },
+  "Gareth": {
+   "zh": "4VZIsMPtgggwNg7OXbPY",
+   "zh_name": "James Gao",
+   "en": "Daniel"
+  }
+ },
+ "starmate": {
+  "Sienna": {
+   "zh": "r6qgCCGI7RWKXCagm158",
+   "zh_name": "Anna Su",
+   "en": "Aria",
+   "lead": true
+  },
+  "Marisol": {
+   "zh": "Iqi0ix5WGtiSXX9VDZB4",
+   "zh_name": "Helen Sun",
+   "en": "Matilda"
+  },
+  "Theo": {
+   "zh": "4aW8bNY2tSD8eaHmuXZ0",
+   "zh_name": "Chen",
+   "en": "Will"
+  },
+  "Rex": {
+   "zh": "WuLq5z7nEcrhppO0ZQJw",
+   "zh_name": "Martin Li",
+   "en": "Bill"
+  },
+  "Julian": {
+   "zh": "4VZIsMPtgggwNg7OXbPY",
+   "zh_name": "James Gao",
+   "en": "Eric"
+  }
+ },
+ "academia": {
+  "Dahlia": {
+   "zh": "5mZxJZhSmJTjL7GoYfYI",
+   "zh_name": "Karo Yang",
+   "en": "Jessica",
+   "lead": true
+  },
+  "Raven": {
+   "zh": "D9bZgM9Er0PhIxuW9Jqa",
+   "zh_name": "Xin",
+   "en": "Callum"
+  },
+  "Hinako": {
+   "zh": "Ca5bKgudqKJzq8YRFoAz",
+   "zh_name": "Coco Li",
+   "en": "Laura"
+  },
+  "Maren": {
+   "zh": "YxbjaPemDJV2xlfvkiIG",
+   "zh_name": "Yun",
+   "en": "Sarah"
+  },
+  "Serena": {
+   "zh": "BqljjWyTnrioXPCNkCd4",
+   "zh_name": "Stella Gu",
+   "en": "Charlotte"
+  }
  }
 }

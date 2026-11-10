@@ -1,0 +1,142 @@
+{
+ "clips": [
+  {
+   "id": "s00",
+   "kind": "still",
+   "cap": "剧照：红发女孩Sienna趴在洒满阳光的床上，戴着耳机边听音乐边翻看画册，神情惬意。",
+   "src": "v/starmate/s00.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s01",
+   "kind": "still",
+   "cap": "剧照：红发琥珀眼的Sienna Lark在洒满阳光的客厅沙发上慵懒地拿着遥控器吃冰棍。",
+   "src": "v/starmate/s01.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s02",
+   "kind": "still",
+   "cap": "剧照：Sienna在阳光厨房里一手举手机一手铲焦黑煎蛋，满脸通红又窘迫。",
+   "src": "v/starmate/s02.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s03",
+   "kind": "still",
+   "cap": "剧照：红发琥珀眼的Sienna在昏暗室内靠门坐地，捂嘴忍泪，氛围伤感。",
+   "src": "v/starmate/s03.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s04",
+   "kind": "still",
+   "cap": "剧照：Sienna Lark在雨夜天台赤脚提鞋，向镜头伸手，湿发贴脸，神情温柔而略带疲惫。",
+   "src": "v/starmate/s04.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s05",
+   "kind": "still",
+   "cap": "剧照：红发女孩Sienna在阳光露台闭眼害羞地撩发，手拿咖啡，氛围温暖惬意。",
+   "src": "v/starmate/s05.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s06",
+   "kind": "still",
+   "cap": "剧照：Sienna身着墨绿礼裙在走廊向镜头伸手，微醺含笑，氛围暧昧亲昵。",
+   "src": "v/starmate/s06.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s07",
+   "kind": "still",
+   "cap": "剧照：Sienna Lark在泳池边躺椅上拿椰子，戴心形墨镜，慵懒惬意。",
+   "src": "v/starmate/s07.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s08",
+   "kind": "still",
+   "cap": "剧照：Sienna Lark在月夜泳池边闭眼微笑，湿发红棕，穿黑泳衣，氛围惬意放松。",
+   "src": "v/starmate/s08.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s09",
+   "kind": "still",
+   "cap": "剧照：红发琥珀眼的Sienna在阳光露台穿黄裙戴草帽，害羞地拉扯裙摆，氛围温暖又暧昧。",
+   "src": "v/starmate/s09.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s10",
+   "kind": "still",
+   "cap": "剧照：红发女子Sienna在洗衣房拎着湿衣、指着镜头怒斥，气氛恼怒又尴尬。",
+   "src": "v/starmate/s10.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s11",
+   "kind": "still",
+   "cap": "剧照：Sienna在雨夜面馆吧台边吃面边回眸，神情慵懒而暧昧。",
+   "src": "v/starmate/s11.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s12",
+   "kind": "still",
+   "cap": "剧照：Sienna Lark身着亮片礼服坐在豪车后座，手捧奖杯指向雨窗，神情慵懒而略带怅然。",
+   "src": "v/starmate/s12.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s13",
+   "kind": "still",
+   "cap": "剧照：Sienna Lark在街头被狗仔围拍，她抱着纸袋抬手遮脸，神情无奈又警惕。",
+   "src": "v/starmate/s13.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s14",
+   "kind": "still",
+   "cap": "剧照：金发女子在明亮厨房餐厅里手持手机自拍，神情自信从容，氛围轻松惬意。",
+   "src": "v/starmate/s14.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s15",
+   "kind": "still",
+   "cap": "剧照：金发女子在明亮厨房里抱臂倚靠台面，神情冷淡而自信。",
+   "src": "v/starmate/s15.mp4",
+   "dur": 6.0
+  },
+  {
+   "id": "s16",
+   "kind": "still",
+   "cap": "剧照：金发女子身穿粉色上衣与白色长裤，在纯色背景中站立，神情冷淡而自信。",
+   "src": "v/starmate/s16.mp4",
+   "dur": 6.0
+  }
+ ],
+ "pool": [
+  "s00",
+  "s01",
+  "s02",
+  "s03",
+  "s04",
+  "s05",
+  "s06",
+  "s07",
+  "s08",
+  "s09",
+  "s10",
+  "s11",
+  "s12",
+  "s13",
+  "s14",
+  "s15",
+  "s16"
+ ]
+}
