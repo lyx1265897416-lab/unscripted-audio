@@ -210,3 +210,5 @@ id：reborn（带着超强技能重生）、hellqueen（和地狱女王一起养
 - 流程：`build_prota_src.py`（原卡 → data/prota/<id>.json）→ `build_prota_world.py`（Opus 写音频版世界卡）→ `build_prota_app.py`（声线、剧目卡、封面、头像；`Ms. Holloway`→`Holloway`、`The System`→`System` 方便当声线键）→ `build_ep1.py <ids>`（第 1 集剧本）→ 中转 `/api/play` prewarm 配第 1 集 → `build_prota_visuals.py`（场景图做 6 秒缓推短片，deepseek-v4.1-flash 看图写画面描述）→ `build_ep1_visuals.py`。
 - 原卡文字、改编的世界卡和剧本只留本机（.gitignore）；公开仓库只有封面、头像、画面短片和第 1 集音频。
 - 新题材：Adventure（冒险）、Academy（学院）加进首页题材；Action/Isekai/Superpowers/Celebrity 有中文标签。
+- **Pages 部署超时**：一次推 ~50 MB 新文件（16 个第 1 集 mp3 + 画面短片）时 Pages 部署卡在 syncing_files 10 分钟超时、连失败两次。办法：先推小文件；mp3 先挪出 app/ep1（中转自动改用云存储地址，不会 404），再每批 4 个直接放进 docs/ep1 推送、等部署成功再下一批，全部上线后放回 app/ep1。以后一次加很多音频也照这样分批。
+- 实测：新剧第 2 集（地狱女王，中文，自由输入）开头两句 2.1 秒写出、第一句 5.8 秒配好；全程没给“你”加性别。修了两处：编剧把旁白过渡句又写一遍时丢掉；一集上限 16 句→22 句（原来截掉后半段，选择点却还在说后面的事）。
