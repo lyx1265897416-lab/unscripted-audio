@@ -1478,19 +1478,20 @@ async function startHandsFree() {
 }
 /** Lock screen at a choice point (11-09): the page can't hear levels, so instead of recording the whole 6.5 s window,
  * send 1.5 s pieces; the relay stitches them and answers as soon as she has finished her sentence. */
-const LOCK_WAIT = 8000;  // 11-09：锁屏看不到屏幕、每段录音还要走隧道往返（1.3–2.5 秒），给她 8 秒开口
+const LOCK_WAIT = 5000;  // 11-09：锁屏给她 5 秒开口；5 秒内没声音才自动往下走，开口了就一直听到她说完
+const LOCK_PIECE = 1250;  // 每段 1.25 秒：第 4 段正好录到第 5 秒
+const LOCK_CAP = 90000;   // 一口气最多听 90 秒，到了就把已说的识别掉
 function hfListenLocked(key) {
-  const t0 = Date.now(); let first = true, heard = false, over = false, rec = null, timer = 0, pending = 0;
+  const t0 = Date.now(); let first = true, heard = false, over = false, rec = null, timer = 0, pending = 0, voiceEnd = 0;
   const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
   const stop = () => { over = true; clearTimeout(timer); if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } micBusy = Math.max(0, micBusy - 1); };
   const ok = () => HF.key === key && P.needChoice && !over;
   const piece = () => {
     if (!ok()) return;
-    // “没说话”只在回包里判断（下面 onstop）：之前在这里按时间判，回包还在隧道上她已经开口了，结果先自动续播、她的话被丢掉（11-09 锁屏“没识别”）
+    // “没说话”只在回包里判断（下面 onstop）：按时间判的话，回包还在隧道上她已经开口了，结果先自动续播、她的话被丢掉
     if (!heard && Date.now() - t0 > LOCK_WAIT + 9000) { stop(); continueOnItsOwn('quiet'); return; }   // 回包一直不来（断网）
-    if (Date.now() - t0 > 25000) { stop(); continueOnItsOwn('unclear'); return; }
     try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { stop(); continueOnItsOwn('quiet'); return; }
-    const chunks = [], pStart = Date.now() - t0;
+    const chunks = [], pStart = Date.now() - t0, last = pStart + LOCK_PIECE >= LOCK_CAP;
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     rec.onstop = async () => {
       const b = new Blob(chunks, { type: rec.mimeType || type || 'audio/mp4' });
@@ -1498,24 +1499,28 @@ function hfListenLocked(key) {
       let r = null; pending++;
       try {
         const ss = getSess(P.id);
-        const u = new URL(apiUrl('api/asr/chunk')); u.searchParams.set('k', TOKEN); u.searchParams.set('sid', (ss && ss.sid) || ''); if (f) u.searchParams.set('first', '1');
+        const u = new URL(apiUrl('api/asr/chunk')); u.searchParams.set('k', TOKEN); u.searchParams.set('sid', (ss && ss.sid) || ''); if (f) u.searchParams.set('first', '1'); if (last) u.searchParams.set('end', '1');
         const res = await fetch(u.toString(), { method: 'POST', headers: { 'Content-Type': b.type || 'audio/mp4' }, body: b });
         r = res.ok ? await res.json() : null;
       } catch (e) { r = null; }
       pending--;
       if (!ok() && !(r && r.text)) return;
-      if (r && (r.speaking || r.heard)) { heard = true; stopAutoCountdown(); HF.phase = 'speaking'; paintHF(); }
-      // 这一段已经录到等待时间之后、还是没声音，而且前面的段都回来了 → 她真的没说话，故事自己往下走
-      else if (r && !r.done && !heard && pStart + 1500 >= LOCK_WAIT && pending === 0) { stop(); continueOnItsOwn('quiet'); return; }
+      const pEnd = pStart + LOCK_PIECE;
+      if (r && (r.speaking || r.heard)) { heard = true; voiceEnd = Math.max(voiceEnd, pEnd); stopAutoCountdown(); HF.phase = 'speaking'; paintHF(); }
+      else if (r && !r.done) {
+        heard = false;  // 咳嗽、碰一下这种没成句的声音不算开口
+        // 录到第 5 秒（或上次出声后 3 秒）还是没声音，而且前面的段都回来了 → 她真的没说话，故事自己往下走
+        if (pEnd >= Math.max(LOCK_WAIT, voiceEnd ? voiceEnd + 3000 : 0) && pending === 0) { stop(); continueOnItsOwn('quiet'); return; }
+      }
       if (r && r.done) {
         stop();
         if (HF.key !== key || !P.needChoice) return;
         if (r.text) { HF.phase = 'heard'; HF.heard = r.text; paintHF(); submitChoice(r.text, 'voice'); if (P.gen) playAux(`ack.${LANG}.mp3`).then(() => { if (P.gen) keepAlive(); }); }
         else continueOnItsOwn('unclear');
-      }
+      } else if (last && ok()) { stop(); continueOnItsOwn(heard ? 'unclear' : 'quiet'); }
     };
     try { rec.start(); } catch (e) { stop(); continueOnItsOwn('quiet'); return; }
-    timer = setTimeout(() => { if (rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } piece(); }, 1500);
+    timer = setTimeout(() => { if (rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } if (!last) piece(); }, LOCK_PIECE);
   };
   micBusy++;
   HF.rec = { cancel: stop };

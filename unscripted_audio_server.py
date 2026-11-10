@@ -1021,7 +1021,7 @@ def echo_of_him(c, text, extra=None):
     return False
 
 
-def ear_feed(c, data, ctype):
+def ear_feed(c, data, ctype, end=False):
     """锁屏通话：手机每 ~2 秒传一段录音（锁屏后网页没法测音量），这里解码拼起来，用能量检测找“她说完的一句”
     （说了 ≥0.3 秒、之后静 ≥1 秒）。返回说完的那段 16k 单声道 PCM，没有就 None。"""
     import array, tempfile
@@ -1044,9 +1044,12 @@ def ear_feed(c, data, ctype):
         else:
             if E['start'] is None: E['floor'] = E['floor'] * 0.97 + rms * 0.03
             else: E['quiet'] += 0.03
-        if E['start'] is not None and E['quiet'] >= 1.0:  # 锁屏时她句中停顿常有 0.8 秒，等 1 秒再算说完
+        # 锁屏时她句中停顿常有 0.8 秒，等 1 秒再算说完；已经说了 2 秒以上（长回答、边想边说）就等 1.6 秒，别把一段话切断（11-09）
+        if E['start'] is not None and E['quiet'] >= (1.0 if E['voiced'] < 2 else 1.6):
             if E['voiced'] >= 0.3: done = bytes(E['buf'][E['start'] * 2:(base + i + fr) * 2])
             E['start'] = None; E['voiced'] = 0; E['quiet'] = 0
+    if end and not done and E['start'] is not None and E['voiced'] >= 0.3:  # 最后一段（说到上限了）：说到哪算哪
+        done = bytes(E['buf'][E['start'] * 2:]); E['start'] = None; E['voiced'] = 0; E['quiet'] = 0
     if E['start'] is None and len(E['buf']) > 16000 * 2 * 6: del E['buf'][:len(E['buf']) - 16000 * 2 * 2]  # 不在说话时只留最后 2 秒
     if done:
         import io, wave
@@ -1286,7 +1289,7 @@ class H(BaseHTTPRequestHandler):
             data = self.rfile.read(n) if 0 < n <= 4_000_000 else b''
             with sess.setdefault('_earlock', threading.Lock()):
                 if gq('first') == '1': sess.pop('_ear', None)
-                try: wav = ear_feed(sess, data, self.headers.get('Content-Type') or '') if data else None
+                try: wav = ear_feed(sess, data, self.headers.get('Content-Type') or '', end=gq('end') == '1') if data else None
                 except Exception as e: print('asr/chunk', repr(e)[:160], flush=True); wav = None
                 E = sess.get('_ear') or {}
                 speaking = E.get('start') is not None
