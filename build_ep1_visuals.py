@@ -4,12 +4,14 @@ import json, sys, os, concurrent.futures as cf
 sys.path.insert(0, '/Users/vicky/Interactive storyline/tools')
 import claude_cli as CC
 os.makedirs('data/ep1_visuals', exist_ok=True)
+PREFER = '\n- 最重要：p 开头是预设完整版成片的镜头，画面质量和人物最统一，优先用它们；只有预设镜头里完全没有对应的场景或人物时，才用 o 开头的开场镜头、剧照或 idle。'
 SYS = '你是有声剧的剪辑师，给每句台词配一段循环播放的画面（静音视频）。只输出 JSON 数组。'
 
 
 def catalog(sid):
     v = json.load(open(f'data/visuals/{sid}.json'))
-    return v, '\n'.join(f"{c['id']}（{c['kind']}，{c['dur']}s）：{c['cap'][:220]}" for c in v['clips'])
+    cl = [c for c in v['clips'] if not (v.get('prefer') and c['kind'] == 'card')]  # 有预设完整版切片的剧：不再给实时测试片段
+    return v, '\n'.join(f"{c['id']}（{c['kind']}，{c['dur']}s）：{c['cap'][:220]}" for c in cl)
 
 
 def ask(sid, lang):
@@ -24,9 +26,9 @@ def ask(sid, lang):
 {lines}
 
 给每一句挑一个最匹配的画面 id：
-- 优先匹配这句在讲的动作、地点、人物和情绪；开场镜头（o 开头）和开场剧情一致，前半段优先用；
+- 优先匹配这句在讲的动作、地点、人物和情绪；{'' if v.get('prefer') else '开场镜头（o 开头）和开场剧情一致，前半段优先用；'}
 - 同一个情景连续几句可以用同一段，但同一段最多连续 4 句，整集尽量多用不同片段，不要来回只用两三段；
-- 实在没有合适的就用剧照（s 开头）或 idle；不能编造不存在的 id。
+- 实在没有合适的就用剧照（s 开头）或 idle；不能编造不存在的 id。{PREFER if v.get('prefer') else ''}
 输出：[{{"line":0,"clip":"o00"}}, …]，每一句都要有。'''
     txt, meta = CC.call_text(SYS, user, timeout=300, effort='low')
     arr = json.loads(txt[txt.find('['):txt.rfind(']') + 1])

@@ -360,8 +360,10 @@ def map_clips(series, ctx, items):
     """items=[(i, who, text)] → {i: clip}。编剧不再管画面（省掉画面库那几千字提示词），台词一出来就交给快模型配。"""
     v = VIS.get(series)
     if not v or not items: return {}
-    lib = '\n'.join(f"{c['id']}: {c['cap'][:90]}" for c in v['clips'])
-    prompt = (f'画面库（id：画面内容）：\n{lib}\n\n前情（最近几句）：\n{ctx}\n\n给下面每句台词挑最匹配的画面 id（按动作、地点、人物、情绪；没有合适的用 s 开头的剧照或 idle；'
+    pref = bool(v.get('prefer'))  # 有预设完整版切片（build_preset_visuals.py）：p 开头优先，实时测试片段不再给
+    lib = '\n'.join(f"{c['id']}: {c['cap'][:90]}" for c in v['clips'] if not (pref and c['kind'] == 'card'))
+    prompt = (f'画面库（id：画面内容）：\n{lib}\n\n前情（最近几句）：\n{ctx}\n\n给下面每句台词挑最匹配的画面 id（按动作、地点、人物、情绪；'
+              + ('p 开头是预设完整版成片镜头，优先用；只有预设镜头里完全没有对应场景时才用 o 开头、s 开头剧照或 idle；' if pref else '没有合适的用 s 开头的剧照或 idle；') +
               f'同一片段不要连用超过 3 句）。只输出 JSON 对象，如 {{"3":"c12"}}：\n' + '\n'.join(f'{i} {w}: {t}' for i, w, t in items))
     body = {'model': MAPPER, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': 300, 'temperature': 0, 'reasoning': {'enabled': False}}
     req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
@@ -374,7 +376,7 @@ def map_clips(series, ctx, items):
 def clip_library(sid):
     v = VIS.get(sid)
     if not v: return ''
-    return 'CLIP LIBRARY（画面库：播放器在这句台词播放时显示的静音画面，按画面内容挑）：\n' + '\n'.join(f"{c['id']}: {c['cap'][:110]}" for c in v['clips'])
+    return 'CLIP LIBRARY（画面库：播放器在这句台词播放时显示的静音画面，按画面内容挑' + ('；p 开头是预设完整版镜头，优先用' if v.get('prefer') else '') + '）：\n' + '\n'.join(f"{c['id']}: {c['cap'][:110]}" for c in v['clips'] if not (v.get('prefer') and c['kind'] == 'card'))
 
 
 def story_so_far(sess):
