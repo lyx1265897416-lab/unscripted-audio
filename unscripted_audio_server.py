@@ -59,7 +59,12 @@ FALLBACK = os.environ.get('WRITER_FALLBACK', 'z-ai/glm-5.3-prime')
 MAX_EPS = 12
 
 POOL = queue.Queue()
-for _ in range(10): POOL.put(WakuMCP())
+def _mcp():
+    for k in range(6):  # 11-09：shim 偶尔初始化失败，原来一失败中转就起不来（launchd 反复重启）
+        try: return WakuMCP()
+        except Exception as e: print('waku mcp init', k, repr(e)[:100], flush=True); time.sleep(2 + 2 * k)
+    return WakuMCP()
+for _ in range(10): POOL.put(_mcp())
 CALL_HEDGE = [int(x) for x in os.environ.get('CALL_HEDGE', '2,1').split(',')]  # 正文第 1、2 句各发几路
 CALL_POOL = queue.Queue()  # 11-09 通话专用配音通道：剧集在后台整集配音时，通话不跟它排队（原来排到 20 秒）
 CALL_POOL_N = [0]
@@ -159,7 +164,8 @@ def tts_text(text, lead, lang):
 def waku(model, params, timeout=120, pool=None):
     if pool is CALL_POOL and not CALL_POOL_N[0]: pool = POOL  # 通话通道还没建好就先用公共的
     pool = pool or POOL
-    m = pool.get()
+    _w = time.time(); m = pool.get()
+    if TTS_DEBUG and time.time() - _w > 0.3: print('waku pool wait', round(time.time() - _w, 2), 'call' if pool is CALL_POOL else 'main', flush=True)
     try:
         return m.tool('multimodal_run_model', {'capability': 'multimodal.generate.audio', 'model_id': model, 'parameters': params}, timeout=timeout)
     except TimeoutError:
@@ -179,6 +185,7 @@ def credit_alarm():
     if g.exists(): subprocess.Popen([sys.executable, str(g), '--now'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+TTS_DEBUG = os.environ.get('TTS_DEBUG', '0') == '1'  # 排查配音慢时设 1
 def tts(series, who, text, lang, engine='v4', pool=None):
     vid, lead = voice_of(series, who, lang)
     params = dict(text=tts_text(text, lead, lang), voice_id=vid, stability=0.4, similarity=0.8)
@@ -187,7 +194,8 @@ def tts(series, who, text, lang, engine='v4', pool=None):
     err = None
     for attempt in range(3):
         try:
-            r = waku(model, params, pool=pool)
+            _t = time.time(); r = waku(model, params, pool=pool)
+            if TTS_DEBUG: print(time.strftime('%H:%M:%S'), 'tts', engine, 'call' if pool is CALL_POOL else 'main', who, round(time.time() - _t, 2), 'ok' if r.get('asset_url') else str(r)[:80], text[:12], flush=True)
             if r.get('asset_url'): return r['asset_url']
             err = r.get('error') or r
             if 'insufficient_credit' in str(err): credit_alarm()
@@ -507,7 +515,7 @@ def write_episode(sess, user_msg, on_line, sysm=None, fast_model=None):
     return out
 
 
-EP_FAST = tuple(os.environ.get('EP_FAST_MODEL', 'z-ai/glm-5.3-prime,deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3').split(','))  # 11-09 三个同时写，谁先写完第一行用谁
+EP_FAST = tuple(os.environ.get('EP_FAST_MODEL', 'z-ai/glm-5.3-prime,deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3,qwen/qwen3.6-flash').split(','))  # 11-09 加 qwen：OpenRouter 时快时慢（首字 1.3–10 秒），多一路更稳  # 11-09 三个同时写，谁先写完第一行用谁
 SPEC_LINES = 4  # 预先生成先配几句：2 句点选项后第 3 句要等 ~13 秒，4 句（约 15–20 秒音频）能盖住其余句子的配音时间  # 她自由输入时写下一集：11-06 实测第一句 2.8 秒（本机 Opus 8–13 秒）
 
 
@@ -525,9 +533,101 @@ def next_msg(sess, her, bridge=None):
         pace += ('\n她在听上一集的时候还对故事说过：' + ' / '.join(f'“{x}”' for x in w) + '。这一集要明显回应、照她想要的方向走。') if lang == 'zh' else \
                 ('\nWhile listening to the last episode she also told the story: ' + ' / '.join(f'"{x}"' for x in w) + '. This episode must clearly answer that and go where she wants.')
     if bridge:
-        pace += (f'\n她回答之后，旁白已经先说了一句：「{bridge}」。这一集紧接着这句往下写，别重复这句的内容；第一句就回应她的话，而且要短（10 个字以内），第二句 20 个字以内。' if lang == 'zh'
-                 else f'\nRight after she answered, the narrator already said: "{bridge}". Continue straight from that line without repeating it; the first line answers her and is short (under 8 words), the second under 16 words.')
+        pace += (f'\n她回答之后，旁白已经先说了一句：「{bridge}」。这一集紧接着这句往下写，别重复这句的内容。' if lang == 'zh'
+                 else f'\nRight after she answered, the narrator already said: "{bridge}". Continue straight from that line without repeating it.')
     return (f'到目前为止：\n{so_far}\n\n现在写第 {n} 集。{pace}' if lang == 'zh' else f'Story so far:\n{so_far}\n\nNow write episode {n}.{pace}')
+
+
+OPEN_MODELS = ('deepseek/deepseek-v4.1-flash', 'qwen/qwen3.6-flash', 'moonshotai/kimi-k3')  # 11-09 小提示词首字 1.3–1.5 秒（整集编剧 2.2–4.9 秒）
+
+
+def quick_open(sess, her, done_ev=None):
+    """她说完现写的那集：先用小提示词让快模型只写开头两句（主角对她这句话的直接回应 + 一句旁白），1.5 秒左右出来，马上配音；
+    整集编剧拿着这两句接着往下写。返回 [(who, text)]，没写出来返回 []。"""
+    lang = sess['lang']; s = sess['series']; b = BASE.get(s, {})
+    cast = [k for k in VOICES[s] if not k.startswith('_')]
+    last = sess['eps'][-1]; tail = '\n'.join(f"{l['who']}: {l['text']}" for l in (last.get('lines') or [])[-6:])
+    br = (sess.get('_brsel') or {}).get(last['n'])
+    lead = (b.get('lead') or {}).get(lang, '') if isinstance(b.get('lead'), dict) else b.get('lead', '')
+    hook = (b.get('hook') or {}).get(lang, '') if isinstance(b.get('hook'), dict) else b.get('hook', '')
+    if lang == 'zh':
+        sysm = '你是女性向有声连载剧的编剧，正在实时接着写。只输出两行，每行格式“角色名: 台词”，角色名只能用：' + '、'.join(cast + ['NARR']) + '。不要别的文字。'
+        user = (f'剧：{lead}。{hook}\n听众本人就是女主（用“你”称呼）。\n上一集最后几句：\n{tail}\n选择点：{last.get("prompt", "")}\n'
+                + (f'旁白刚说：「{br["text"]}」\n' if br else '') + f'{her}\n\n'
+                '写这一集最开头的两行：第一行是此刻在场、最该回应她的那个角色（通常是主角）对她这句话的直接回应，12 个字以内，口语、符合人设；'
+                '第二行是 NARR 旁白，写他的一个动作或神情，20 个字以内。不要替她做决定，不要一下推进大剧情。')
+    else:
+        sysm = 'You write a women-focused serialized audio drama, live. Output exactly two lines, each "Name: line", names only from: ' + ', '.join(cast + ['NARR']) + '. Nothing else.'
+        user = (f'Show: {lead}. {hook}\nThe listener is the heroine ("you").\nLast lines of the previous episode:\n{tail}\nChoice point: {last.get("prompt", "")}\n'
+                + (f'The narrator just said: "{br["text"]}"\n' if br else '') + f'{her}\n\n'
+                'Write the first two lines of the new episode: line 1 is the character in the scene who should answer her (usually the lead), replying directly to what she said, under 10 words, spoken, in character; '
+                'line 2 is NARR: one action or look of his, under 16 words. Don\'t decide for her and don\'t jump the plot ahead.')
+    got = []; ev = threading.Event(); buf = {'b': ''}
+    def feed(c):
+        buf['b'] += c
+        while '\n' in buf['b']:
+            ln, buf['b'] = buf['b'].split('\n', 1)
+            m = KEYS_RE.match(ln)
+            if m and len(got) < 2:
+                who = 'NARR' if m.group(1).strip().upper() == 'NARR' else m.group(1).strip()
+                if who in cast or who == 'NARR': got.append((who, m.group(2).strip()))
+            if len(got) >= 2: ev.set()
+    def run():
+        try: openrouter_hedged(OPEN_MODELS, sysm, user, feed, max_tokens=120, temperature=0.75)
+        except Exception as e: print('quick_open', repr(e)[:120], flush=True)
+        finally: ev.set()
+    threading.Thread(target=run, daemon=True).start()
+    return ev, got
+
+
+def race_write(job, sess, user_msg, her, on_line):
+    """现写的那集（11-09 再提速）：快模型写开头两句 和 整集编剧 同时开跑，谁先出第一句用谁——
+    开头两句先到：马上配音，整集编剧带着这两句重新接着写；整集编剧先到：直接用它，开头两句不要了。不会因为哪一路慢而干等。"""
+    lang = sess['lang']; sysm = system_prompt(sess)
+    lock = threading.Lock(); mode = {'m': 'pending'}; buf = []; first = threading.Event(); sdone = threading.Event(); res = {}
+    def sline(k, v):
+        with lock:
+            if mode['m'] == 'dead': raise _Lost()
+            if mode['m'] == 'live': on_line(k, v); return
+            buf.append((k, v)); first.set()
+    pb = {'b': ''}
+    def sfeed(c):
+        pb['b'] += c
+        while '\n' in pb['b']:
+            ln, pb['b'] = pb['b'].split('\n', 1)
+            m = KEYS_RE.match(ln)
+            if m: sline(m.group(1).strip(), m.group(2).strip())
+    plain = user_msg + ('\n第一句就回应她的话，而且要短（10 个字以内），第二句 20 个字以内。' if lang == 'zh' else '\nThe first line answers her and is short (under 8 words), the second under 16 words.')
+    def shadow():
+        try: res['txt'], res['model'] = openrouter_hedged(EP_FAST, sysm, plain, sfeed, max_tokens=1400, temperature=0.8)
+        except Exception as e: res['err'] = repr(e)[:160]
+        finally: sdone.set(); first.set()
+    threading.Thread(target=shadow, daemon=True).start()
+    oev, got = quick_open(sess, her)
+    t0 = time.time()
+    while time.time() - t0 < 12:
+        if oev.is_set() and got and not buf: break  # 开头两句先写好
+        if buf or sdone.is_set(): break
+        first.wait(0.05); oev.wait(0.02)
+    with lock:
+        use_open = bool(got) and not buf
+        mode['m'] = 'dead' if use_open else 'live'
+        pend = [] if use_open else list(buf)
+    job['t']['race'] = 'open' if use_open else 'writer'
+    if not use_open:
+        for k, v in pend: on_line(k, v)
+        sdone.wait(90)
+        if res.get('txt') or pend: sess_w = res.get('model'); job['writer'] = sess_w; return
+        # 整集编剧这一路失败了：走原来的整套兜底
+        return write_episode({'_got_lines': False}, plain, on_line, sysm=sysm, fast_model=EP_FAST)
+    lines = list(got[:2])
+    for w, v in lines: on_line(w, v)
+    shown = ' / '.join(f'{w}: {v}' for w, v in lines)
+    more = (f'\n这一集开头两行已经写好、正在播出：{shown}。从第三行接着写（输出里不要再写这两行，也别再回答一遍她的话），TITLE/PROMPT/C1/C2/END 照常写。' if lang == 'zh'
+            else f'\nThe first two lines of this episode are already written and playing: {shown}. Continue from line three (do not output those two lines again or re-answer her); TITLE/PROMPT/C1/C2/END as usual.')
+    wctx = {'_got_lines': True}
+    out = write_episode(wctx, user_msg + more, on_line, sysm=sysm, fast_model=EP_FAST)
+    job['writer'] = wctx.get('writer'); return out
 
 
 def run_episode(job, sess, user_msg, spec=None, her=None):
@@ -593,9 +693,12 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
         if not clip: mq['pending'].append((i, who, ep['lines'][i]['text'])); mev.set()
     job['_mth'] = mth
     try:
-        wctx = {'_got_lines': False}
-        write_episode(wctx, user_msg, lambda k, v: (on_line(k, v), wctx.__setitem__('_got_lines', True)), sysm=system_prompt(sess), fast_model=None if spec else EP_FAST)
-        job['writer'] = wctx.get('writer')
+        if not spec and her:  # 现写的那集：快模型开头 和 整集编剧 赛跑
+            race_write(job, sess, user_msg, her, on_line)
+        else:
+            wctx = {'_got_lines': False}
+            write_episode(wctx, user_msg, lambda k, v: (on_line(k, v), wctx.__setitem__('_got_lines', True)), sysm=system_prompt(sess), fast_model=None if spec else EP_FAST)
+            job['writer'] = wctx.get('writer')
         job['t']['writer'] = round(time.time() - t0, 2)
         mq['done'] = True; mev.set()
         if len(ep['lines']) < 3: raise RuntimeError('writer returned too few lines')
@@ -638,6 +741,7 @@ def start_ep_specs(sess):
     last = sess['eps'][-1]; sess['spec'] = {}
     if len(sess['eps']) >= MAX_EPS: return
     if (sess['sid'], last['n']) not in BRIDGE_EP: threading.Thread(target=ep_bridge, args=(sess, last['n']), daemon=True).start()
+    beat_card(sess)  # 第一次用这部剧/这个主角时在后台配好
     for ch in (last.get('choices') or [])[:2]:
         jid = rid(); JOBS[jid] = {'id': jid, 'status': 'writing', 'error': None}
         her = her_said(ch, 'option', sess['lang'])
@@ -753,6 +857,50 @@ def ep_bridge(sess, n):
         print('ep_bridge', repr(e)[:160], flush=True); return None
     finally:
         ev.set(); _BR_EV.pop(key, None)
+
+
+# 旁白过渡说完、新一集还没好时，主角先接半句（预先配好音，不写进剧情，任何回答都接得上）：她问了问题用 q，否则 s
+EP_BEATS = {'zh': {'q': ['你问这个……', '……你真想知道？', '这个问题啊……'], 's': ['……我听见了。', '……好。', '嗯……']},
+            'en': {'q': ['You want to know that…', '…You really want to know?', 'That question…'], 's': ['…I heard you.', '…Okay.', 'Mm…']}}
+BEATS = {}
+_BEAT_MAKING = set()
+
+
+def lead_now(sess):
+    """这一刻在场的主角：只有一个主角就是他；多主角的剧取上一集说话最多的那个"""
+    s = sess['series']; leads = [k for k, v in VOICES[s].items() if isinstance(v, dict) and v.get('lead')]
+    if len(leads) <= 1: return leads[0] if leads else None
+    cnt = {k: 0 for k in leads}
+    for l in (sess['eps'][-1].get('lines') or []):
+        if l['who'] in cnt: cnt[l['who']] += 1
+    return max(leads, key=lambda k: cnt[k])
+
+
+def beats(series, who, lang, make=True):
+    key = (series, who, lang)
+    if key in BEATS: return BEATS[key]
+    f = CACHE / 'beats' / f'{series}.{who}.{lang}.json'
+    if f.exists(): BEATS[key] = json.load(open(f)); return BEATS[key]
+    if not make or key in _BEAT_MAKING: return None
+    _BEAT_MAKING.add(key)
+    try:
+        import concurrent.futures as cf
+        with cf.ThreadPoolExecutor(6) as ex:
+            d = {k: [{'text': t, 'url': u} for t, u in zip(v, ex.map(lambda t: tts(series, who, t, lang), v))] for k, v in EP_BEATS[lang].items()}
+        f.parent.mkdir(parents=True, exist_ok=True); json.dump(d, open(f, 'w'), ensure_ascii=False)
+        BEATS[key] = d; return d
+    except Exception as e:
+        print('beats', repr(e)[:120], flush=True); return None
+    finally:
+        _BEAT_MAKING.discard(key)
+
+
+def beat_card(sess):
+    who = lead_now(sess)
+    if not who: return None
+    d = beats(sess['series'], who, sess['lang'], make=False)
+    if not d: threading.Thread(target=beats, args=(sess['series'], who, sess['lang']), daemon=True).start(); return None
+    return dict(d, who=who)
 
 
 def sel_bridge(sess, n, lock=True):
@@ -1320,7 +1468,7 @@ class H(BaseHTTPRequestHandler):
                     L = j['ep']['lines']
                     if not (L and L[0].get('url')): continue
                     out[ch] = {'job': sp['job'], 'n': j['ep']['n'], 'ep': dict(j['ep'], lines=[dict(x) for x in L])}
-                return self._send(200, {'n': len(sess['eps']) + 1 if sess else 0, 'specs': out, 'bridge': sel_bridge(sess, len(sess['eps']), False) if sess else None})
+                return self._send(200, {'n': len(sess['eps']) + 1 if sess else 0, 'specs': out, 'bridge': sel_bridge(sess, len(sess['eps']), False) if sess else None, 'beats': beat_card(sess) if sess else None})
             if u.path == '/api/a':  # 一句配音（本机缓存，带跨域头），手机取成 blob 提前放在本地
                 f = cache_line(g('u'))
                 return self._send(200, f.read_bytes(), 'audio/mpeg', 'public, max-age=604800, immutable') if f else self._send(404, {'error': 'no audio'})

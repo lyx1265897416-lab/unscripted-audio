@@ -850,6 +850,7 @@ function maybeSpecs(force) {
   API.specs(ss.sid).then((r) => {
     if (!r || SPEC.key !== key || r.n !== ep.n + 1) return;
     if (r.bridge) noteBridge(ss.sid, ep.n, r.bridge);
+    if (r.beats) noteBeats(ss.sid, ep.n, r.beats);
     Object.entries(r.specs || {}).forEach(([ch, sp]) => {
       if (SPEC.map[ch]) return;
       SPEC.map[ch] = sp;
@@ -1274,12 +1275,40 @@ function noteBridge(sid, n, b) {
   if (blobable(b.url)) fetchBlob(b.url);
 }
 const auxTalking = () => P.aux && !audio.loop && !!P.auxEnd && !audio.paused;   // the ack / bridge is being spoken
+/* the lead's half-line after the bridge ("You want to know that…" / "…I heard you."), only when her episode still isn't ready */
+const BEATS = {};
+let BEAT_KEY = '';
+function noteBeats(sid, n, b) {
+  if (!b || !b.q || !b.s) return;
+  BEATS[sid + ':' + n] = b; BEAT_KEY = sid + ':' + n;
+  [...b.q, ...b.s].forEach((x) => { if (x.url && blobable(x.url)) fetchBlob(x.url); });
+}
+const isQuestion = (t) => /[?？]|吗|呢|什么|为什么|怎么|谁|哪|几时|是不是|有没有|能不能|会不会|^(who|what|why|how|when|where|is|are|do|does|did|can|could|will|would|should)\b/i.test((t || '').trim());
+function afterBridge() {
+  if (!P.gen) return;
+  const b = BEATS[BEAT_KEY];
+  if (b && !P.gen.ready && !P.gen.beat && P.gen.text) {
+    P.gen.beat = true;
+    const list = isQuestion(P.gen.text) ? b.q : b.s, x = list[Math.floor(Math.random() * list.length)];
+    if (x && x.url) { playAux(x.url).then(() => { if (P.gen) keepAlive(); }); return; }
+  }
+  keepAlive();
+}
 function maybeBridge() {
   if (!P.gen || P.gen.n !== BR.n || !BR.url || BR.played || !BR.ackDone || Date.now() - BR.t0 > 7000) return false;
   BR.played = true;
-  playAux(BR.url).then(() => { if (P.gen) keepAlive(); });
+  playAux(BR.url).then(afterBridge);
   return true;
 }
+/** 11-09 (2): she has just stopped talking — play the bridge right away, before her words are even recognised (~1 s sooner). */
+let EARLY = { n: 0, url: '' };
+function earlyBridge() {
+  const ss = P.id && getSess(P.id); if (!ss || !P.ep || !P.needChoice) return;
+  const b = BRIDGES[ss.sid + ':' + P.ep.n]; if (!b || !b.url) return;
+  EARLY = { n: P.ep.n + 1, url: b.url };
+  playAux(b.url).then(afterBridge);
+}
+const afterAux = (fn) => { const w = () => (auxTalking() ? setTimeout(w, 100) : fn()); w(); };   // never cut the narrator mid-sentence
 
 /* narrator's spoken question at the end of an episode (prefetched ~45 s before the end) */
 const CUE = {};
@@ -1381,7 +1410,7 @@ function micLevel() {
 function recordAnswer({ wait = 5000, max = 15000, manual = false, onState } = {}) {
   let rec = null, chunks = [], t0 = 0, speechAt = 0, lastVoice = 0, timer = 0, finished = false, canceled = false, floor = 0, n = 0, blind = false;
   let resolve; const done = new Promise((r) => { resolve = r; });
-  const st = (s) => { try { onState && onState(s); } catch (e) { /* ignore */ } };
+  const st = (s, x) => { try { onState && onState(s, x); } catch (e) { /* ignore */ } };
   micBusy++;
   const finish = async (spoke) => {
     if (finished) return; finished = true; clearInterval(timer);
@@ -1391,7 +1420,7 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState } = {}
     micBusy = Math.max(0, micBusy - 1); setTimeout(micPark, 50);
     if (canceled) { resolve({ text: '', spoke: false, canceled: true }); return; }
     if (!spoke || !chunks.length) { resolve({ text: '', spoke: false }); return; }
-    st('thinking');
+    st('thinking', { spoke: speechAt ? lastVoice - speechAt : 0 });
     try {
       const r = await API.asr(new Blob(chunks, { type: (rec && rec.mimeType) || 'audio/webm' }));
       resolve({ text: ((r && r.text) || '').trim(), lang: r && r.lang, spoke: true });
@@ -1562,10 +1591,10 @@ function hfListen() {
   startAutoCountdown(WAIT, 'Listening · the story continues in', true);
   const h = HF.rec = recordAnswer({
     wait: WAIT * 1000, max: 15000,
-    onState: (s) => {
+    onState: (s, x) => {
       if (HF.rec !== h) return;
       if (s === 'speaking') { stopAutoCountdown(); HF.phase = 'speaking'; paintHF(); }
-      else if (s === 'thinking') { stopAutoCountdown(); HF.phase = 'thinking'; paintHF(); }
+      else if (s === 'thinking') { stopAutoCountdown(); HF.phase = 'thinking'; paintHF(); if (x && x.spoke >= 1200) earlyBridge(); }   // a real sentence (not “A/B”): the story reacts the moment she stops, while it is recognised
     },
   });
   h.done.then((r) => {
@@ -1748,7 +1777,8 @@ async function sendNext(id, text, via) {
     ss.eps = ss.eps.filter((e) => e.n !== nextN); ss.eps.push(ep); ss.eps.sort((a, b) => a.n - b.n);
     ss.job = { id: sp.job, n: nextN, text, via };
     ep._done = false; P.gen = null; save();
-    playEpisode(id, ep, { autoplay: true });
+    EARLY = { n: 0, url: '' };
+    afterAux(() => { if (P.ep !== ep && ss.job && ss.job.id === sp.job) playEpisode(id, ep, { autoplay: true }); });
     P.jobDone = false;
     openPlayer(); updatePlayerUI(); renderMini();
     API.next({ sid: ss.sid, text: via === 'auto' ? '' : text, via }).then((res) => {
@@ -1765,9 +1795,13 @@ async function sendNext(id, text, via) {
   P.gen = { n: nextN, text, via, status: 'writing', err: null, t0: Date.now() };
   save();
   const pre = via !== 'auto' && via !== 'silence' ? BRIDGES[ss.sid + ':' + (nextN - 1)] : null;
-  Object.assign(BR, { n: nextN, url: (pre && pre.url) || '', played: false, ackDone: via !== 'voice', t0: Date.now() });
-  if (via === 'voice') playAux(`ack.${LANG}.mp3`).then(() => { BR.ackDone = true; if (P.gen && !maybeBridge()) keepAlive(); });   // heard her → narrator says so, then the bridge
-  else if (!maybeBridge()) bedStart();
+  const early = EARLY.n === nextN && EARLY.url; EARLY = { n: 0, url: '' };
+  Object.assign(BR, { n: nextN, url: early || (pre && pre.url) || '', played: !!early, ackDone: true, t0: Date.now() });
+  // the bridge itself tells her she was heard (no separate “Okay — your way” first: that cost 1.8 s); no bridge → the old ack
+  if (early) { if (!auxTalking()) afterBridge(); }
+  else if (maybeBridge()) { /* bridge playing */ }
+  else if (via === 'voice') { BR.ackDone = false; playAux(`ack.${LANG}.mp3`).then(() => { BR.ackDone = true; if (P.gen && !maybeBridge()) keepAlive(); }); }
+  else bedStart();
   updatePlayerUI(); renderMini(); openPlayer();
   try {
     const res = await API.next({ sid: ss.sid, text: via === 'silence' ? '' : text, via });
@@ -1868,7 +1902,7 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
         let ready = 0; for (let x = k; x < lines.length && lines[x].url; x++) ready++;
         // 11-09: start on the first voiced line (the others are being voiced in parallel; the bridge already covered the wait).
         // Never cut the ack / bridge mid-sentence: check again the moment it ends.
-        if (((lines[k] && lines[k].url && ready >= 1) || j.status === 'done') && auxTalking()) { const w = () => (auxTalking() ? setTimeout(w, 100) : poll()); setTimeout(w, 100); return; }
+        if (((lines[k] && lines[k].url && ready >= 1) || j.status === 'done') && auxTalking()) { if (P.gen) P.gen.ready = true; const w = () => (auxTalking() ? setTimeout(w, 100) : poll()); setTimeout(w, 100); return; }
         if ((lines[k] && lines[k].url && ready >= 1) || (j.status === 'done')) {
           started = true;
           P.gen = null;

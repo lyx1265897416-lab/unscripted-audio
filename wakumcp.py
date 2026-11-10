@@ -7,7 +7,11 @@ class WakuMCP:
         self.p = subprocess.Popen(['waku', 'mcp', 'serve'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
         self.ids = itertools.count(1); self.waiters = {}; self.lock = threading.Lock()
         threading.Thread(target=self._reader, daemon=True).start()
-        self.call_raw('initialize', {'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'magnus-voice', 'version': '1'}})
+        try: self.call_raw('initialize', {'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'magnus-voice', 'version': '1'}}, timeout=40)
+        except Exception:  # 11-09 初始化失败时别留下这个 shim 进程（越积越多，后面的也起不来）
+            try: self.p.kill()
+            except Exception: pass
+            raise
         self.p.stdin.write(json.dumps({'jsonrpc': '2.0', 'method': 'notifications/initialized'}) + '\n'); self.p.stdin.flush()
 
     def _reader(self):
