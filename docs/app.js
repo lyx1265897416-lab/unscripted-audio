@@ -1167,7 +1167,7 @@ function openChoiceSheet() {
     <div class="ch-opts">
       ${choices.map((c, i) => `<button class="ch-opt" data-act="choose" data-i="${i}"><i>${'AB'[i]}</i><span>${esc(c)}</span></button>`).join('')}
     </div>
-    <div class="ch-or">or answer in your own words</div>
+    <div class="ch-or">${VOICE_OK ? 'say A or B, or answer in your own words' : 'or answer in your own words'}</div>
     <form class="ch-input" data-form="free" autocomplete="off">
       <div class="fld">
         <input id="ch-text" type="text" maxlength="200" placeholder="Say it your way…" enterkeyhint="send" aria-label="Your answer">
@@ -1660,8 +1660,31 @@ function updateModePill() {
   if (el.dataset.m !== modeOf()) { el.dataset.m = modeOf(); el.innerHTML = html; }
 }
 
+/* 11-09 她要求：语音说“A / 选B / 第一个 / option B / the second one”或直接说出选项内容，和点那个选项一样（预写好的下一集马上开播）。
+ * 服务器 pick_letter + match_choice 同样会认（转述也认）；这里先认字母/序号和几乎原样的选项文字，好走本地秒开。 */
+const LET_ZH = /^(大写)?(我|那)?(就|还是|要)?(选|要|挑|走)?(选项)?(?<k>a|ａ|b|ｂ|1|2|一|二|第一个|第二个|第一|第二|前面那个|后面那个|前一个|后一个|上面那个|下面那个|左边那个|右边那个)(个|吧|八|8|呀|啊|哦|嘛|了|好了|这个|那个)*$/;
+const LET_ZH2 = /^(我|那)?(就|还是|要)?(选|挑)(选项)?(?<k>诶|欸|哎|比|必|逼|币|笔)(吧|呀|啊|了)*$/;
+const LET_EN = /^(i ?(ll|will|d|would)? ?(choose|pick|go with|take|select|say|want)|(let ?s|lets) go with|go with|choose|pick|take|select|maybe)? ?(option|letter|choice|the)? ?(?<k>a|b|ay|bee|be|1|2|one|two|first|second|first one|second one|top one|bottom one|left one|right one)( one| option)?( please)?$/;
+const FIRST = new Set(['a', 'ａ', '1', '一', '第一个', '第一', '前面那个', '前一个', '上面那个', '左边那个', '诶', '欸', '哎', 'ay', 'one', 'first', 'first one', 'top one', 'left one']);
+function pickSpoken(text, choices) {
+  if (!choices || choices.length < 2 || !text) return -1;
+  const t = String(text).trim().toLowerCase();
+  const z = t.replace(/[\s，。！？、,.!?~…“”"'：:]+/g, '');
+  let m = z.match(LET_ZH) || z.match(LET_ZH2);
+  if (m) return FIRST.has(m.groups.k) ? 0 : 1;
+  const e = t.replace(/'/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  m = e.match(LET_EN);
+  if (m) return FIRST.has(m.groups.k) ? 0 : 1;
+  const norm = (x) => String(x).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  for (let i = 0; i < 2; i++) { const c = norm(choices[i]); if (c && (z === c || norm(t) === c)) return i; }
+  return -1;
+}
 function submitChoice(text, via) {
   if (!P.ep || !P.needChoice) return;
+  if (via === 'voice' || via === 'free') {
+    const k = pickSpoken(text, P.ep.choices);
+    if (k >= 0) { text = P.ep.choices[k]; via = 'option'; toast((LANG === 'zh' ? '已选 ' : 'Picked ') + 'AB'[k]); }
+  }
   stopAutoCountdown(); hfStop(true);
   const id = P.id, nextN = P.ep.n + 1;
   primeAudio();

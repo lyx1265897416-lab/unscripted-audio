@@ -131,7 +131,36 @@ def on_mlx(fn, wait=60):
     return box.get('r')
 
 
-def transcribe(path, hint, ctx='', fast=False):
+LETTER_PROMPT = {'zh': '选A。选B。第一个，第二个。', 'en': 'A. B. Option A. Option B.'}
+
+
+def short_answer(text):
+    z = re.sub(r'[\s，。！？、,.!?~…"\'：:]+', '', text or '')
+    return len(z) <= 6 if re.search(r'[\u4e00-\u9fff]', z) else len((text or '').split()) <= 3
+
+
+def letter_pass(path, lang):
+    """选择点上的短回答（A / 选B / Option A）：SenseVoice、Parakeet 常把单念的字母听成“选地”“Yeah”，MLX 带字母提示约 0.9 秒全对（11-09 实测）"""
+    r = MLX.transcribe(path, path_or_hf_repo=MLX_REPO, initial_prompt=LETTER_PROMPT.get(lang, LETTER_PROMPT['en']), condition_on_previous_text=False,
+                       temperature=0.0, language=('zh' if lang == 'zh' else 'en'))
+    segs = [x for x in (r.get('segments') or []) if x.get('no_speech_prob', 0) < 0.6]
+    return ''.join(x.get('text', '') for x in segs).strip()
+
+
+def transcribe(path, hint, ctx='', fast=False, choice=False):
+    r = _transcribe(path, hint, ctx, fast)
+    if choice and MLX and r.get('text') is not None and short_answer(r.get('text')) and (r.get('text') or r.get('engine') in ('sensevoice', 'parakeet')):
+        t = time.time()
+        try:
+            txt = on_mlx(lambda: letter_pass(path, hint or r.get('lang') or 'en'), 3)
+            if txt and not JUNK.search(txt) and short_answer(txt):
+                r = dict(r, text=txt, engine=r.get('engine', '') + '+letter', fast_text=r.get('text'), ms=r.get('ms', 0) + int((time.time() - t) * 1000))
+        except Exception as e:
+            print('letter pass failed', repr(e)[:120], flush=True)
+    return r
+
+
+def _transcribe(path, hint, ctx='', fast=False):
     with LOCK:
         t = time.time(); sv = None
         if SV:
@@ -196,7 +225,7 @@ class H(BaseHTTPRequestHandler):
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
             f.write(data); p = f.name
         try:
-            r = transcribe(p, hint, ctx, fast=self.headers.get('X-Fast') == '1')
+            r = transcribe(p, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1')
         except Exception as e:
             r = {'text': '', 'error': repr(e)[:200]}
         finally:

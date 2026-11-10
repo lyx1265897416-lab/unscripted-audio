@@ -643,13 +643,37 @@ def fast_chat(prompt, max_tokens=200, timeout=8):
     return json.loads(op.open(req, timeout=timeout).read())['choices'][0]['message']['content'].strip()
 
 
+_LET_ZH = re.compile(r'^(大写)?(我|那)?(就|还是|要)?(选|要|挑|走)?(选项)?(?P<k>a|ａ|b|ｂ|1|2|一|二|第一个|第二个|第一|第二|前面那个|后面那个|前一个|后一个|上面那个|下面那个|左边那个|右边那个)(个|吧|八|8|呀|啊|哦|嘛|了|好了|这个|那个)*$')
+_LET_ZH2 = re.compile(r'^(我|那)?(就|还是|要)?(选|挑)(选项)?(?P<k>诶|欸|哎|比|必|逼|币|笔)(吧|呀|啊|了)*$')  # 中文识别常把单念的 A/B 写成同音字，只在前面有“选”时认
+_LET_EN = re.compile(r"^(i ?(ll|will|d|would)? ?(choose|pick|go with|take|select|say|want)|(let ?s|lets) go with|go with|choose|pick|take|select|maybe)? ?(option|letter|choice|the)? ?(?P<k>a|b|ay|bee|be|1|2|one|two|first|second|first one|second one|top one|bottom one|left one|right one)( one| option)?( please)?$")
+
+
+def pick_letter(text):
+    """她说“A / 选A / 第一个 / option B / the second one” → 0 或 1；不是这种说法 → None（11-09 她要求说字母和点选项一样）"""
+    t = (text or '').strip().lower()
+    z = re.sub(r'[\s，。！？、,.!?~…“”"\'：:]+', '', t)
+    m = _LET_ZH.match(z) or _LET_ZH2.match(z)
+    if m:
+        k = m.group('k')
+        return 0 if k in ('a', 'ａ', '1', '一', '第一个', '第一', '前面那个', '前一个', '上面那个', '左边那个', '诶', '欸', '哎') else 1
+    e = re.sub(r'[^a-z0-9 ]+', ' ', t.replace("'", '')); e = re.sub(r'\s+', ' ', e).strip()
+    m = _LET_EN.match(e)
+    if m:
+        k = m.group('k')
+        return 0 if k in ('a', 'ay', '1', 'one', 'first', 'first one', 'top one', 'left one') else 1
+    return None
+
+
 def match_choice(sess, text):
     """她用语音/打字回了一句：意思就是 C1 或 C2（没有多出来的要求）→ 直接用预先写好的那集；“继续/你决定/随便” → AUTO；否则 None（现写）。约 1–2 秒。"""
     ch = (sess['eps'][-1].get('choices') or [])[:2]
     if len(ch) < 2 or not text.strip(): return None
+    k = pick_letter(text)
+    if k is not None:
+        print('match_choice letter', repr(text[:40]), '->', 'C%d' % (k + 1), flush=True); return ch[k]
     # 11-09：她锁屏说“等他自己过来拿。”被判成 AUTO、“Sure.”也是 → 播了默认那集，她的话被丢掉。现在只认“几乎同义”的 C1/C2，其余一律 FREE（按她的原话现写）。
     pr = (f'选择点的两个选项：\nC1: {ch[0]}\nC2: {ch[1]}\n\n听众用语音回答（可能有识别错字）：“{text}”\n\n'
-          '判断：只有当她的回答和 C1 或 C2 说的是同一个动作/同一句话（几乎同义，没有任何新内容）时，输出 C1 或 C2；'
+          '判断：她用字母或序号指某个选项（A/B、选A、第一个、第二个、option B 等）→ 输出对应的 C1 或 C2；她的回答和 C1 或 C2 说的是同一个动作/同一句话（同义转述也算，但没有新的内容或要求）→ 输出 C1 或 C2；'
           '其他所有情况——她说了别的做法、换了说法带出不同意思、只说了“好/嗯/Sure”这类含糊的话、或你拿不准——一律输出 FREE。只输出一个词。')
     try:
         r = fast_chat(pr, 8, 6).upper()
@@ -972,10 +996,10 @@ def finish_turn(job, c, ths):
     if not out['hangup'] and c['cid'] in CALLS: start_specs(c, out['choices'])
 
 
-def asr_local(data, ctype, lang, hint='', fast=True):
+def asr_local(data, ctype, lang, hint='', fast=True, choice=False):
     """本机识别（unscripted_asr.py 8917）。hint：人名/他刚说的话/选项，帮识别认对专有名词（11-09 她说识别不准）"""
     from urllib.parse import quote
-    req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': ctype or 'audio/wav', 'X-Lang': lang, 'X-Hint': quote((hint or '')[:300]), 'X-Fast': '1' if fast else '0'})
+    req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': ctype or 'audio/wav', 'X-Lang': lang, 'X-Hint': quote((hint or '')[:300]), 'X-Fast': '1' if fast else '0', 'X-Choice': '1' if choice else '0'})
     return (json.loads(op.open(req, timeout=30).read()).get('text') or '').strip()
 
 
@@ -1269,7 +1293,7 @@ class H(BaseHTTPRequestHandler):
             if not wav: return self._send(200, {'text': '', 'speaking': speaking, 'heard': speaking or bool(E.get('voiced'))})
             ch = (sess['eps'][-1].get('choices') or [])[:2]
             hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
-            try: text = asr_local(wav, 'audio/wav', sess['lang'], hint)
+            try: text = asr_local(wav, 'audio/wav', sess['lang'], hint, choice=True)  # 选择点：短回答再用字母提示认一遍（A/B）
             except Exception as e: text = ''; print('asr/chunk asr', repr(e)[:120], flush=True)
             sess.pop('_ear', None)
             return self._send(200, {'text': text, 'done': True})
@@ -1285,7 +1309,7 @@ class H(BaseHTTPRequestHandler):
                 if sess:  # 选项原文 + 角色名当提示，识别更准（11-09）
                     ch = (sess['eps'][-1].get('choices') or [])[:2]
                     hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
-                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0], 'X-Hint': quote(hint[:300])})
+                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0] or (sess or {}).get('lang', ''), 'X-Hint': quote(hint[:300]), 'X-Choice': '1' if sess else '0'})
                 return self._send(200, json.loads(op.open(req, timeout=30).read()))
             except Exception as e:
                 return self._send(200, {'text': '', 'error': 'asr unavailable: ' + repr(e)[:120]})
@@ -1344,8 +1368,8 @@ class H(BaseHTTPRequestHandler):
             if not sess: return self._send(404, {'error': 'session expired'})
             text = (body.get('text') or '').strip()[:400]; via = body.get('via') or 'free'
             n = len(sess['eps']) + 1; matched = None
-            if via in ('voice', 'free') and sess.get('spec'):
-                m = match_choice(sess, text) if text else None  # 她说的就是某个选项（几乎同义）→ 用预先写好的那集，马上开播；否则按她的原话现写
+            if via in ('voice', 'free'):
+                m = match_choice(sess, text) if text else None  # 她说“A/选B/第一个”或说的就是某个选项 → 和点那个选项一样（有预写集就马上开播）；否则按她的原话现写
                 if m: matched = m
             if via == 'auto':  # 闭眼听/被动收听：她没回应，故事自己往下走；有预先写好的就用第一个（默认走向），马上开播
                 ch = (sess['eps'][-1].get('choices') or [])
@@ -1353,7 +1377,7 @@ class H(BaseHTTPRequestHandler):
             pick = matched if matched else (text if via == 'option' else None)
             jid = commit_ep_spec(sess, pick) if pick else None
             if not jid: sess['spec'] = {}
-            her = her_said(text, via, sess['lang']) if not jid or via == 'option' else (her_said(matched, 'option', sess['lang']))
+            her = her_said(matched, 'option', sess['lang']) if matched and via != 'auto' else her_said(text, via, sess['lang'])  # 说中了选项：现写也按“她选择：选项”写，和点选项一样
             log(sess['sid'], {'her': text, 'via': via, 'matched': matched, 'next': n, 'spec': bool(jid), 'wishes': sess.get('wishes'), 'at': time.strftime('%F %T')})
             out = jid or start_job(run_episode, sess, next_msg(sess, her), None, her)
             sess['wishes'] = []

@@ -38,7 +38,7 @@
     'The end — for this path': '这条线的结局', 'Your choices led here. Start again and the story will be written differently.': '是你的选择走到了这里。重新开始，故事会写成不一样的样子。',
     'Not written yet': '还没写', 'Up next': '下一集',
     // choice sheet & voice
-    'or answer in your own words': '或者用你自己的话回答', 'Say it your way…': '用你的话说…', 'Your answer': '你的回答', 'Speak your answer': '说出你的回答', 'Stay silent': '保持沉默',
+    'or answer in your own words': '或者用你自己的话回答', 'say A or B, or answer in your own words': '可以直接说 A 或 B，也可以用你自己的话回答', 'Say it your way…': '用你的话说…', 'Your answer': '你的回答', 'Speak your answer': '说出你的回答', 'Stay silent': '保持沉默',
     'Wait for me': '等等我', 'Paused — take your time': '已暂停 —— 慢慢来', 'The story continues in': '故事将继续：', 'Lean back · the story continues in': '躺着听 · 故事将继续：',
     'Listening · the story continues in': '正在听 · 没听到就继续：', 'Mic is off · the story continues in': '麦克风已关 · 故事将继续：', 'The story carries on…': '故事继续…',
     'Didn’t catch that — the story carries on': '没听清 —— 故事先往下走', 'The story carries on by itself…': '故事正在自己往下走…', 'You stayed silent.': '你没有说话。', 'Stayed silent': '没有说话',
