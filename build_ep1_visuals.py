@@ -4,13 +4,13 @@ import json, sys, os, concurrent.futures as cf
 sys.path.insert(0, '/Users/vicky/Interactive storyline/tools')
 import claude_cli as CC
 os.makedirs('data/ep1_visuals', exist_ok=True)
-PREFER = '\n- 最重要：p 开头是预设完整版成片的镜头，画面质量和人物最统一，优先用它们；只有预设镜头里完全没有对应的场景或人物时，才用 o 开头的开场镜头、剧照或 idle。'
+PREFER = '\n- 最重要：p 开头是预设完整版成片的镜头，画面质量和人物最统一，优先用它们；只有预设镜头里完全没有对应的场景或人物时，才用 idle。'
 SYS = '你是有声剧的剪辑师，给每句台词配一段循环播放的画面（静音视频）。只输出 JSON 数组。'
 
 
 def catalog(sid):
     v = json.load(open(f'data/visuals/{sid}.json'))
-    cl = [c for c in v['clips'] if not (v.get('prefer') and c['kind'] == 'card')]  # 有预设完整版切片的剧：不再给实时测试片段
+    cl = [c for c in v['clips'] if not (v.get('prefer') and c['kind'] in ('card', 'open', 'still'))]  # 有预设完整版切片的剧：不再给实时测试片段
     return v, '\n'.join(f"{c['id']}（{c['kind']}，{c['dur']}s）：{c['cap'][:220]}" for c in cl)
 
 

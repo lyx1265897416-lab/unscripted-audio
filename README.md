@@ -161,3 +161,10 @@ Eleven v4 每句 15、环境声 40、上传 4。第 1 集约 35 句 ≈ 560；�
 - Parakeet-TDT 0.6B v2（sherpa-onnx int8，`~/.local/parakeet/`）：英文首选，SenseVoice 判出是英文后交给它；不可用时退回 MLX。
 - 19:20 已接上 Parakeet：8 句全对（只差 firepit→fire pit、句号变逗号），每句 0.16–0.22 秒（MLX 1.05 秒、原来 2.1 秒）；webm / iPhone mp4 都通过；启动时预热，解码加锁。中文仍走 SenseVoice（约 0.06 秒）。
 - 通话英文写稿单独一组 `CALL_FAST_EN`：deepseek-v4.1-flash / kimi-k3 / qwen3-30b-a3b-instruct-2507 / qwen3.8-flash（英文实测第一句约 1.9 秒；qwen3.6 英文常漏 LINE: 前缀）。
+
+## 与狼为伍画面改用预设完整版（2026-11-09 19:50）
+- 她要求：播放器上方的动态画面改用预设完整版视频切片，优先用预设版。
+- `build_preset_visuals.py`：预设完整版成片（magnus-midnight-garage-series-web/media，7 集 + 分支）逐镜头看过后切成 83 段方形静音片段 `app/v/magnus/pNNN.mp4`（共 5.9MB），描述 = 人工写的画面内容 + 这段时间的字幕台词；重复分支（p6B/ep6B/p8M）、过暗转场、跟定装不一致的镜头已剔除。
+- `data/visuals/magnus.json` 加 `prefer: "p"`：第 1 集逐句配画面、实时集配画面（map_clips）、写稿时的画面库都只给 p 开头预设片段（+ idle 兜底），不再给实时测试片段、旧开场、剧照；pool 换成 8 段预设镜头。
+- 之前已经写好的集里配的旧画面 id，前端自动换成预设片段轮播（v36）。
+- 实测：实时集 6 句全部配到对应预设镜头（庄园大门→p037、壁炉倒酒→p042、Selene 绿裙→p048），约 2 秒。

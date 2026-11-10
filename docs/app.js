@@ -3691,6 +3691,7 @@ function visualClipId(s) {
     if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; const v = ep.visuals.find(x => t >= x.s && t < x.e) || ep.visuals[ep.visuals.length - 1]; id = v && v.clip; }
     else if (ep.kind === 'live') { const ln = (ep.lines || [])[P.idx]; id = ln && ln.clip; }
   }
+  if (id && V.prefer && id !== 'idle' && !id.startsWith(V.prefer)) id = null;  // 有预设完整版切片的剧：之前写好的集里配的旧画面也换成预设片段轮播
   if (!id || !V.clips[id]) { const pool = (V.pool || []).filter(x => V.clips[x]); if (!pool.length) return null; id = pool[Math.floor(Date.now() / 7000) % pool.length]; }
   return id;
 }
