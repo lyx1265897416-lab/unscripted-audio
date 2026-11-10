@@ -80,6 +80,8 @@ try:
         PK = sherpa_onnx.OfflineRecognizer.from_transducer(encoder=os.path.join(_d, 'encoder.int8.onnx'), decoder=os.path.join(_d, 'decoder.int8.onnx'),
                                                            joiner=os.path.join(_d, 'joiner.int8.onnx'), tokens=os.path.join(_d, 'tokens.txt'),
                                                            num_threads=4, model_type='nemo_transducer')
+        import numpy as _np
+        _st = PK.create_stream(); _st.accept_waveform(16000, _np.zeros(16000, dtype=_np.float32)); PK.decode_stream(_st)  # 预热：首句不再 1.2 秒
         print('parakeet ready', _d, flush=True)
 except Exception as e:
     print('parakeet unavailable', repr(e)[:160], flush=True)
@@ -91,8 +93,13 @@ def _pcm16k(path):
     return np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
 
 
+import threading as _th
+_PKL = _th.Lock()
+
+
 def transcribe_pk(x):
-    st = PK.create_stream(); st.accept_waveform(16000, x); PK.decode_stream(st)
+    with _PKL:
+        st = PK.create_stream(); st.accept_waveform(16000, x); PK.decode_stream(st)
     return (st.result.text or '').strip()
 
 

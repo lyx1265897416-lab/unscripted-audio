@@ -159,4 +159,5 @@ Eleven v4 每句 15、环境声 40、上传 4。第 1 集约 35 句 ≈ 560；�
 - 英文慢在识别：SenseVoice 英文错字多（Kai→KI、necklace→NEGLAES），原来改走 MLX Whisper turbo 要 2.1 秒。
 - MLX 英文：已知是英文就指定 language='en'、只带人名提示，不再做语言检测、不带中文提示词 → 1.05 秒，8 句测试全对。
 - Parakeet-TDT 0.6B v2（sherpa-onnx int8，`~/.local/parakeet/`）：英文首选，SenseVoice 判出是英文后交给它；不可用时退回 MLX。
+- 19:20 已接上 Parakeet：8 句全对（只差 firepit→fire pit、句号变逗号），每句 0.16–0.22 秒（MLX 1.05 秒、原来 2.1 秒）；webm / iPhone mp4 都通过；启动时预热，解码加锁。中文仍走 SenseVoice（约 0.06 秒）。
 - 通话英文写稿单独一组 `CALL_FAST_EN`：deepseek-v4.1-flash / kimi-k3 / qwen3-30b-a3b-instruct-2507 / qwen3.8-flash（英文实测第一句约 1.9 秒；qwen3.6 英文常漏 LINE: 前缀）。
