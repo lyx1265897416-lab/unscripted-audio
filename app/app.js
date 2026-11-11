@@ -317,6 +317,7 @@ const RealAPI = {
   callStart({ series, who, sid, direction, ckey }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '', tts: TTS, ckey }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
   callEnd({ cid, seconds }) { return this.post('api/call/end', { cid, seconds }); },
+  callPrepare({ series, who, sid }) { return this.post('api/call/prepare', { series, lang: LANG, name: S.name || '', who, sid: sid || null, me: S.me || '', tts: TTS }); },
 };
 
 const MockAPI = {
@@ -1348,7 +1349,7 @@ const VI = { stream: null, an: null, buf: null, denied: false, primed: false };
 async function micStream() {
   if (VI.stream && VI.stream.getAudioTracks().some((t) => t.readyState === 'live')) return VI.stream;
   try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch (e) { /* ignore */ }  // let Safari pick record+play itself (forcing it was one suspect for the 0:00 stall)
-  VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, voiceIsolation: true } });  // 11-10 voiceIsolation: browsers that support it keep only the nearest voice
   VI.denied = false;
   // iOS switches the audio session when the mic opens and may pause the story that is playing: pick it straight back up
   [150, 700].forEach((ms) => setTimeout(() => {
@@ -2139,8 +2140,8 @@ function langUrl(l) {
 const CALL_PRICE = 20;
 const tz = (en, zh) => (LANG === 'zh' ? zh : en);
 const CALL_WAIT = 3500;   // 11-09: a real call doesn't wait for "your turn" — if she says nothing he carries on / draws her in   // after he finishes: how long the mic waits for her to start talking before he carries on
-const MAX_RING = 9000;    // …but never longer than this: then "Hey." and a "let me think" while his line finishes
-const MIN_RING = 1800;    // an outgoing call rings at least this long before he picks up (feels like a real call; covers his first line)
+const MAX_RING = 6500;    // …but never longer than this: then "Hey." and a "let me think" while his line finishes
+const MIN_RING = 1100;    // an outgoing call rings at least this long before he picks up (feels like a real call; covers his first line)
 const callAudio = new Audio();
 callAudio.preload = 'auto';
 callAudio.setAttribute('playsinline', '');
@@ -2181,11 +2182,22 @@ function startRing() {
   ringOnce(); if (C) C.ringT = setInterval(ringOnce, 3200);
 }
 function stopRing() { if (C && C.ringT) { clearInterval(C.ringT); C.ringT = 0; } if (C) clearInterval(C.ringW); stopLoop(); }
+/* 11-10 "the ring should start the instant you call": both ring files are kept in memory from app start, so the
+ * element never waits on the network; the watchdog below switches to a WebAudio ring within ~0.5 s if iOS holds it. */
+const RINGB = {};
+function warmRings() {
+  if (MOCK) return;
+  ['ringback.mp3', 'ring-in.mp3'].forEach((u) => {
+    if (RINGB[u]) return; RINGB[u] = 1;
+    fetch(absUrl(u)).then((r) => (r.ok ? r.blob() : null)).then((b) => { if (b && b.size) RINGB[u] = URL.createObjectURL(b.type ? b : new Blob([b], { type: 'audio/mpeg' })); else delete RINGB[u]; }).catch(() => { delete RINGB[u]; });
+  });
+}
+const ringSrc = (u) => (typeof RINGB[u] === 'string' ? RINGB[u] : u);
 /** ringtone / ringback on the call element itself (loops until he picks up) */
 function playLoop(url) {
   try {
     callSrcTok++;
-    callAudio.loop = true; callAudio.src = url; callAudio.dataset.loop = '1';
+    callAudio.loop = true; callAudio.src = ringSrc(url); callAudio.dataset.loop = '1'; callAudio.dataset.ring = url;
     const p = callAudio.play(); if (p && p.catch) p.catch(() => { if (C && !C.ringT && callAudio.dataset.loop) { delete callAudio.dataset.loop; unlockCtx(); const f = C.direction === 'incoming' ? ringOnce : ringbackOnce; f(); C.ringT = setInterval(f, C.direction === 'incoming' ? 3200 : 4000); } });
     return true;
   } catch (e) { return false; }
@@ -2206,13 +2218,13 @@ function ringWatch(call) {
     last = callAudio.currentTime;
     if (playing) { stuck = 0; return; }
     stuck += 1;
-    if (stuck <= 2) { try { callAudio.dataset.loop = '1'; callAudio.loop = true; if (!/ring/.test(callAudio.src)) callAudio.src = call.direction === 'incoming' ? 'ring-in.mp3' : 'ringback.mp3'; const p = callAudio.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } return; }
+    if (stuck <= 1) { try { callAudio.dataset.loop = '1'; callAudio.loop = true; if (!/ring/.test(callAudio.dataset.ring || '')) { const u = call.direction === 'incoming' ? 'ring-in.mp3' : 'ringback.mp3'; callAudio.dataset.ring = u; callAudio.src = ringSrc(u); } const p = callAudio.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } return; }
     unlockCtx();
     const f = call.direction === 'incoming' ? ringOnce : ringbackOnce;
     f(); call.ringT = setInterval(f, call.direction === 'incoming' ? 3200 : 4000);
-  }, 600);
+  }, 250);
 }
-function stopLoop() { if (callAudio.dataset.loop) { delete callAudio.dataset.loop; callAudio.loop = false; try { callAudio.pause(); } catch (e) { /* ignore */ } } }
+function stopLoop() { delete callAudio.dataset.ring; if (callAudio.dataset.loop) { delete callAudio.dataset.loop; callAudio.loop = false; try { callAudio.pause(); } catch (e) { /* ignore */ } } }
 function hangupTone() {
   unlockCtx();
   if (!actx || actx.state !== 'running') return;
@@ -2290,6 +2302,20 @@ const callerAv = (s, key) => { const c = s && key ? callersOf(s).find((x) => x.k
 const shortName = (c) => String((c && (c.name || c.key)) || '').split(/\s*[·•]\s*/)[0].trim();
 const callCost = (id) => (S.vip || !(S.callsUsed || {})[id] ? 0 : CALL_PRICE);
 
+/* 11-10 "connect faster": while she is on a series page / the caller list / the player, the relay already writes and
+ * voices his first two lines for an outgoing call (POST /api/call/prepare); tapping Call then picks up in ~1 s.
+ * Once per caller and story point every 8 min (each prepare costs a short write + two voiced lines). */
+const PREPD = {};
+function prepareCall(id, who) {
+  if (MOCK || !API.callPrepare || callActive()) return;
+  const s = byId(id); if (!s) return;
+  who = who || (callersOf(s)[0] || {}).key; if (!who) return;
+  const ss = getSess(id); const key = `${id}|${who}|${ss ? ss.sid + ':' + ss.eps.length : ''}|${LANG}`;
+  if (PREPD[key] && Date.now() - PREPD[key] < 8 * 60e3) return;
+  PREPD[key] = Date.now();
+  API.callPrepare({ series: id, who, sid: ss ? ss.sid : null }).catch(() => { delete PREPD[key]; });
+}
+
 /** Outgoing entry point (detail / player / library / call again). */
 function requestCall(id, opts = {}) {
   const s = byId(id); if (!s || callActive()) return;
@@ -2304,6 +2330,7 @@ function requestCall(id, opts = {}) {
 }
 function openCallerChooser(id, opts) {
   const s = byId(id);
+  callersOf(s).slice(0, 3).forEach((c) => prepareCall(id, c.key));
   const cost = callCost(id);
   openSheet(`
     <div class="sh-h"><div><h3>Who do you want to call?</h3><p>${esc(s.title)} · ${cost ? `${coinIc('sm')} ${cost} coins per call` : 'First call is free'}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
@@ -2345,8 +2372,12 @@ function beginCallRequest(call) {
       if (!r) throw err || new Error('no answer');
       if (C !== call) { if (r && r.cid) API.callEnd({ cid: r.cid, seconds: 0 }).catch(() => {}); return; }
       call.cid = r.cid; if (r.who) call.who = r.who; call.job = r.job;
+      if (r.prepared && (r.lines || []).length && !call.lines.length) {  // 11-10 prepared while she was on the page: his first lines are already voiced
+        call.lines = r.lines.map((l) => ({ who: l.who, text: cleanText(l.text), url: l.url }));
+        call.lines.forEach((l) => fetchBlob(l.url).then(() => { if (C === call && !call.pickedUp) callAdvance(); }));
+      }
       if (r.greet && !(call.greet || []).length) { call.greet = [r.greet]; fetchBlob(r.greet); callAdvance(); }
-      (r.bridges || []).forEach((u) => fetchBlob(u));   // his "first sentence" replies: on the phone before she ever speaks   // "Hello?" ready the moment he picks up
+      lowFetch(call, r.bridges || []);   // his "first sentence" replies: fetched after the first lines (browsers open only ~6 connections; 11-10 they queued the first line 9 s)
       pollCall(r.job, call.turn);
     } catch (e) {
       if (C !== call) return;
@@ -2356,12 +2387,28 @@ function beginCallRequest(call) {
   })();
   return call.startP;
 }
+/** fillers / bridges are fetched two at a time once his first lines are in (or after 2.5 s), so they never queue ahead of them */
+function lowFetch(call, urls) {
+  call.lowQ = (call.lowQ || []).concat(urls.filter((u) => u && !BLOB.has(u)));
+  if (call.lowRun) return;
+  call.lowRun = true;
+  const firstIn = () => { const l = call.lines.slice(0, 2).filter((x) => x.url); return l.length && l.every((x) => !blobable(x.url) || blobNow(x.url)); };
+  const t0 = Date.now();
+  const pump = () => {
+    if (C !== call) return;
+    if (!call.pickedUp && !firstIn() && Date.now() - t0 < 2500) { setTimeout(pump, 200); return; }
+    const next = () => { const u = call.lowQ.shift(); if (!u) return Promise.resolve(); return fetchBlob(u).then(next, next); };
+    next(); next();
+  };
+  pump();
+}
 function prefetchFillers(call) {
   // {urls:[short fillers], think:["let me think" lines]} — older servers send only urls
   API.fillers({ series: call.id, who: call.who }).then((r) => {
     if (C !== call) return;
     call.fillers = (r && r.urls) || []; call.thinks = (r && r.think) || []; call.greet = (r && r.greet) || [];
-    [...call.greet, ...call.fillers, ...call.thinks].forEach((u) => fetchBlob(u));
+    call.greet.forEach((u) => fetchBlob(u));
+    lowFetch(call, [...call.fillers, ...call.thinks]);
     callAdvance();
   }).catch(() => {});
 }
@@ -3562,6 +3609,7 @@ async function showDetail(id) {
 function hideDetail() { $('#detail').classList.remove('on'); }
 function renderDetail() {
   const s = byId(detailId); if (!s) return;
+  setTimeout(() => { if (detailId === s.id && isDetailOpen()) { warmRings(); prepareCall(s.id); } }, 1200);
   const d = DETAIL[s.id] || {};
   const ss = getSess(s.id);
   const pr = S.progress[skey(s.id)];
@@ -4021,6 +4069,7 @@ function closePlayer() {
 function showPlayerUI() {
   if (!P.id) { location.replace('#/home'); return; }
   playerOpen = true;
+  { const pid = P.id; setTimeout(() => { if (playerOpen && P.id === pid) { warmRings(); prepareCall(pid); } }, 8000); }
   renderPlayer();
   const el = $('#player');
   el.classList.add('on'); el.setAttribute('aria-hidden', 'false');
@@ -4389,6 +4438,7 @@ async function boot() {
   }
   // drop live sessions with a different language/mode? keys already include both.
   if (location.hash === '#/player') history.replaceState(null, '', location.pathname + location.search + '#/home');
+  setTimeout(warmRings, 2500);
   if (!S.onboarded) { renderOnboard(); showTab('home'); }
   else { const top = grantWelcome(); if (top) setTimeout(() => toast(`${coinIc('sm')} +${top} coins · Welcome bonus`), 900); route(); primeMicOnEntry(); if (modeOf() === 'voice') fetchLocalBlob(`ack.${LANG}.mp3`); }
   if (TTS !== 'v4') setTimeout(() => toast(LANG === 'zh' ? `配音测试：${TTS === 'turbo' ? 'Eleven v4 Turbo（低延迟）' : 'Eleven Turbo v2.5（实时）'} · 第 2 集起生效` : `Voice test: ${TTS === 'turbo' ? 'Eleven v4 Turbo (low latency)' : 'Eleven Turbo v2.5 (realtime)'} · from Episode 2`), 900);

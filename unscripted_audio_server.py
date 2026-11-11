@@ -65,7 +65,7 @@ def _mcp():
         except Exception as e: print('waku mcp init', k, repr(e)[:100], flush=True); time.sleep(2 + 2 * k)
     return WakuMCP()
 for _ in range(10): POOL.put(_mcp())
-CALL_HEDGE = [int(x) for x in os.environ.get('CALL_HEDGE', '2,1').split(',')]  # 正文第 1、2 句各发几路
+CALL_HEDGE = [int(x) for x in os.environ.get('CALL_HEDGE', '3,2').split(',')]  # 11-10 Waku 每句 3–6 秒波动大：第 1 句三路、第 2 句两路取最快  # 正文第 1、2 句各发几路
 CALL_POOL = queue.Queue()  # 11-09 通话专用配音通道：剧集在后台整集配音时，通话不跟它排队（原来排到 20 秒）
 CALL_POOL_N = [0]
 def _fill_call_pool(n):
@@ -419,9 +419,11 @@ def her_said(text, via, lang):
                 else "She doesn't answer — she's just listening with her eyes closed. Move the story one step on the characters' own will and the main line; don't make big decisions for her, and don't mention that she stayed quiet.")
     if via == 'silence' or not text.strip(): return '她没有说话，只是沉默。' if lang == 'zh' else 'She stays silent.'
     if lang != 'zh':
-        return f'She chooses: {text}' if via == 'option' else f'She says ({"spoken" if via == "voice" else "typed"}): {text}'
+        if via == 'voice': return f'She says (speech recognition — may contain misheard words; infer what she meant from sound and context, she may also speak Chinese): {text}'
+        return f'She chooses: {text}' if via == 'option' else f'She says (typed): {text}'
     if via == 'option': return f'她选择：{text}'
-    return f'她自己说（{"语音" if via == "voice" else "打字"}）：{text}'
+    if via == 'voice': return f'她自己说（语音识别，可能有同音错字或漏字：按读音和上下文理解她的真实意思，别照字面误会）：{text}'
+    return f'她自己说（打字）：{text}'
 
 
 KEYS_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9 ._-]{0,24}|NARR|TITLE|PROMPT|C1|C2|END|LINE|HANGUP)\s*[:：]\s*(.+)$')
@@ -681,8 +683,9 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
             eng = 'flash' if not spec else sess.get('tts', 'v4')  # 11-09 她说完现写的那集：整集用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒），句句赶在播放前配好
             if job.get('_cancel'): ep['lines'][i]['url'] = ''; return
             # 她说完现写的那集：前三句走专用配音通道（不跟后台预写、过渡句排队；11-09 实测排队时第一句要 7–8 秒，单独 3–4 秒）
-            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (3 if (i == 1 and not spec) else 2 if (i == 2 and not spec) or (spec and i == SPEC_LINES) else 1), eng,
-                           pool=CALL_POOL if not spec and i < 3 else None)
+            # 11-10 卡顿：后台在预写下一集的两个分支（30 多句配音），正在播的这集第 4 句起跟它们排同一个队就会断——整集都走专用通道，第 4–6 句也两路
+            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (3 if (i == 1 and not spec) else 2 if (i < 6 and not spec) or (spec and i == SPEC_LINES) else 1), eng,
+                           pool=CALL_POOL if (not spec or job.get('_committed')) else None)  # 她已经选了这条预写分支：剩下的句子也走专用通道
             ep['lines'][i]['url'] = u
             threading.Thread(target=cache_line, args=(u,), daemon=True).start()
         except Exception:
@@ -1168,6 +1171,36 @@ CALL_FAST = tuple(os.environ.get('CALL_FAST_MODEL', 'qwen/qwen3.6-35b-a3b,deepse
 CALL_FAST_EN = tuple(os.environ.get('CALL_FAST_MODEL_EN', 'deepseek/deepseek-v4.1-flash,moonshotai/kimi-k3,qwen/qwen3-30b-a3b-instruct-2507,qwen/qwen3.8-flash').split(','))  # 11-09 英文实测：deepseek/kimi 第一句约 1.9 秒；qwen3.6 英文常不带 LINE: 前缀
 
 
+PREP = {}; PREP_TTL = 600  # 预备好的拨出电话第一轮（10 分钟内拨出就直接用）
+
+
+def prep_key(series, who, lang, sess, name):
+    return (series, who, lang, sess['sid'] if sess and sess['series'] == series else '', len(sess['eps']) if sess and sess['series'] == series else 0, name)
+
+
+def purge_prep():
+    for k, v in list(PREP.items()):
+        if time.time() - v['t'] > PREP_TTL:
+            PREP.pop(k, None); c = CALLS.get(v['cid'])
+            if c and c.get('_prep'): CALLS.pop(v['cid'], None)
+
+
+def warm_call_assets(series, who, lang):
+    """这个角色的“喂？”、过渡句、短反应：没配过就后台配好（原来第一次打给新角色时现配，挤得第一句等了 11 秒）"""
+    if (series, who, lang) not in REACT_URLS and not load_reacts(series, who, lang):
+        threading.Thread(target=call_fillers, args=(series, who, lang), daemon=True).start()
+    if not bridge_urls(series, who, lang, make=False): threading.Thread(target=bridge_urls, args=(series, who, lang), daemon=True).start()
+    if not greet_url(series, who, lang, make=False): threading.Thread(target=greet_url, args=(series, who, lang), daemon=True).start()
+    def precache():  # “喂？”、过渡句、垫话先下到中转：手机取 blob 时不用现拉谷歌存储
+        us = [greet_url(series, who, lang, make=False)] + [u for v in (bridge_urls(series, who, lang, make=False) or {}).values() for _, u in v]
+        f = CACHE / 'fillers' / f'{series}.{who}.{lang}.json'
+        if f.exists():
+            d = json.load(open(f)); us += (d.get('urls') or []) + (d.get('think') or []) if isinstance(d, dict) else []
+        import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(6) as ex: list(ex.map(cache_line, [u for u in us if u]))
+    threading.Thread(target=precache, daemon=True).start()
+
+
 def call_system(c, lite=False):
     s, lang, w = c['series'], c['lang'], WORLD[c['series']]
     ch = next((x for x in w['characters'] if x['name'].split()[0] == c['who'] or x['name'] == c['who']), w['characters'][0])
@@ -1201,7 +1234,11 @@ def run_call(job, c, her, spec=None, bridge=None):
     def synth(i, text):
         if job.get('_canceled'): out['lines'][i]['url'] = ''; return  # 她已经打断了这一轮，后面的句子不再配音
         k = i - (1 if bridge else 0)  # 第一句正文三路、第二句两路并发（Waku 每句 4–9 秒且波动大，取最快的）
-        try: out['lines'][i]['url'] = tts_hedged(c['series'], c['who'], text, lang, CALL_HEDGE[k] if 0 <= k < len(CALL_HEDGE) else 1, c.get('tts', 'flash'), CALL_POOL)
+        hn = 1 if c.get('_prep') else (CALL_HEDGE[k] if 0 <= k < len(CALL_HEDGE) else 1)  # 预备通话不赶时间，一路就够
+        try:
+            u = tts_hedged(c['series'], c['who'], text, lang, hn, c.get('tts', 'flash'), CALL_POOL)
+            cache_line(u)  # 11-10 先下到中转（手机经 /api/a 取 blob 时不再现拉谷歌存储，接通原来卡到 6.5 秒）
+            out['lines'][i]['url'] = u
         except Exception: out['lines'][i]['url'] = ''
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
     job['_synth'] = synth
@@ -1619,6 +1656,24 @@ class H(BaseHTTPRequestHandler):
             c = ep1_cached(series, lang)
             if not body.get('prewarm'): threading.Thread(target=start_ep_specs, args=(sess,), daemon=True).start()  # 她听第 1 集的 3 分钟里，第 2 集已经按两个选项写好（批量预热第 1 集时不做）
             return self._send(200, {'sid': sid, 'ep': ep1_with_visuals(c, series, lang)} if c else {'sid': sid, 'job': start_job(ep1_job, series, lang)})
+        if u.path == '/api/call/prepare':  # 11-10 她在剧详情/选人页时：先把他开口第一轮写好、前两句配好（拨出后约 1 秒就接通，原来 6–17 秒）
+            series = body.get('series')
+            if series not in BASE: return self._send(404, {'error': 'no series'})
+            cs = callers(series); who = body.get('who') if body.get('who') in [x['key'] for x in cs] else cs[0]['key']
+            warm_call_assets(series, who, lang)
+            if body.get('warm_only'): return self._send(200, {'ok': True})
+            name = (body.get('name') or ('你' if lang == 'zh' else 'you')).strip()[:24]
+            sess = get_sess(body.get('sid'))
+            key = prep_key(series, who, lang, sess, name)
+            purge_prep()
+            if key in PREP and PREP[key]['cid'] in CALLS: return self._send(200, {'ok': True, 'cached': True})
+            cid = 'c' + time.strftime('%m%d%H%M') + rid(4)
+            c = CALLS[cid] = {'cid': cid, 'series': series, 'lang': lang, 'name': name, 'who': who, 'me': (body.get('me') or (sess or {}).get('me') or '').strip()[:400], 'sid': sess['sid'] if sess and sess['series'] == series else None,
+                              'direction': 'outgoing', 'turns': [], 'tts': body.get('tts') if body.get('tts') in ('turbo', 'flash') else CALL_TTS, '_prep': True}
+            jid = rid(); JOBS[jid] = {'id': jid, 'status': 'writing', 'error': None, '_spec': True}
+            threading.Thread(target=run_call, args=(JOBS[jid], c, '', {'base': 0}), daemon=True).start()
+            PREP[key] = {'cid': cid, 'job': jid, 't': time.time()}
+            return self._send(200, {'ok': True})
         if u.path == '/api/call/start':
             series = body.get('series')
             if series not in BASE: return self._send(404, {'error': 'no series'})
@@ -1628,6 +1683,19 @@ class H(BaseHTTPRequestHandler):
             cs = callers(series); who = body.get('who') if body.get('who') in [x['key'] for x in cs] else cs[0]['key']
             name = (body.get('name') or ('你' if lang == 'zh' else 'you')).strip()[:24]
             sess = get_sess(body.get('sid'))
+            pk = prep_key(series, who, lang, sess, name)
+            pr = PREP.pop(pk, None) if body.get('direction') != 'incoming' else None
+            if pr and time.time() - pr['t'] < PREP_TTL and pr['cid'] in CALLS and JOBS.get(pr['job'], {}).get('status') != 'error':  # 预备好的第一轮：直接接上
+                c = CALLS[pr['cid']]; c.pop('_prep', None); job = JOBS[pr['job']]
+                with c.setdefault('_lock', threading.Lock()):
+                    job['_committed'] = True; ready = job['status'] == 'ready'
+                if ready: threading.Thread(target=finish_spec, args=(job, c), daemon=True).start()
+                log('call-' + c['cid'], {'start': True, 'series': series, 'who': who, 'lang': lang, 'name': name, 'sid': c['sid'], 'direction': 'outgoing', 'prepared': round(time.time() - pr['t'], 1), 'at': time.strftime('%F %T')})
+                if ck: CALL_KEYS[ck] = (c['cid'], pr['job'])
+                g = greet_url(series, who, lang, make=False); bu = bridge_urls(series, who, lang, make=False) or {}
+                ls = (job.get('call') or {}).get('lines') or []
+                return self._send(200, {'cid': c['cid'], 'who': who, 'job': pr['job'], 'greet': g, 'bridges': [u for v in bu.values() for _, u in v if u], 'prepared': True,
+                                        'lines': [{'who': l['who'], 'text': l['text'], 'url': l['url']} for l in ls[:2] if l.get('url')]})
             cid = 'c' + time.strftime('%m%d%H%M') + rid(4)
             c = CALLS[cid] = {'cid': cid, 'series': series, 'lang': lang, 'name': name, 'who': who, 'me': (body.get('me') or (sess or {}).get('me') or '').strip()[:400], 'sid': sess['sid'] if sess and sess['series'] == series else None,
                               'direction': 'incoming' if body.get('direction') == 'incoming' else 'outgoing', 'turns': [],

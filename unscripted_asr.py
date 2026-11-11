@@ -61,12 +61,14 @@ def transcribe_mlx(path, hint, ctx):
 
 
 # 11-09：SenseVoice（sherpa-onnx int8，CPU 上十分之一秒级，中文明显更准）放最前；没有就 MLX turbo；再没有 faster-whisper small
-SV = None
+SV = SVZH = None
 try:
     import sherpa_onnx
     _m = sorted(glob.glob(os.path.expanduser('~/.local/sensevoice/sherpa-onnx-sense-voice-*/model.int8.onnx')))
     if _m:
         SV = sherpa_onnx.OfflineRecognizer.from_sense_voice(model=_m[-1], tokens=os.path.join(os.path.dirname(_m[-1]), 'tokens.txt'), num_threads=4, use_itn=True, language='auto')
+        # 11-10：自动判语言时普通话常被判成粤语（“先里经嘅试到咗…”），判成粤/日/韩就用固定普通话的再认一遍
+        SVZH = sherpa_onnx.OfflineRecognizer.from_sense_voice(model=_m[-1], tokens=os.path.join(os.path.dirname(_m[-1]), 'tokens.txt'), num_threads=4, use_itn=True, language='zh')
         print('sensevoice ready', _m[-1], flush=True)
 except Exception as e:
     print('sensevoice unavailable', repr(e)[:160], flush=True)
@@ -93,6 +95,52 @@ def _pcm16k(path):
     return np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
 
 
+
+# 11-10 她说：别录进杂音/旁边其他人的声音。Silero 人声检测找出有人声的地方，再按 20 ms 帧的响度只留“离手机最近的那个人”：
+# 比她说话最响时（人声帧响度的 95 分位）小 16 dB 以上的帧静音掉（远处别人说话、电视、杂音）；整体最响都低于 -40 dBFS 就当没说话。
+GATE_REL, GATE_ABS = float(os.environ.get('GATE_REL', '16')), float(os.environ.get('GATE_ABS', '-40'))
+try:
+    from faster_whisper.vad import get_speech_timestamps, VadOptions
+except Exception as e:
+    get_speech_timestamps = None; print('vad unavailable', repr(e)[:120], flush=True)
+
+
+def foreground(x):
+    """x: 16 kHz float32 → (只留前景人声的音频 or None, 说明)"""
+    import numpy as np
+    if get_speech_timestamps is None or x.size < 3200: return x, 'skip'
+    ts = get_speech_timestamps(x, VadOptions(threshold=0.45, min_speech_duration_ms=180, min_silence_duration_ms=250, speech_pad_ms=120))
+    if not ts: return None, 'no speech'
+    F = 320; n = len(x) // F
+    if n < 5: return x, 'short'
+    e = 20 * np.log10(np.sqrt((x[: n * F].reshape(n, F) ** 2).mean(axis=1)) + 1e-9)
+    voiced = np.zeros(n, bool)
+    for t in ts: voiced[t['start'] // F: min(n, t['end'] // F + 1)] = True
+    if not voiced.any(): return None, 'no speech'
+    loud = float(np.percentile(e[voiced], 95))
+    if loud < GATE_ABS: return None, f'too quiet {loud:.0f}dB'
+    keep = voiced & (e >= loud - GATE_REL)
+    k = np.convolve(keep.astype(float), np.ones(17), 'same') > 0   # 前后各留 160 ms，别把字头字尾切掉
+    keep = k & voiced
+    if keep.sum() * F < 0.25 * 16000: return None, f'fg too short ({keep.sum() * 20} ms)'
+    g = np.repeat(keep.astype(np.float32), F)
+    g = np.convolve(g, np.ones(160, dtype=np.float32) / 160, 'same')   # 10 ms 淡入淡出，不出咔哒声
+    y = x[: n * F] * g
+    return y, f'kept {int(keep.sum()) * 20}/{int(voiced.sum()) * 20} ms voiced, loud {loud:.0f}dB'
+
+
+def gate_file(path):
+    """转成 16k 单声道、只留前景人声，写回一个 wav；没有人声返回 None"""
+    import numpy as np, wave
+    x = _pcm16k(path)
+    y, why = foreground(x)
+    if y is None: return None, why
+    out = path + '.fg.wav'
+    with wave.open(out, 'wb') as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes((np.clip(y, -1, 1) * 32767).astype(np.int16).tobytes())
+    return out, why
+
+
 import threading as _th
 _PKL = _th.Lock()
 
@@ -103,7 +151,7 @@ def transcribe_pk(x):
     return (st.result.text or '').strip()
 
 
-def transcribe_sv(path):
+def transcribe_sv(path, hint=''):
     import numpy as np, subprocess
     pcm = subprocess.run([os.path.join(_FFDIR, 'ffmpeg'), '-v', 'error', '-i', path, '-ac', '1', '-ar', '16000', '-f', 's16le', '-'], capture_output=True, timeout=20).stdout
     x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
@@ -111,7 +159,12 @@ def transcribe_sv(path):
     st = SV.create_stream(); st.accept_waveform(16000, x); SV.decode_stream(st)
     r = st.result
     lang = (getattr(r, 'lang', '') or '').strip('<|>')
-    return (r.text or '').strip(), ('zh' if lang in ('zh', 'yue') else 'en' if lang == 'en' else lang)
+    text = (r.text or '').strip()
+    if SVZH and lang in ('yue', 'ja', 'ko') and hint != 'en':
+        st = SVZH.create_stream(); st.accept_waveform(16000, x); SVZH.decode_stream(st)
+        print('sv relang', lang, repr(text[:30]), '->', repr((st.result.text or '')[:30]), flush=True)
+        text, lang = (st.result.text or '').strip(), 'zh'
+    return text, ('zh' if lang in ('zh', 'yue') else 'en' if lang == 'en' else lang)
 
 
 # MLX keeps its GPU state per thread: run every MLX call on ONE worker thread (a new HTTP thread each time cost ~2 s extra)
@@ -170,7 +223,7 @@ def _transcribe(path, hint, ctx='', fast=False):
         t = time.time(); sv = None
         if SV:
             try:
-                text, lang = transcribe_sv(path)
+                text, lang = transcribe_sv(path, hint)
                 letters = re.sub(r'[^A-Za-z\u4e00-\u9fff]', '', text)
                 english = bool(letters) and sum(1 for ch in letters if ch.isascii()) / len(letters) > 0.6
                 if not english:   # Chinese (or nothing): SenseVoice is the more accurate one and ~0.15 s
@@ -208,6 +261,20 @@ def _transcribe(path, hint, ctx='', fast=False):
         return {'text': text, 'lang': lang, 'prob': round(info.language_probability, 2), 'ms': int((time.time() - t) * 1000)}
 
 
+SAMPLES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache', 'asr_samples')  # 最近 80 段录音（只在本机，调识别用）
+
+
+def keep_sample(path, data, r):
+    try:
+        os.makedirs(SAMPLES, exist_ok=True)
+        k = time.strftime('%m%d-%H%M%S') + '-' + str(int(time.time() * 1000) % 1000)
+        open(os.path.join(SAMPLES, k + os.path.splitext(path)[1]), 'wb').write(data)
+        json.dump(r, open(os.path.join(SAMPLES, k + '.json'), 'w'), ensure_ascii=False)
+        fs = sorted(glob.glob(os.path.join(SAMPLES, '*')))
+        for f in fs[:-160]: os.unlink(f)
+    except Exception: pass
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
@@ -229,12 +296,22 @@ class H(BaseHTTPRequestHandler):
         ext = '.mp4' if 'mp4' in ct else '.wav' if 'wav' in ct else '.mp3' if 'mpeg' in ct else '.webm'
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
             f.write(data); p = f.name
+        g = None
         try:
-            r = transcribe(p, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1')
+            t0 = time.time()
+            try: g, why = gate_file(p)
+            except Exception as e: g, why = p, 'gate error ' + repr(e)[:80]
+            if g is None:
+                r = {'text': '', 'lang': hint or 'zh', 'gate': why, 'ms': int((time.time() - t0) * 1000)}
+            else:
+                r = transcribe(g, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1')
+                r['gate'] = why; r['ms'] = int((time.time() - t0) * 1000)
+            keep_sample(p, data, r)
         except Exception as e:
             r = {'text': '', 'error': repr(e)[:200]}
         finally:
             os.unlink(p)
+            if g and g != p and os.path.exists(g): os.unlink(g)
         print(time.strftime('%m-%d %H:%M:%S'), len(data), r, flush=True)
         self._send(200, r)
 
