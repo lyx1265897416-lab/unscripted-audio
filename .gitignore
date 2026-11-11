@@ -45,3 +45,5 @@ data/fixed_stills/
 data/fixed_stills.json
 data/still_qa*.json
 data/covers_orig/
+data/shots/
+qa/demo/

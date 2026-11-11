@@ -1,19 +1,19 @@
 [
  {
   "line": 0,
-  "clip": "s11"
+  "clip": "g00"
  },
  {
   "line": 1,
-  "clip": "s11"
+  "clip": "g01"
  },
  {
   "line": 2,
-  "clip": "s06"
+  "clip": "g01"
  },
  {
   "line": 3,
-  "clip": "s06"
+  "clip": "g00"
  },
  {
   "line": 4,
@@ -21,7 +21,7 @@
  },
  {
   "line": 5,
-  "clip": "s15"
+  "clip": "g01"
  },
  {
   "line": 6,
@@ -29,31 +29,31 @@
  },
  {
   "line": 7,
-  "clip": "s17"
+  "clip": "s08"
  },
  {
   "line": 8,
-  "clip": "s04"
+  "clip": "g02"
  },
  {
   "line": 9,
-  "clip": "s04"
+  "clip": "g02"
  },
  {
   "line": 10,
-  "clip": "s09"
+  "clip": "g02"
  },
  {
   "line": 11,
-  "clip": "s14"
+  "clip": "g03"
  },
  {
   "line": 12,
-  "clip": "s14"
+  "clip": "g03"
  },
  {
   "line": 13,
-  "clip": "s14"
+  "clip": "g03"
  },
  {
   "line": 14,
@@ -61,19 +61,19 @@
  },
  {
   "line": 15,
-  "clip": "s11"
+  "clip": "g03"
  },
  {
   "line": 16,
-  "clip": "s11"
+  "clip": "g04"
  },
  {
   "line": 17,
-  "clip": "s04"
+  "clip": "g11"
  },
  {
   "line": 18,
-  "clip": "s14"
+  "clip": "g04"
  },
  {
   "line": 19,
@@ -85,54 +85,54 @@
  },
  {
   "line": 21,
-  "clip": "s15"
- },
- {
-  "line": 22,
-  "clip": "s10"
- },
- {
-  "line": 23,
-  "clip": "s10"
- },
- {
-  "line": 24,
-  "clip": "s10"
- },
- {
-  "line": 25,
-  "clip": "s13"
- },
- {
-  "line": 26,
-  "clip": "s05"
- },
- {
-  "line": 27,
-  "clip": "s05"
- },
- {
-  "line": 28,
-  "clip": "s05"
- },
- {
-  "line": 29,
-  "clip": "s02"
- },
- {
-  "line": 30,
-  "clip": "s05"
- },
- {
-  "line": 31,
-  "clip": "s07"
- },
- {
-  "line": 32,
   "clip": "s11"
  },
  {
+  "line": 22,
+  "clip": "s13"
+ },
+ {
+  "line": 23,
+  "clip": "g08"
+ },
+ {
+  "line": 24,
+  "clip": "g09"
+ },
+ {
+  "line": 25,
+  "clip": "g10"
+ },
+ {
+  "line": 26,
+  "clip": "g05"
+ },
+ {
+  "line": 27,
+  "clip": "g05"
+ },
+ {
+  "line": 28,
+  "clip": "g05"
+ },
+ {
+  "line": 29,
+  "clip": "g06"
+ },
+ {
+  "line": 30,
+  "clip": "g06"
+ },
+ {
+  "line": 31,
+  "clip": "g07"
+ },
+ {
+  "line": 32,
+  "clip": "g11"
+ },
+ {
   "line": 33,
-  "clip": "s06"
+  "clip": "g06"
  }
 ]

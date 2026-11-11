@@ -1,31 +1,31 @@
 [
  {
   "line": 0,
-  "clip": "s00"
+  "clip": "g00"
  },
  {
   "line": 1,
-  "clip": "s00"
+  "clip": "g01"
  },
  {
   "line": 2,
-  "clip": "s17"
+  "clip": "s00"
  },
  {
   "line": 3,
-  "clip": "s05"
+  "clip": "g01"
  },
  {
   "line": 4,
-  "clip": "s06"
+  "clip": "g02"
  },
  {
   "line": 5,
-  "clip": "s06"
+  "clip": "g02"
  },
  {
   "line": 6,
-  "clip": "s00"
+  "clip": "g03"
  },
  {
   "line": 7,
@@ -33,82 +33,82 @@
  },
  {
   "line": 8,
-  "clip": "s04"
+  "clip": "g04"
  },
  {
   "line": 9,
-  "clip": "s04"
+  "clip": "g04"
  },
  {
   "line": 10,
-  "clip": "s06"
+  "clip": "g05"
  },
  {
   "line": 11,
-  "clip": "s04"
+  "clip": "g05"
  },
  {
   "line": 12,
-  "clip": "s04"
+  "clip": "g09"
  },
  {
   "line": 13,
-  "clip": "s09"
+  "clip": "g06"
  },
  {
   "line": 14,
-  "clip": "s09"
+  "clip": "g06"
  },
  {
   "line": 15,
-  "clip": "s09"
+  "clip": "g06"
  },
  {
   "line": 16,
-  "clip": "s01"
+  "clip": "s00"
  },
  {
   "line": 17,
-  "clip": "s09"
+  "clip": "g06"
  },
  {
   "line": 18,
-  "clip": "s00"
+  "clip": "g00"
  },
  {
   "line": 19,
-  "clip": "s00"
+  "clip": "g07"
  },
  {
   "line": 20,
-  "clip": "s00"
+  "clip": "g07"
  },
  {
   "line": 21,
-  "clip": "s06"
+  "clip": "g08"
  },
  {
   "line": 22,
-  "clip": "s09"
+  "clip": "g07"
  },
  {
   "line": 23,
-  "clip": "s04"
+  "clip": "g09"
  },
  {
   "line": 24,
-  "clip": "s05"
+  "clip": "g11"
  },
  {
   "line": 25,
-  "clip": "s06"
+  "clip": "g10"
  },
  {
   "line": 26,
-  "clip": "s01"
+  "clip": "g10"
  },
  {
   "line": 27,
-  "clip": "s00"
+  "clip": "g00"
  }
 ]
