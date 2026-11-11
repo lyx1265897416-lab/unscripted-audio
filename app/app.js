@@ -537,6 +537,20 @@ const waveBars = (n = 18) => `<span class="wave">${Array.from({ length: n }, () 
  * 6. Series data
  * ========================================================================= */
 let SERIES = [];
+const WELCOME = 100;  // coins every new listener starts with
+/* shelf order: the Prota Top 10 batch (11-10) is woven in among the earlier series instead of trailing at the end;
+ * any series not listed here goes after, in the server's order */
+const SHELF_ORDER = ['magnus', 'reborn', 'rian', 'hellqueen', 'island', 'starmate', 'lena', 'crackhigh', 'rafael', 'mythborne', 'kael',
+  'onestat', 'dorian', 'heroacad', 'villa', 'academia', 'rowan', 'mask', 'hear', 'mii', 'milo'];
+const NEW_BATCH = ['reborn', 'hellqueen', 'crackhigh', 'onestat', 'mythborne', 'heroacad', 'starmate', 'academia'];
+/** keep a shelf's order but alternate earlier series and the new batch, so neither clumps (taste-sorted rows stay roughly taste-sorted) */
+const weave = (list) => {
+  const a = list.filter((x) => NEW_BATCH.indexOf(x.id) < 0), b = list.filter((x) => NEW_BATCH.indexOf(x.id) >= 0), out = [];
+  const firstNew = list.length && NEW_BATCH.indexOf(list[0].id) >= 0;
+  while (a.length || b.length) { const p = firstNew ? [b, a] : [a, b]; if (p[0].length) out.push(p[0].shift()); if (p[1].length) out.push(p[1].shift()); }
+  return out;
+};
+const shelfSort = (list) => list.map((x, i) => [x, SHELF_ORDER.indexOf(x.id), i]).sort((a, b) => (a[1] < 0 ? 999 + a[2] : a[1]) - (b[1] < 0 ? 999 + b[2] : b[1])).map((x) => x[0]);
 const DETAIL = {};
 const byId = (id) => SERIES.find((s) => s.id === id);
 const GENRES = ['Werewolf', 'Billionaire', 'Romance', 'Fantasy', 'Adventure', 'Academy', 'Mystery', 'Thriller', 'Reality show', 'Cozy'];  // 11-10 Prota Top10 加冒险、学院
@@ -3261,8 +3275,7 @@ function progressLabel(pr) {
 let heroTimer = 0;
 function renderHome() {
   const el = $('#v-home');
-  const order = ['magnus', 'rian', 'island', 'lena', 'rafael', 'rowan', 'mii'];
-  const sorted = byPref(order.map(byId).filter(Boolean).concat(SERIES.filter((s) => order.indexOf(s.id) < 0)));  // her picked tastes first
+  const sorted = weave(byPref(SERIES));  // her picked tastes first, earlier series and the new batch alternating  // her picked tastes first
   const heroes = sorted.slice(0, 5);
   const cont = continueItems();
   setTimeout(() => cont.slice(0, 2).forEach((x) => warmResume(x.id || (x.s && x.s.id))), 400);  // the top "continue" rows start instantly
@@ -3270,10 +3283,10 @@ function renderHome() {
   const fav = (S.genres && S.genres[0]) || 'Werewolf';
   const becauseLabel = fav === 'Werewolf' ? 'werewolf romance' : fav.toLowerCase();
   const because = SERIES.filter((s) => (S.genres.length ? S.genres.some((g) => matchGenre(s, g)) : matchGenre(s, 'Werewolf') || matchGenre(s, 'Romance')));
-  const becauseList = byPref(because).concat(SERIES.filter((s) => because.indexOf(s) < 0));
+  const becauseList = weave(byPref(because)).concat(weave(SERIES.filter((s) => because.indexOf(s) < 0)));
   const top = SERIES.slice().sort((a, b) => parseFloat(rankScore(b)) - parseFloat(rankScore(a)));
-  const fresh = byPref(['lena', 'rian', 'island', 'mii', 'rowan', 'rafael', 'magnus'].map(byId).filter(Boolean));
-  const binge = SERIES.slice().sort((a, b) => ((b.stats || {}).rating || 0) - ((a.stats || {}).rating || 0));
+  const fresh = weave(byPref(['reborn', 'lena', 'hellqueen', 'rian', 'starmate', 'island', 'crackhigh', 'mii', 'mythborne', 'rowan', 'onestat', 'rafael', 'heroacad', 'magnus', 'academia'].map(byId).filter(Boolean)));
+  const binge = weave(SERIES.slice().sort((a, b) => ((b.stats || {}).rating || 0) - ((a.stats || {}).rating || 0)));
   el.innerHTML = `
     ${topbar()}
     <section class="hero" aria-label="Featured">
@@ -4273,7 +4286,7 @@ let obStep = 0, obGenres = [];
 function renderOnboard() {
   const el = $('#onboard');
   el.hidden = false;
-  const pick = ['magnus', 'rian', 'rafael'].map(byId).filter(Boolean);
+  const pick = ['magnus', 'reborn', 'rian'].map(byId).filter(Boolean);
   const steps = `<div class="ob-steps">${[0, 1, 2].map((i) => `<i class="${i <= obStep ? 'on' : ''}"></i>`).join('')}</div>`;
   let body = '';
   if (obStep === 0) {
@@ -4313,16 +4326,25 @@ function renderOnboard() {
     setTimeout(() => { try { inp.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 250);
   }
 }
+/* new listeners start with WELCOME (100) coins (11-10; was 30). Listeners who already got the old 30 are topped up once. Returns coins added. */
+function grantWelcome() {
+  if ((S.welcome || 0) >= WELCOME) return 0;
+  const had = S.welcome || (S.ledger.some((l) => /Welcome/.test(l.l)) ? 30 : 0);
+  S.welcome = WELCOME;
+  if (WELCOME <= had) { save(); return 0; }
+  addCoins(WELCOME - had, 'Welcome bonus');
+  return WELCOME - had;
+}
 function obNext(skip) {
   if (obStep === 1 && !skip) { const inp = $('#ob-name'); if (inp) S.name = inp.value.trim().slice(0, 24); }
   if (obStep < 2) { obStep += 1; save(); renderOnboard(); return; }
   S.genres = obGenres.slice();
   S.onboarded = true;
-  if (!S.ledger.some((l) => /Welcome/.test(l.l))) addCoins(30, 'Welcome bonus');
+  const got = grantWelcome();
   save(true);
   const el = $('#onboard'); el.hidden = true; el.innerHTML = '';
   primeMic();  // the last onboarding tap: ask for the mic now (Hands-free is the default), not at the first choice point
-  toast(`${coinIc('sm')} Welcome${S.name ? ', ' + esc(S.name) : ''}! +30 coins`);
+  toast(`${coinIc('sm')} Welcome${S.name ? ', ' + esc(S.name) : ''}! +${got || WELCOME} coins`);
   route();
 }
 
@@ -4347,27 +4369,28 @@ async function boot() {
     });
     if (Array.isArray(cachedList) && cachedList.length) {
       // Open instantly from the last series list on this device; refresh in the background (the tunnel can take seconds)
-      SERIES = cachedList; API = RealAPI;
+      SERIES = shelfSort(cachedList); API = RealAPI;
       fresh.then((list) => {
         const byIdNew = Object.fromEntries(list.map((x) => [x.id, x]));
         SERIES.forEach((x) => { if (byIdNew[x.id]) Object.assign(x, byIdNew[x.id]); });
         list.forEach((x) => { if (!SERIES.some((y) => y.id === x.id)) SERIES.push(x); });
+        SERIES = shelfSort(SERIES);
         if (curTab === 'home' && !isDetailOpen() && location.hash !== '#/player') renderHome();
       }).catch(() => toast('Server is reconnecting…'));
     } else {
-      SERIES = await fresh;
+      SERIES = shelfSort(await fresh);
       API = RealAPI;
     }
   } catch (e) {
     const wasExplicit = MOCK;
     MOCK = true; API = MockAPI;
-    SERIES = await MockAPI.series();
+    SERIES = shelfSort(await MockAPI.series());
     if (!wasExplicit) setTimeout(() => toast('Server offline — demo mode'), 600);
   }
   // drop live sessions with a different language/mode? keys already include both.
   if (location.hash === '#/player') history.replaceState(null, '', location.pathname + location.search + '#/home');
   if (!S.onboarded) { renderOnboard(); showTab('home'); }
-  else { route(); primeMicOnEntry(); if (modeOf() === 'voice') fetchLocalBlob(`ack.${LANG}.mp3`); }
+  else { const top = grantWelcome(); if (top) setTimeout(() => toast(`${coinIc('sm')} +${top} coins · Welcome bonus`), 900); route(); primeMicOnEntry(); if (modeOf() === 'voice') fetchLocalBlob(`ack.${LANG}.mp3`); }
   if (TTS !== 'v4') setTimeout(() => toast(LANG === 'zh' ? `配音测试：${TTS === 'turbo' ? 'Eleven v4 Turbo（低延迟）' : 'Eleven Turbo v2.5（实时）'} · 第 2 集起生效` : `Voice test: ${TTS === 'turbo' ? 'Eleven v4 Turbo (low latency)' : 'Eleven Turbo v2.5 (realtime)'} · from Episode 2`), 900);
   renderMini();
 }

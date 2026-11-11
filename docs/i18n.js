@@ -124,7 +124,7 @@
     [/^(\d+) coins$/, '$1 金币'], [/^(\d+) coins \/ call$/, '$1 金币 / 次'], [/^coins · (\d+) series started$/, '金币 · 已开始 $1 部剧'], [/^(\d+) records$/, '$1 条记录'], [/^Day (\d+)$/, '第 $1 天'],
     [/^Daily check-in · Day (\d+)$/, '每日签到 · 第 $1 天'], [/^Task · ([\s\S]+)$/, '任务 · $1'], [/^Coin pack (\d+)([\s\S]*) \(test\)$/, '金币礼包 $1$2（测试）'], [/^Ad unlock Ep (\d+) · ([\s\S]+)$/, '看广告解锁第 $1 集 · $2'],
     [/^Auto-unlock Ep (\d+) · ([\s\S]+)$/, '自动解锁第 $1 集 · $2'], [/^Unlock Ep (\d+) · ([\s\S]+)$/, '解锁第 $1 集 · $2'], [/^Ad call · ([\s\S]+)$/, '看广告通话 · $1'], [/^Balance:$/, '余额：'],
-    [/^Welcome(?:, ([\s\S]+))?! \+30 coins$/, (m, n) => (n ? `欢迎，${n}！+30 金币` : '欢迎！+30 金币')], [/^They'll call you ([\s\S]+)$/, '他们会叫你 $1'], [/^VIP on — ([\s\S]+)$/, 'VIP 已开通 —— 通话和剧集都免费'],
+    [/^Welcome(?:, ([\s\S]+))?! \+(\d+) coins$/, (m, n, c) => (n ? `欢迎，${n}！+${c} 金币` : `欢迎！+${c} 金币`)], [/^\+(\d+) coins · Welcome bonus$/, '+$1 金币 · 新人奖励'], [/^They'll call you ([\s\S]+)$/, '他们会叫你 $1'], [/^VIP on — ([\s\S]+)$/, 'VIP 已开通 —— 通话和剧集都免费'],
     [/^Sleep timer: paused$/, '睡眠定时：已暂停'], [/^Calling([\s\S]*)$/, '正在呼叫$1'], [/^Saved to Calls$/, '已保存到通话记录'], [/^Call again$/, '再打一次'],
     [/^Call dropped: ([\s\S]+)$/, '通话中断：$1'], [/^Call failed: ([\s\S]+)$/, '通话失败：$1'], [/^Couldn't reach ([\s\S]+): ([\s\S]+)$/, '没能接通 $1：$2'], [/^Couldn't start the story\.([\s\S]*)$/, '故事没能开始。$1'],
     [/^Couldn't write the next episode \(([\s\S]+)\)\. Try again\.$/, '下一集没写出来（$1），再试一次。'], [/^Generation failed: ([\s\S]+)$/, '生成失败：$1'], [/^Interrupted · ([\s\S]+)$/, '已中断 · $1'],
