@@ -1639,6 +1639,97 @@ def series_detail(sid, lang):
     return d
 
 
+# ---------------- 实时语音输入（11-11 她要求：输入框里边说边出字，像豆包输入法） ----------------
+# 原来每 0.7 秒把整段录音重新 POST 一次，过隧道一个来回就要 0.8–2 秒，字出得又慢又一顿一顿。
+# 改成一条 WebSocket：手机把麦克风的 16k PCM 每 ~85 毫秒发一小块，中转不停地把“到目前为止的全部声音”送本机识别（一次约 0.2–0.3 秒），
+# 认出来就推回去；她说完手机发 end，中转做最后一遍（带选项提示 + 字母复认）并马上开写下一集。没有逐次请求的往返。
+import struct, io, wave
+WS_MAGIC = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+
+
+def ws_read(rf):
+    """读一帧：返回 (opcode, payload)；连接断了返回 None"""
+    h = rf.read(2)
+    if len(h) < 2: return None
+    op_, ln = h[0] & 0x0f, h[1] & 0x7f
+    if ln == 126: ln = struct.unpack('>H', rf.read(2))[0]
+    elif ln == 127: ln = struct.unpack('>Q', rf.read(8))[0]
+    if ln > 2_000_000: return None
+    mask = rf.read(4) if h[1] & 0x80 else b''
+    data = rf.read(ln) if ln else b''
+    if len(data) < ln: return None
+    if mask: data = bytes(b ^ mask[i & 3] for i, b in enumerate(data)) if ln < 64 else (int.from_bytes(data, 'big') ^ int.from_bytes((mask * (ln // 4 + 1))[:ln], 'big')).to_bytes(ln, 'big')
+    return op_, data
+
+
+def ws_send(wf, lock, text, op_=1):
+    b = text.encode() if isinstance(text, str) else text
+    n = len(b); head = bytes([0x80 | op_]) + (bytes([n]) if n < 126 else bytes([126]) + struct.pack('>H', n) if n < 65536 else bytes([127]) + struct.pack('>Q', n))
+    with lock:
+        wf.write(head + b); wf.flush()
+
+
+def asr_stream(h, q):
+    """h: 请求处理器（已确认是 WebSocket 升级）。q: 查询参数"""
+    g = lambda k, d='': q.get(k, [d])[0]
+    key = h.headers.get('Sec-WebSocket-Key') or ''
+    acc = base64.b64encode(hashlib.sha1((key + WS_MAGIC).encode()).digest()).decode()
+    h.wfile.write(('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + acc + '\r\n\r\n').encode()); h.wfile.flush()
+    h.close_connection = True
+    try: h.connection.settimeout(25)
+    except Exception: pass
+    sess = get_sess(g('sid')); lang = g('lang') or (sess or {}).get('lang', '')
+    hint = ''
+    if sess:
+        ch = (sess['eps'][-1].get('choices') or [])[:2]
+        hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
+    from urllib.parse import quote
+    buf = bytearray(); lock = threading.Lock(); st = {'end': False, 'closed': False, 'done': 0}
+    t0 = time.time()
+
+    def recog(pcm, final):
+        b = io.BytesIO()
+        with wave.open(b, 'wb') as w: w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(pcm)
+        req = U.Request('http://127.0.0.1:8917/asr', data=b.getvalue(), headers={'Content-Type': 'audio/wav', 'X-Lang': lang, 'X-Hint': quote(hint[:300]),
+                                                                              'X-Choice': '1' if final and sess else '0', 'X-Partial': '0' if final else '1'})
+        return json.loads(op.open(req, timeout=20).read())
+
+    def worker():
+        last = ''
+        while not st['closed']:
+            n = len(buf) // 2 * 2; final = st['end']
+            if not final and (n < 9600 or n - st['done'] < 3200): time.sleep(0.03); continue   # 至少 0.3 秒声音；有 0.1 秒新声音才再认一遍
+            st['done'] = n
+            try: r = recog(bytes(buf[max(0, n - 16000 * 2 * 40):n]), final) if n >= 3200 else {'text': ''}
+            except Exception as e: r = {'text': '', 'error': repr(e)[:80]}
+            text = (r.get('text') or '').strip()
+            try:
+                if final:
+                    ws_send(h.wfile, lock, json.dumps({'final': text, 'lang': r.get('lang'), 'ms': r.get('ms')}, ensure_ascii=False))
+                    if sess and g('go') == '1' and text: threading.Thread(target=pre_next, args=(sess, text[:400]), daemon=True).start()  # 选择点上的回答：马上开写下一集
+                    log('asr-stream', {'sid': g('sid'), 'final': text, 'sec': round(n / 32000, 1), 'asr_ms': r.get('ms'), 'at': time.strftime('%F %T')})
+                    break
+                if text and text != last and not re.fullmatch(r'[嗯啊呃哦唔额一。，,.!?！？\s]+', text):   # 刚开口那零点几秒常被认成“嗯”“一”：不推，等下一遍
+                    last = text; ws_send(h.wfile, lock, json.dumps({'t': text, 'at': round(n / 32000, 2)}, ensure_ascii=False))
+            except Exception: break
+        st['closed'] = True
+    th = threading.Thread(target=worker, daemon=True); th.start()
+    try:
+        while not st['closed'] and time.time() - t0 < 120:
+            fr = ws_read(h.rfile)
+            if fr is None: break
+            op_, data = fr
+            if op_ == 8: break
+            if op_ == 9: ws_send(h.wfile, lock, data, 10); continue
+            if op_ in (2, 0): buf.extend(data)
+            elif op_ == 1 and data[:3] == b'end': st['end'] = True
+    except Exception: pass
+    if st['end']: th.join(8)   # 最后一遍还在认：等它把结果发出去
+    st['closed'] = True
+    try: ws_send(h.wfile, lock, b'', 8)
+    except Exception: pass
+
+
 class H(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
@@ -1664,6 +1755,7 @@ class H(BaseHTTPRequestHandler):
         if u.path == '/health': return self._send(200, {'ok': True, 'sessions': len(SESS)})
         if u.path.startswith('/api/'):
             if g('k') != TOKEN: return self._send(403, {'error': 'bad key'})
+            if u.path == '/api/asr/ws' and (self.headers.get('Upgrade') or '').lower() == 'websocket': return asr_stream(self, q)
             if u.path == '/api/series': return self._send(200, [series_card(s, lang) for s in BASE])
             if u.path == '/api/ep1pack':  # 11-11 所有剧第 1 集的文字稿 + 画面时间轴，一次给完（不建会话）：手机存好，点播放直接有字有画面，不用等 /api/play 过隧道
                 out = {}

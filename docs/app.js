@@ -342,7 +342,7 @@ const RealAPI = {
   wish(sid, text) { return this.post('api/wish', { sid, text }); },
   async asr(blob, opt) {   // opt.partial: what she has said so far, shown while she is still talking (never starts the next episode)
     const part = !!(opt && opt.partial);
-    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid); if (part) u.searchParams.set('partial', '1'); else if (P.needChoice) u.searchParams.set('go', '1'); return u.toString(); },
+    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid); if (part) u.searchParams.set('partial', '1'); else if (P.needChoice && !(opt && opt.nogo)) u.searchParams.set('go', '1'); return u.toString(); },
       { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
@@ -783,7 +783,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; } };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id) };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -1524,8 +1524,48 @@ function micLevel() {
 function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPartial } = {}) {
   let rec = null, chunks = [], t0 = 0, speechAt = 0, lastVoice = 0, timer = 0, finished = false, canceled = false, floor = 0, n = 0, blind = false;
   let pBusy = false, pAt = 0, pN = 0;
-  /* live transcript (11-11): while she talks, what has been recorded so far is recognised again every ~0.7 s and handed to onPartial */
+  /* 11-11 (7) real-time voice input ("like a voice keyboard"): the mic's audio goes to the relay over one WebSocket as 16 kHz PCM,
+   * ~85 ms at a time; the relay keeps recognising everything said so far and pushes the text back the moment it has it, so the
+   * words appear while she is still talking. When she stops, "end" asks for the final pass on the same socket (no upload, no
+   * extra round trip). Without WebAudio / WebSocket it falls back to the recorder below (text every ~0.7 s, final by upload). */
+  const LS = { ws: null, open: false, sent: 0, got: 0, q: [], proc: null, src: null, sink: null, fin: null, asked: false };
+  const lsClose = () => {
+    try { if (LS.proc) { LS.proc.onaudioprocess = null; LS.proc.disconnect(); } if (LS.src) LS.src.disconnect(); if (LS.sink) LS.sink.disconnect(); } catch (e) { /* ignore */ }
+    LS.proc = LS.src = LS.sink = null;
+    const w = LS.ws; LS.ws = null; LS.open = false;
+    if (w) { w.onmessage = w.onclose = w.onerror = null; try { w.close(); } catch (e) { /* ignore */ } }
+    if (LS.fin) { const f = LS.fin; LS.fin = null; f(null); }
+  };
+  const lsStart = () => {
+    if (!onPartial || MOCK || !window.WebSocket || !actx || actx.state !== 'running' || !VI.stream) return;
+    try {
+      const u = new URL(apiUrl('api/asr/ws')); u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG);
+      const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid);
+      if (P.needChoice) u.searchParams.set('go', '1');
+      const w = LS.ws = new WebSocket(u.toString()); w.binaryType = 'arraybuffer';
+      w.onopen = () => { LS.open = true; LS.q.forEach((b) => w.send(b)); LS.q = []; };
+      w.onmessage = (e) => {
+        let d = null; try { d = JSON.parse(e.data); } catch (x) { return; }
+        LS.got += 1;
+        if (d.final != null) { if (LS.fin) { const f = LS.fin; LS.fin = null; f(d); } return; }
+        if (d.t && !finished) { try { onPartial(d.t); } catch (x) { /* ignore */ } }
+      };
+      w.onclose = w.onerror = () => { LS.open = false; if (LS.fin) { const f = LS.fin; LS.fin = null; f(null); } };
+      LS.src = actx.createMediaStreamSource(VI.stream); LS.proc = actx.createScriptProcessor(4096, 1, 1); LS.sink = actx.createGain(); LS.sink.gain.value = 0;
+      const ratio = actx.sampleRate / 16000;
+      LS.proc.onaudioprocess = (e) => {
+        if (finished || !LS.ws) return;
+        const x = e.inputBuffer.getChannelData(0), n = Math.floor(x.length / ratio), out = new Int16Array(n);
+        for (let i = 0; i < n; i++) { const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio)); let v = 0; for (let j = a; j < b; j++) v += x[j]; v /= (b - a); out[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32767))); }
+        LS.sent += n;
+        if (LS.open) LS.ws.send(out.buffer); else if (LS.q.length < 240) LS.q.push(out.buffer);   // up to ~20 s kept while the socket opens
+      };
+      LS.src.connect(LS.proc); LS.proc.connect(LS.sink); LS.sink.connect(actx.destination);
+    } catch (e) { lsClose(); }
+  };
   const partial = async () => {
+    if (LS.open || LS.got) return;   // the live socket is doing it
     if (!onPartial || pBusy || finished || !speechAt || chunks.length === pN || Date.now() - pAt < 700) return;
     pBusy = true; pN = chunks.length;
     try { const r = await API.asr(new Blob(chunks.slice(), { type: (rec && rec.mimeType) || 'audio/webm' }), { partial: true }); const t = ((r && r.text) || '').trim(); if (!finished && t) onPartial(t); } catch (e) { /* ignore */ }
@@ -1536,15 +1576,21 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
   micBusy++;
   const finish = async (spoke) => {
     if (finished) return; finished = true; clearInterval(timer);
+    let finP = null;   // the relay already has everything she said: ask for the final pass on the socket at once (before the recorder has even stopped)
+    if (spoke && !canceled && LS.open && LS.sent > 4800) finP = new Promise((res) => { LS.fin = res; LS.asked = true; try { LS.ws.send('end'); } catch (e) { LS.fin = null; res(null); } setTimeout(() => { if (LS.fin === res) { LS.fin = null; res(null); } }, 4500); });
     if (rec && rec.state !== 'inactive') {
       await new Promise((r) => { rec.onstop = () => r(); try { rec.stop(); } catch (e) { r(); } setTimeout(r, 900); });
     }
     micBusy = Math.max(0, micBusy - 1); setTimeout(micPark, 50);
-    if (canceled) { resolve({ text: '', spoke: false, canceled: true }); return; }
-    if (!spoke || !chunks.length) { resolve({ text: '', spoke: false }); return; }
+    if (canceled) { lsClose(); resolve({ text: '', spoke: false, canceled: true }); return; }
+    if (!spoke || !chunks.length) { lsClose(); resolve({ text: '', spoke: false }); return; }
     st('thinking', { spoke: speechAt ? lastVoice - speechAt : 0 });
+    if (finP) {
+      const d = await finP; lsClose();
+      if (d && d.final != null) { resolve({ text: String(d.final).trim(), lang: d.lang, spoke: true }); return; }
+    }
     try {
-      const r = await API.asr(new Blob(chunks, { type: (rec && rec.mimeType) || 'audio/webm' }));
+      const r = await API.asr(new Blob(chunks, { type: (rec && rec.mimeType) || 'audio/webm' }), { nogo: LS.asked });
       resolve({ text: ((r && r.text) || '').trim(), lang: r && r.lang, spoke: true });
     } catch (e) { resolve({ text: '', spoke: true, error: e.message }); }
   };
@@ -1555,6 +1601,7 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
     try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { st('denied'); resolve({ text: '', spoke: false, denied: true }); finished = true; return; }
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     rec.start(250);
+    lsStart();
     t0 = Date.now(); st('listening');
     timer = setInterval(() => {
       const now = Date.now(), lv = micLevel();
@@ -1799,8 +1846,12 @@ function hfStop(silent) {
 /* narra player (11-11): the answer box under A and B — same size as an option. She can type in it (a real caret once tapped) or
  * just talk: while the mic is open a ring turns at its end and her words fill in as they are recognised. */
 const askInline = () => NARRA && playerOpen;
-function askText(t) {
+const ASK = { live: false, stable: 0 };   // live: the box holds words that came from her voice; stable: how many leading characters did not change in the last update
+function askText(t, final) {
   const inp = $('#nr-in'); if (!inp || document.activeElement === inp) return;
+  t = String(t || ''); if (!final) t = t.replace(/[\s.。,，!！?？…]+$/, '');   // the recogniser closes every partial with a full stop: don't flash it
+  const old = inp.value; let k = 0; while (k < old.length && k < t.length && old[k] === t[k]) k++;
+  ASK.live = !!t; ASK.stable = final ? t.length : k;
   inp.value = t; paintAsk(); placeLyrics();
 }
 function askSend() {
@@ -1811,7 +1862,8 @@ function paintAsk() {
   const box = $('#nr-inbox'); if (!box) return;
   const ph = HF.phase, inp = $('#nr-in'), ghost = $('#nr-ghost'), ring = $('#nr-ring'), send = $('#nr-send'), mic = $('.in-mic', box), hint = $('#nr-hint');
   const focused = document.activeElement === inp, hearing = ph === 'listen' || ph === 'speaking', busy = hearing || ph === 'thinking';
-  if (ph === 'heard' && HF.heard && !focused) inp.value = HF.heard;
+  if (ph === 'heard' && HF.heard && !focused && inp.value !== HF.heard) { inp.value = HF.heard; ASK.live = true; ASK.stable = HF.heard.length; }
+  if (focused) ASK.live = false;
   const val = inp.value;
   box.classList.toggle('live', busy); box.classList.toggle('focus', focused);
   ring.hidden = !busy; ring.classList.toggle('wait', ph === 'listen');
@@ -1820,7 +1872,10 @@ function paintAsk() {
   const tip = !VOICE_OK ? 'Type your answer…' : busy ? 'Listening — say your answer…' : 'Say or type your answer…';
   inp.placeholder = tip;
   ghost.className = 'in-ghost' + (val ? '' : ' ph');
-  if (val) { ghost.setAttribute('translate', 'no'); ghost.innerHTML = esc(val) + '<i class="caret"></i>'; }
+  if (val) {   // voice: the words that just arrived (or changed) come in soft and settle, like a voice keyboard
+    const k = ASK.live ? Math.min(ASK.stable, val.length) : val.length;
+    ghost.setAttribute('translate', 'no'); ghost.innerHTML = esc(val.slice(0, k)) + (k < val.length ? `<span class="fresh">${esc(val.slice(k))}</span>` : '') + '<i class="caret"></i>';
+  }
   else { ghost.removeAttribute('translate'); ghost.innerHTML = '<i class="caret"></i><span>' + tip + '</span>'; }
   if (hint && !autoT) {
     const t = ph === 'ask' ? `${ic('headphones', 'xs')}<span>The narrator is asking…</span>` : ph === 'thinking' ? '<span>Got it — one moment…</span>' : ph === 'denied' ? '<span>Microphone is off — type your answer or tap a choice</span>' : '';
@@ -1834,7 +1889,7 @@ function bindAsk() {
   if (opts.length) box.style.minHeight = opts[opts.length - 1].offsetHeight + 'px';   // the same height as the option above it
   inp.addEventListener('focus', () => { holdForHer(); paintAsk(); });
   inp.addEventListener('blur', paintAsk);
-  inp.addEventListener('input', () => { stopAutoCountdown(); paintAsk(); placeLyrics(); });
+  inp.addEventListener('input', () => { ASK.live = false; stopAutoCountdown(); paintAsk(); placeLyrics(); });
   inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askSend(); } });
   paintAsk();
 }
@@ -4138,25 +4193,63 @@ function stillOf(s, id) {
 }
 /** Which picture belongs to which part of the episode — a pure function of the position, so dragging the bar, tapping a line
  * or skipping lands on that part's picture at once. It follows the story's own picture timeline (the picture changes where the
- * scene changes) but holds each picture at least MIN, so the background doesn't flicker through short cuts.
+ * scene changes) and holds a picture long enough not to flicker through short cuts.
+ * 11-11 (8) "at least five changes of background in every episode": never fewer than six stretches. Where the story's own
+ * pictures don't give that many (a scene that stays on one or two pictures), long stretches are split and the gaps take the
+ * episode's other pictures in rotation (least shown first, never the same one twice in a row).
  * Units: seconds (Episode 1) or lines (written episodes). */
 function stillPlan(s, ep) {
   const V = s.visuals, produced = ep.kind !== 'live';
-  const units = produced ? (ep.visuals || []).map((x) => [x.s, x.clip]) : (ep.lines || []).map((l, i) => [i, l.clip]);
-  const key = [s.id, ep.n, ep.kind, units.length].join(':');
+  const ok = (id) => !!(id && V.clips[id] && !(V.prefer && id !== 'idle' && !id.startsWith(V.prefer)));
+  const units = (produced ? (ep.visuals || []).map((x) => [x.s, x.clip]) : (ep.lines || []).map((l, i) => [i, l.clip])).filter((u) => ok(u[1]));
+  let total = produced ? ((P.ep === ep && audio.duration) || ep.dur || 0) : (ep.lines || []).length;
+  if (produced && !total && units.length) total = units[units.length - 1][0] + 12;   // length not known yet
+  const open = !produced && P.ep === ep && !P.jobDone;   // still being written: more lines will come
+  const key = [s.id, ep.n, ep.kind, units.length, Math.round(total), open ? 'o' : ''].join(':');
   if (V._planKey === key && V._plan) return V._plan;
-  const MIN = produced ? 12 : 3, ok = (id) => id && V.clips[id] && !(V.prefer && id !== 'idle' && !id.startsWith(V.prefer));
-  const pts = [];
-  units.forEach(([at, id]) => {
-    if (!ok(id)) return;
-    const last = pts[pts.length - 1];
-    if (last && (last[1] === id || at - last[0] < MIN)) return;
-    pts.push([at, id]);
-  });
-  if (!pts.length) { const pool = (V.pool || []).filter(ok); if (pool.length) pts.push([0, pool[(ep.n || 0) % pool.length]]); }
-  if (pts.length) pts[0][0] = 0;
-  V._planKey = key; V._plan = pts;
-  return pts;
+  const rest = (V.pool || []).concat(Object.keys(V.clips)).filter(ok);   // stand-ins, always in the same order
+  const used = {}, out = [];
+  const put = (at, id) => { if (!id) return; out.push([at, id]); used[id] = (used[id] || 0) + 1; };
+  /* the picture for the stretch [a, b): the story's own picture there if it is not the one already up, else a stand-in —
+   * a picture this episode has shown before (closest to the scene) or one from the series, whichever has been shown least */
+  const pick = (a, b, nextId) => {
+    const prev = out.length ? out[out.length - 1][1] : null, seen = Object.keys(used).length;
+    for (const u of units) if (u[0] >= a && u[0] < b && u[1] !== prev && (!used[u[1]] || seen >= 5)) return u[1];   // back to a picture already shown only once five different ones have been up
+    let best = null;
+    for (const id of units.filter((u) => u[0] < b).map((u) => u[1]).concat(rest)) {
+      if (id === prev || id === nextId) continue;
+      if (best == null || (used[id] || 0) < (used[best] || 0)) best = id;
+    }
+    return best || prev || rest[0] || null;
+  };
+  if (produced) {
+    let pts = [];
+    for (const MIN of [12, 8, 5]) {   // the story's own changes, at least MIN apart; a quieter episode may change a little sooner
+      pts = [];
+      units.forEach(([at, id]) => { const last = pts[pts.length - 1]; if (last && (last[1] === id || at - last[0] < MIN)) return; pts.push([at, id]); });
+      if (pts.length >= 6) break;
+    }
+    if (pts.length) pts[0][0] = 0;
+    const segs = pts.length ? pts.map((p, j) => ({ a: p[0], b: j + 1 < pts.length ? pts[j + 1][0] : total, id: p[1] })) : [{ a: 0, b: total, id: null }];
+    const parts = [];
+    segs.forEach((g) => { const n = Math.max(1, Math.ceil((g.b - g.a) / 36)); for (let q = 0; q < n; q++) parts.push({ a: g.a + ((g.b - g.a) * q) / n, b: g.a + ((g.b - g.a) * (q + 1)) / n, id: q ? null : g.id }); });   // nothing stays up longer than 36 s
+    while (parts.length < 6) {   // still fewer than six stretches: halve the longest
+      let k = 0; parts.forEach((g, i) => { if (g.b - g.a > parts[k].b - parts[k].a) k = i; });
+      const g = parts[k]; if (g.b - g.a < 10) break;
+      parts.splice(k, 1, { a: g.a, b: (g.a + g.b) / 2, id: g.id }, { a: (g.a + g.b) / 2, b: g.b, id: null });
+    }
+    while (parts.length > 6 && parts[parts.length - 1].b - parts[parts.length - 1].a < 6) parts.pop();   // no flash of a new picture in the last seconds
+    parts.forEach((g, i) => { const prev = out.length ? out[out.length - 1][1] : null; put(g.a, g.id && g.id !== prev ? g.id : pick(g.a, g.b, parts[i + 1] && parts[i + 1].id)); });
+  } else {
+    // written episodes are 9–14 lines (60–90 s): a change every two lines, twice after one, gives six stretches by line 9;
+    // the same lines always get the same picture while the episode is still arriving
+    let at = [];
+    for (let p = 0, k = 0; p < Math.max(total, 1); p += [2, 2, 1, 2, 1][k++] || 2) at.push(p);
+    if (!open && at.length < 6 && total >= 6) at = [0, 1, 2, 3, 4, 5].map((k) => Math.floor((k * total) / 6));
+    at.forEach((p, j) => put(p, pick(p, j + 1 < at.length ? at[j + 1] : Math.max(total, p + 1), null)));
+  }
+  V._planKey = key; V._plan = out;
+  return out;
 }
 function stillClip(s) {
   const V = s.visuals, ep = P.ep; if (!V || !ep) return V && V._cur && V._curSid === s.id ? V._cur : null;
@@ -4727,7 +4820,7 @@ document.addEventListener('click', (e) => {
     case 'talk': openTalkSheet(); break;
     case 'talk-mic': if (VOICE_OK) { if (talkRec) talkRec.stop(); else talkListen(); } break;
     case 'hf-again': hfListen(); break;
-    case 'nr-mic': { const i = $('#nr-in'); if (i) { i.blur(); i.value = ''; } if (VOICE_OK && P.needChoice) { holdForHer(); hfListen(); } break; }
+    case 'nr-mic': { const i = $('#nr-in'); if (i) { i.blur(); i.value = ''; ASK.live = false; } if (VOICE_OK && P.needChoice) { holdForHer(); hfListen(); } break; }
     case 'nr-send': askSend(); break;
     case 'hf-stop': if (HF.rec) HF.rec.stop(); break;
     case 'ch-wait': holdForHer(); break;
