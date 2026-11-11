@@ -852,28 +852,28 @@
    "kind": "still",
    "cap": "剧照：magnus-open",
    "src": "v/magnus/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：open-lock",
    "src": "v/magnus/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：open-nohand",
    "src": "v/magnus/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：selene-room",
    "src": "v/magnus/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",

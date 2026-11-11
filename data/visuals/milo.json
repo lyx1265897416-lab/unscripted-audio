@@ -96,49 +96,49 @@
    "kind": "still",
    "cap": "剧照：cover",
    "src": "v/milo/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：hero",
    "src": "v/milo/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：milo cabin",
    "src": "v/milo/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：milo grin",
    "src": "v/milo/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s04",
    "kind": "still",
    "cap": "剧照：loc milo party kitchen",
    "src": "v/milo/s04.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s05",
    "kind": "still",
    "cap": "剧照：loc milo porch",
    "src": "v/milo/s05.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s06",
    "kind": "still",
    "cap": "剧照：loc milo her place",
    "src": "v/milo/s06.mp4",
-   "dur": 6.0
+   "dur": 8.0
   }
  ],
  "pool": [

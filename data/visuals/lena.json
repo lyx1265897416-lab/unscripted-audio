@@ -117,42 +117,42 @@
    "kind": "still",
    "cap": "剧照：dont-trust",
    "src": "v/lena/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：direct_key",
    "src": "v/lena/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：relay_key",
    "src": "v/lena/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：open-last-v2",
    "src": "v/lena/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s04",
    "kind": "still",
    "cap": "剧照：loc_room",
    "src": "v/lena/s04.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s05",
    "kind": "still",
    "cap": "剧照：loc_stairwell",
    "src": "v/lena/s05.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",

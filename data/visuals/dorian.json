@@ -61,56 +61,56 @@
    "kind": "still",
    "cap": "剧照：cover",
    "src": "v/dorian/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：hero",
    "src": "v/dorian/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：kitchen",
    "src": "v/dorian/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：dining",
    "src": "v/dorian/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s04",
    "kind": "still",
    "cap": "剧照：study",
    "src": "v/dorian/s04.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s05",
    "kind": "still",
    "cap": "剧照：terrace",
    "src": "v/dorian/s05.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s06",
    "kind": "still",
    "cap": "剧照：pool",
    "src": "v/dorian/s06.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s07",
    "kind": "still",
    "cap": "剧照：corridor",
    "src": "v/dorian/s07.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",

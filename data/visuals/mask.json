@@ -166,49 +166,49 @@
    "kind": "still",
    "cap": "剧照：cover",
    "src": "v/mask/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：hero",
    "src": "v/mask/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：sc03-start",
    "src": "v/mask/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：look-gallery-v1",
    "src": "v/mask/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s04",
    "kind": "still",
    "cap": "剧照：champagne tower",
    "src": "v/mask/s04.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s05",
    "kind": "still",
    "cap": "剧照：rain window",
    "src": "v/mask/s05.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s06",
    "kind": "still",
    "cap": "剧照：service door",
    "src": "v/mask/s06.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",

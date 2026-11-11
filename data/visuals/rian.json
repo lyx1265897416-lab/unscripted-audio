@@ -145,35 +145,35 @@
    "kind": "still",
    "cap": "剧照：rian-third",
    "src": "v/rian/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：open-key",
    "src": "v/rian/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：open-last",
    "src": "v/rian/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：rian-key",
    "src": "v/rian/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s04",
    "kind": "still",
    "cap": "剧照：plate-gallery",
    "src": "v/rian/s04.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",

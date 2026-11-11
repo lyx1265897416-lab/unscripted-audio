@@ -117,49 +117,49 @@
    "kind": "still",
    "cap": "剧照：cover",
    "src": "v/hear/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：hero",
    "src": "v/hear/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：look day",
    "src": "v/hear/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：look night",
    "src": "v/hear/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s04",
    "kind": "still",
    "cap": "剧照：loc hear car",
    "src": "v/hear/s04.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s05",
    "kind": "still",
    "cap": "剧照：loc hear terrace",
    "src": "v/hear/s05.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s06",
    "kind": "still",
    "cap": "剧照：loc hear mediation",
    "src": "v/hear/s06.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",

@@ -26,42 +26,42 @@
    "kind": "still",
    "cap": "剧照：cover",
    "src": "v/kael/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：hero",
    "src": "v/kael/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s02",
    "kind": "still",
    "cap": "剧照：banquet",
    "src": "v/kael/s02.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s03",
    "kind": "still",
    "cap": "剧照：place jetty",
    "src": "v/kael/s03.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s04",
    "kind": "still",
    "cap": "剧照：place corridor",
    "src": "v/kael/s04.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s05",
    "kind": "still",
    "cap": "剧照：kael idle end first",
    "src": "v/kael/s05.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",

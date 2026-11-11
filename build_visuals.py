@@ -7,6 +7,7 @@
 {"clips":[{"id","src","dur","kind":"open|card|still|idle","cap"}], "pool":[id…]}（pool = 没有合适画面时轮播的万能 live/剧照）"""
 import json, os, subprocess, sys, concurrent.futures as cf
 from pathlib import Path
+import framing as FR
 
 ROOT = Path(__file__).resolve().parent
 P = Path('/Users/vicky/Interactive storyline/projects')
@@ -56,20 +57,18 @@ def dims(f):
 
 
 def square(src, out, a=0.0, b=None):
-    """竖版裁方形：取上中部（人脸多在这里），缩到 SIZE，静音，快启动"""
-    w, h = dims(src); side = min(w, h); y = int(max(0, (h - side) * 0.42))
+    """竖版裁方形：按脸定裁切位置（framing.video_box，Qwen3-VL 找脸；没 key 时取上中部），缩到 SIZE，静音，快启动"""
+    w, h = dims(src)
+    if os.environ.get('OPENROUTER_API_KEY'): x, y, side = FR.video_box(src, a, b, w, h)
+    else: side = min(w, h); x, y = (w - side) // 2, int(max(0, (h - side) * 0.42))
     trim = ['-ss', f'{a:.2f}'] + (['-to', f'{b:.2f}'] if b else [])
-    subprocess.run([FF, '-v', 'error', '-y', *trim, '-i', str(src), '-an', '-vf', f'crop={side}:{side}:{(w - side) // 2}:{y},scale={SIZE}:{SIZE},fps=24,setsar=1,format=yuv420p',
+    subprocess.run([FF, '-v', 'error', '-y', *trim, '-i', str(src), '-an', '-vf', f'crop={side}:{side}:{x}:{y},scale={SIZE}:{SIZE},fps=24,setsar=1,format=yuv420p',
                     '-c:v', 'libx264', '-crf', '30', '-preset', 'veryfast', '-movflags', '+faststart', str(out)], check=True)
 
 
-def kenburns(img, out, secs=6):
-    """剧照缓推：方形取中上部，6 秒从 1.0 缓推到 1.12"""
-    n = secs * 24
-    subprocess.run([FF, '-v', 'error', '-y', '-i', str(img), '-frames:v', str(n), '-vf',
-                    f"scale='if(gt(iw,ih),-2,{SIZE * 2})':'if(gt(iw,ih),{SIZE * 2},-2)',crop={SIZE * 2}:{SIZE * 2}:(iw-{SIZE * 2})/2:(ih-{SIZE * 2})*0.3,"
-                    f"zoompan=z='1+0.12*on/{n}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n}:s={SIZE}x{SIZE}:fps=24,format=yuv420p",
-                    '-c:v', 'libx264', '-crf', '28', '-preset', 'veryfast', '-movflags', '+faststart', str(out)], check=True)
+def kenburns(img, out, secs=8):
+    """剧照：按脸取景的“呼吸式”慢推（framing.still_clip：亚像素逐帧、以脸为锚点、8 秒无缝循环，不抖）"""
+    return FR.still_clip(img, out, secs)
 
 
 def opening_shots(cid):

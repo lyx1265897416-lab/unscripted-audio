@@ -278,14 +278,14 @@
    "kind": "still",
    "cap": "剧照：mii-open-clean",
    "src": "v/mii/s00.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "s01",
    "kind": "still",
    "cap": "剧照：mii",
    "src": "v/mii/s01.mp4",
-   "dur": 6.0
+   "dur": 8.0
   },
   {
    "id": "idle",
