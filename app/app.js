@@ -3948,7 +3948,7 @@ function renderDetailPane() {
     box.innerHTML = `
       <div class="about-block"><h4>Cast</h4>
         <div class="cast">${cast.length ? cast.map((c, i) => `
-          <div class="cast-row">${i === 0 ? `<img src="${esc(avatarOf(s))}" alt="">` : `<span class="ph">${esc((c.name || '?').slice(0, 1))}</span>`}
+          <div class="cast-row">${c.avatar ? `<img src="${esc(c.avatar)}" alt="" loading="lazy">` : i === 0 ? `<img src="${esc(avatarOf(s))}" alt="">` : (c.narr || /^(Narrator|旁白)$/.test(c.name || '')) ? `<span class="ph narr">${ic('wave')}</span>` : `<span class="ph">${esc((c.name || '?').slice(0, 1))}</span>`}
             <div><b>${esc(c.name)}</b><span>${esc(c.role)}</span><em>${ic('mic')} Voice: ${esc(c.voice || '—')}</em></div></div>`).join('') : '<div class="skel" style="height:52px"></div>'}
         </div></div>
       <div class="about-block"><h4>How it works</h4>

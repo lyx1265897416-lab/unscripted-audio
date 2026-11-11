@@ -1653,9 +1653,11 @@ def series_detail(sid, lang):
     for ch in w['characters']:
         v = VOICES[sid].get(ch['name'].split()[0]) or VOICES[sid].get(ch['name'])
         if not v: continue
+        key = ch['name'].split()[0] if ch['name'].split()[0] in VOICES[sid] else ch['name']
+        av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'   # 11-11 介绍页演员表每人一张头像（build_cast_avatars.py）
         cast.append({'name': ch['name'] if lang == 'en' else (ch.get('name_zh') or ch['name']), 'role': ch.get(f'role_{lang}') or ch.get('role_zh', ''),
-                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en')})
-    cast.append({'name': 'Narrator' if lang == 'en' else '旁白', 'role': 'Narrator' if lang == 'en' else '旁白', 'voice': VOICES['NARR']['zh_name'] if lang == 'zh' else VOICES['NARR']['en']})
+                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en'), 'avatar': av if (APP / av).exists() else None})
+    cast.append({'name': 'Narrator' if lang == 'en' else '旁白', 'role': 'Narrator' if lang == 'en' else '旁白', 'voice': VOICES['NARR']['zh_name'] if lang == 'zh' else VOICES['NARR']['en'], 'narr': True})
     d['cast'] = cast
     return d
 

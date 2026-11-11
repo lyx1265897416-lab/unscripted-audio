@@ -379,3 +379,14 @@ id：reborn（带着超强技能重生）、hellqueen（和地狱女王一起养
   现在只有她说了字母 / 序号，或几乎逐字念了选项（`same_words`，相似度 ≥ 0.82）才算选项，其余一律按她的原话现写；理解那一步只负责改识别错字和写明指代。
   编剧提示词加了“严格照做”：她话里点到的每一件具体的事要在前三句里按原样发生、按她的顺序、不打折扣，角色不能拦下或改写她的动作，结尾的提问和选项也从这件事生出来，写完自查要点；先出的开头两句也要求针对她这句话本身回应。
   代价：自己说的话不再秒接预写的那集，要等现写（实测第一句约 3–6 秒，期间有旁白过渡句）。
+
+
+## 介绍页演员表头像补齐（2026-11-11，v65）
+
+她的要求：介绍页的角色头像 / 形象全部补齐（原来只有主角和能来电的角色有头像，其余显示名字首字母）。
+
+- `build_cast_avatars.py`：每个有台词的角色一张 `app/avatars/cast/<剧>.<角色键>.jpg`（320×320，按脸裁）。
+  - 42 张来自现成定装图 / 脸部参考：各剧角色库（magnus、rafael、rowan、rian、island、mii）、perhaps-worlds 的 ref（kael、villa、mask）、Prota 原卡角色图。
+  - 19 张没有任何形象，用主角的图做画风参考、按世界卡的身份设定生成（Waku google/nano-banana-2.1/edit，约 4 credits/张）：dorian 的 Father / Mom / Sebastian / Guard、hear 的 His Assistant、milo 的 Sacha / Evren / Sienna、rian 的 Sera、reborn 的 Thalrex、hellqueen 的 Malachar / Seraphiel / Holloway、heroacad 的 Liora、starmate 的 Marisol / Theo / Rex / Julian、onestat 的 System（发光面板，不是人）。原图在 `data/cast_gen/`（只留本机）。
+  - dorian 的 Father / Mom 原有参考图是侧脸背光；让模型“照同一个人转正脸”出来的脸太像现实里的演员，弃用，改成按身份重新设计的原创脸（提示词写明不像任何真人）。
+- 中转 `series_detail()` 给演员表每一项带 `avatar`；旁白带 `narr`，介绍页显示声波徽标而不是人像。主角仍用剧的头像。
