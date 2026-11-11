@@ -1,7 +1,7 @@
 """音频层（11-11 她要求）：角色音和旁白音量一致；配一条很小声、清亮的 BGM；关键情节加特定音效。
 借鉴阿炫《多角色语音故事》：响度只算高于 -40 dBFS 的 20 毫秒帧；换人处后一句不比前一句响 4 分贝以上；不逐段做动态归一。
 
-  python3 build_audio.py bgm [id…]      每部剧一条 60 秒 BGM（Waku elevenlabs/music-v2，30 credits/条）→ 做成无缝循环 → app/bgm/<id>.mp3
+  python3 build_audio.py bgm [id…]      每部剧一条 60 秒 BGM（Waku elevenlabs/music-v2，15 credits/条）→ 做成无缝循环 → app/bgm/<id>.mp3
   python3 build_audio.py sfxlib         通用音效库（sfx_lib.py，实时写的集用）→ app/sfx/<id>.mp3（约 0.5 credits/秒）
   python3 build_audio.py plan [id…]     Opus（本机 Claude Code）读第 1 集中英文剧本，挑 4–7 处关键音效 → data/sfx/<id>.json
   python3 build_audio.py gen [id…]      按 plan 生成第 1 集专属音效 → cache/sfx_ep1/<id>/<x>.mp3
