@@ -1026,6 +1026,7 @@ h1, h2, h3, h4, p { margin: 0; }
 }
 .narra .nr-stage .pl-art { position: absolute; inset: 0; height: auto; max-height: none; max-width: none; aspect-ratio: auto; border-radius: 0; box-shadow: none; background: transparent; }
 .narra .nr-stage .pl-art img, .narra .nr-stage .pl-art video { object-position: center 30%; }
+.narra .nr-stage .pl-art video { transition: opacity 1.4s ease; }   /* live backgrounds change rarely, and softly */
 /* posters: one frame of each scene clip, on screen the moment the line starts (the clip fades in over it once loaded) */
 .narra .nr-stage .pl-art img.pst { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .9s ease; }
 .narra .nr-stage .pl-art img.pst.on { opacity: 1; animation: nrKb 16s ease-in-out infinite alternate; }

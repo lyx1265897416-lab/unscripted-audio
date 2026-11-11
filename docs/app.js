@@ -624,6 +624,8 @@ const matchGenre = (s, g) => {
 const coverOf = (s) => s.cover || `covers/${s.id}.jpg`;
 /** small covers for cards (covers/t = 360 px ≈ 40 KB, the full one is ≈ 160 KB); falls back to the full cover if the small one is missing */
 const thumbOf = (s) => { const c = coverOf(s); return /^covers\/[\w-]+\.jpg$/.test(c) ? c.replace('covers/', 'covers/t/') : c; };
+/** super-resolved cover (covers/x/<id>.jpg, 1080 px wide) for the big spots — hero, series page, player — on a good link */
+const bigCover = (s) => { const c = coverOf(s); return slowNet() ? thumbOf(s) : (/^covers\/[\w-]+\.jpg$/.test(c) ? c.replace('covers/', 'covers/x/') : c); };
 const thumbImg = (s) => `<img src="${esc(thumbOf(s))}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">`;
 const motionOf = (s) => s.motion || (MOCK ? `motion/${s.id}.mp4` : null);
 const avatarOf = (s) => s.avatar || `avatars/${s.id}.jpg`;
@@ -3439,7 +3441,7 @@ function renderHome() {
       <div class="hero-track" id="hero">
         ${heroes.map((s, i) => `
           <div class="hero-slide" data-act="open" data-id="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.title)}">
-            <img src="${esc(slowNet() ? thumbOf(s) : coverOf(s))}" alt="" ${i ? 'loading="lazy"' : ''} onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
+            <img src="${esc(bigCover(s))}" alt="" ${i ? 'loading="lazy"' : ''} onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
             <div class="hero-info">
               <span class="hero-badge"><span class="dot"></span>Written live from your choices</span>
               <h2 class="hero-title">${esc(s.title)}</h2>
@@ -3698,7 +3700,7 @@ async function showDetail(id) {
   warmEp1(s); warmResume(id);
   if (s.visuals) [...((s.ep1 && s.ep1.visuals) || []).slice(0, 3).map((x) => x.clip), ...(s.visuals.pool || []).slice(0, 1)].forEach((c) => {
     const u = s.visuals.clips[c]; if (!u) return;
-    if (NARRA) { hdIndex(id); const im = new Image(); im.src = absUrl(posterOf(u)); }   // the first pictures (posters) are there before Play
+    if (NARRA) { liveIndex(id); hdIndex(id); const im = new Image(); im.src = absUrl(posterOf(u)); }   // the first pictures (posters) are there before Play
     if (!slowNet() && !(NARRA && HD_IDS.has(id))) clipBlob(u);
   });  // first pictures ready before Play
   if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
@@ -3736,7 +3738,7 @@ function renderDetail() {
         </span>
       </div>
       <div class="dt-main">
-        <div class="dt-cover"><img src="${esc(coverOf(s))}" alt=""></div>
+        <div class="dt-cover"><img src="${esc(slowNet() ? coverOf(s) : bigCover(s))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'"></div>
         <h1 class="dt-title">${esc(s.title)}</h1>
         <p class="dt-lead">${esc(s.lead)}</p>
         <div class="stats">
@@ -3944,13 +3946,13 @@ function renderPlayer() {
     bindScrub($('#pl-bar'));
   }
   const s = byId(P.id); if (!s) return;
-  const cov = slowNet() ? thumbOf(s) : coverOf(s);   // slow link: the small cover (≈40 KB) instead of the full one (≈160 KB)
-  $('#pl-bgimg').style.backgroundImage = `url('${cov}')`;
+  const cov = bigCover(s);   // good link: the super-resolved cover; slow link: the small one (≈40 KB)
+  $('#pl-bgimg').style.backgroundImage = `url('${slowNet() ? thumbOf(s) : coverOf(s)}')`;   // blurred backdrop: the plain cover is enough
   const art = $('#pl-art'); if (art.getAttribute('src') !== cov) { art.onerror = () => { art.onerror = null; art.src = coverOf(s); }; art.src = cov; }
   // 动态封面（Pocket FM 式）：静音循环短片盖在封面上，能播了才淡入；没有短片就只显示封面
   const vid = $('#pl-vid'), mo = motionOf(s);
   if (VS.sid !== s.id) {  // another series: drop the old one's picture at once (its cover shows) instead of leaving it up until the new clip loads
-    VS.sid = s.id; VS.url = null; VS.tok++; hdIndex(s.id); PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
+    VS.sid = s.id; VS.url = null; VS.tok++; liveIndex(s.id); hdIndex(s.id); PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
     [vid, $('#pl-vid2')].forEach((v) => { v.classList.remove('on'); v.oncanplay = null; v.onplaying = null; try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ } delete v.dataset.src; });
     warmVisuals(s);
   }
@@ -3979,6 +3981,14 @@ function clipBlob(url) {
 }
 function warmVisuals(s) {
   const V = s && s.visuals; if (!V) return;
+  if (NARRA && HD_IDS.has(s.id)) {
+    const L = LIVEX[s.id];
+    if (!L || !L.ready) return;   // wait for the live list before fetching anything else
+    if (L.live.length) {          // live mode: only the next live clip, and only on a good link
+      if (!slowNet()) clipBlob(`v/${s.id}/live/${L.live[((L.i || 0) + 1) % L.live.length]}.mp4`);
+      return;
+    }
+  }
   const ids = new Set(V.pool || []);
   const ss = getSess(s.id), ep = P.id === s.id && P.ep;
   ((ep && ep.visuals) || (s.ep1 && s.ep1.visuals) || []).forEach((x) => ids.add(x.clip));
@@ -4010,6 +4020,37 @@ const posterOf = (clipUrl) => String(clipUrl || '').replace(/\.mp4$/, '.jpg');
  * hd/index.json says which clips have one; until it has loaded, and for everything else, the square clips are used. */
 const HDX = {};
 const HD_IDS = new Set(STYLE_REAL.concat(STYLE_SEMI));
+/* live set per series: v/<id>/live/live.json = {"live": [clip ids in episode order]} */
+const LIVEX = {};
+function liveIndex(sid) {
+  if (!NARRA || LIVEX[sid] || !HD_IDS.has(sid)) return;
+  LIVEX[sid] = { live: [], ready: false, i: 0 };
+  fetch(absUrl(`v/${sid}/live/live.json`)).then((r) => (r.ok ? r.json() : null)).then((j) => {
+    LIVEX[sid] = { live: (j && j.live) || [], ready: true, i: 0 };
+    if (LIVEX[sid].live.length) { const im = new Image(); im.src = absUrl(`v/${sid}/live/${LIVEX[sid].live[0]}.jpg`); VS.url = null; }
+  }).catch(() => { LIVEX[sid].ready = true; });
+}
+/** the live clip for this moment: Episode 1 → the fifth of the episode we are in; written episodes → changes every six lines.
+ * While the narrator asks / she answers / the next episode is written, the one that was on stays. */
+function liveClip(s) {
+  liveIndex(s.id);
+  const L = LIVEX[s.id]; if (!L || !L.live.length) return '';
+  const K = L.live.length, ep = P.ep;
+  if (ep && !P.aux && !P.needChoice && !P.gen && !P.loading) {
+    if (ep.kind !== 'live') { const d = audio.duration || ep.dur || 0; if (d) L.i = Math.min(K - 1, Math.floor(((audio.currentTime || 0) / d) * K)); }
+    else L.i = (Math.floor(P.idx / 6) + (ep.n || 0)) % K;
+  }
+  return `v/${s.id}/live/${L.live[L.i || 0]}.mp4`;
+}
+/** slow link: a ~1 MB clip may only load when it won't starve the story's audio (well buffered ahead, or a per-line episode) */
+function liveAffordable() {
+  try {
+    if (!P.ep || P.ep.kind === 'live') return NET.kbs === 0 || NET.kbs > 40;
+    const b = audio.buffered, t = audio.currentTime || 0;
+    for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.5 && b.end(i) >= Math.min((audio.duration || 0) - 1, t + 90)) return true;
+  } catch (e) { /* ignore */ }
+  return false;
+}
 function hdIndex(sid) {
   if (!NARRA || HDX[sid] || !HD_IDS.has(sid)) return;
   HDX[sid] = { video: new Set(), poster: new Set() };
@@ -4066,7 +4107,12 @@ function renderVisual(force) {
   const a = $('#pl-vid'), b = $('#pl-vid2'); if (!a || !b) return;
   const id = visualClipId(s); if (!id) return;
   let url = s.visuals.clips[id];
-  if (NARRA) {
+  const lv = NARRA ? liveClip(s) : '';
+  if (lv) {
+    // 11-11 (3) "a live video behind, not a slideshow": super-resolved seamless loops (build_live.py), one per fifth of the episode
+    url = lv; showPoster(lv, lv);
+    if (url !== VS.url && slowNet() && !liveAffordable()) return;   // slow link: its still picture first; the clip follows once the audio is safely ahead
+  } else if (NARRA) {
     hdIndex(s.id);
     const hd = hdOf(url);
     showPoster(url, hd.video || url); warmPosters(s);
