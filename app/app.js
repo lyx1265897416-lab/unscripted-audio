@@ -1628,7 +1628,8 @@ function playAux(url, { loop = false, volume = 1 } = {}) {
   return new Promise((res) => {
     P.aux = true; P.auxEnd = loop ? null : res;
     audio.loop = loop; audio.volume = volume;
-    audio.src = srcFor(url); audio.playbackRate = 1;
+    audio.src = srcFor(url);
+    audio.playbackRate = loop ? 1 : (S.speed || 1);   // 11-11 the narrator's question / bridge keep the speed she chose (the quiet bed loop stays at 1x); the 5 s wait is real time either way
     const p = audio.play();
     if (p && p.catch) p.catch(() => { if (P.auxEnd === res) { P.auxEnd = null; res(); } });
     if (loop) res();
@@ -4077,7 +4078,6 @@ function renderPlayer() {
         <div class="pl-tools">
           <button class="tool" data-act="speed" id="pl-speed" aria-label="Playback speed"><b>1x</b>Speed</button>
           <button class="tool" data-act="sleep-sheet" id="pl-sleep" aria-label="Sleep timer">${ic('moon')}<span>Sleep</span></button>
-          <button class="tool talk" data-act="talk" aria-label="Talk to the story">${ic('mic')}<span>Talk</span></button>
           <button class="tool" data-act="pl-eps" aria-label="Episode list">${ic('list')}<span>Episodes</span></button>
           <button class="tool" data-act="mode-sheet" id="pl-mode" aria-label="Listening mode"></button>
         </div>
@@ -4111,7 +4111,6 @@ function renderPlayer() {
         <div class="pl-tools">
           <button class="tool" data-act="speed" id="pl-speed" aria-label="Playback speed"><b>1x</b>Speed</button>
           <button class="tool" data-act="sleep-sheet" id="pl-sleep" aria-label="Sleep timer">${ic('moon')}<span>Sleep</span></button>
-          <button class="tool talk" data-act="talk" aria-label="Talk to the story">${ic('mic')}<span>Talk</span></button>
           <button class="tool" data-act="pl-eps" aria-label="Episode list">${ic('list')}<span>Episodes</span></button>
           <button class="tool" data-act="share" id="pl-share" aria-label="Share">${ic('share')}<span>Share</span></button>
         </div>

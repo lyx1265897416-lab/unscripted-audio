@@ -641,10 +641,16 @@ def next_msg(sess, her, bridge=None):
                 ('\nWhile listening to the last episode she also told the story: ' + ' / '.join(f'"{x}"' for x in w) + '. This episode must clearly answer that and go where she wants.')
     if re.match(r'^(她自己说|She says)', her or ''):  # 11-10 她自由说的话：这一集按她的指令演，不绕回预设
         pace += ('\n【最重要】她这次没有选现成的选项，而是自己说了上面那句话。这一集的主线就是执行/回应她这句话：第一句就接住；她要做的事这一集就让它发生、她问的问题角色要正面回答、她要角色做的事角色要有明确反应；'
-                 '不要只回应一句又绕回原来的剧情，不要改成两个选项里的做法，不要替她换成别的意思。语音识别可能有错字，按读音和上下文理解。' if lang == 'zh' else
+                 '不要只回应一句又绕回原来的剧情，不要改成两个选项里的做法，不要替她换成别的意思。语音识别可能有错字，按读音和上下文理解。'
+                 '\n严格照做：她话里点到的每一件具体的事——谁、做什么、对谁、在哪、拿什么、说什么——都要在前三句里按她说的原样发生，一件不漏、不换说法、不打折扣；'
+                 '她说了几步就按她的顺序写几步；角色可以有自己的反应，但不能拦下、否定或改写她已经做出的动作。这一集后面的内容是这件事带来的后果，结尾的提问和两个选项也从这件事往下生出来。'
+                 '写完自查一遍：把她那句话拆成几个要点，逐个确认正文里都有，没有的补上。' if lang == 'zh' else
                  '\n[MOST IMPORTANT] She did not pick a ready-made option; she said the line above in her own words. This episode is about carrying out / answering exactly that: answer it in the first line; '
                  'if she does something, it happens; if she asks something, the character answers it directly; if she tells a character to do something, they clearly react. Do not answer once and drift back to the planned plot, '
-                 'do not swap in one of the two options, do not change her meaning. Speech recognition may contain misheard words: infer from sound and context.')
+                 'do not swap in one of the two options, do not change her meaning. Speech recognition may contain misheard words: infer from sound and context.'
+                 '\nFollow it to the letter: every concrete thing she named — who, does what, to whom, where, with what, says what — must happen as she said it within the first three lines, nothing left out, reworded into something else or watered down; '
+                 'if she gave several steps, write them in her order; characters may react, but may not block, deny or rewrite an action she has taken. The rest of the episode is the consequence of it, and the closing prompt and both choices grow out of it too. '
+                 'Before you finish, check: break her line into its points and make sure each one is in the text; add any that are missing.')
     if bridge:
         pace += (f'\n她回答之后，旁白已经先说了一句：「{bridge}」。这一集紧接着这句往下写，别重复这句的内容。' if lang == 'zh'
                  else f'\nRight after she answered, the narrator already said: "{bridge}". Continue straight from that line without repeating it.')
@@ -668,13 +674,15 @@ def quick_open(sess, her, done_ev=None):
         user = (f'剧：{lead}。{hook}\n' + ('听众本人就是主角（用“你”称呼，性别不限，别给你加性别）。\n' if neutral(s) else '听众本人就是女主（用“你”称呼）。\n') + f'上一集最后几句：\n{tail}\n选择点：{last.get("prompt", "")}\n'
                 + (f'旁白刚说：「{br["text"]}」\n' if br else '') + f'{her}\n\n'
                 '写这一集最开头的两行：第一行是此刻在场、最该回应她的那个角色（通常是主角）对她这句话的直接回应，12 个字以内，口语、符合人设；'
-                '第二行是 NARR 旁白，写这个角色的一个动作或神情，20 个字以内。不要替她做决定，不要一下推进大剧情。')
+                '第二行是 NARR 旁白，写这个角色的一个动作或神情，20 个字以内。不要替她做决定，不要一下推进大剧情。'
+                '她说的是她要做的事 / 要问的话 / 给角色的要求：第一行必须针对这件事本身回应（她做了什么就承认她做了，她问了什么就正面答），不能答非所问，不能把她的做法换成别的。')
     else:
         sysm = 'You write a women-focused serialized audio drama, live. Output exactly two lines, each "Name: line", names only from: ' + ', '.join(cast + ['NARR']) + '. Nothing else.'
         user = (f'Show: {lead}. {hook}\n' + ('The listener is the protagonist ("you"), gender unspecified: never gender them.\n' if neutral(s) else 'The listener is the heroine ("you").\n') + f'Last lines of the previous episode:\n{tail}\nChoice point: {last.get("prompt", "")}\n'
                 + (f'The narrator just said: "{br["text"]}"\n' if br else '') + f'{her}\n\n'
                 'Write the first two lines of the new episode: line 1 is the character in the scene who should answer her (usually the lead), replying directly to what she said, under 10 words, spoken, in character; '
-                'line 2 is NARR: one action or look of his, under 16 words. Don\'t decide for her and don\'t jump the plot ahead.')
+                'line 2 is NARR: one action or look of his, under 16 words. Don\'t decide for her and don\'t jump the plot ahead. '
+                'What she said is what she does / asks / tells a character to do: line 1 must respond to exactly that (acknowledge the action she took, answer the question she asked), never something beside the point, never a different action in its place.')
     got = []; ev = threading.Event(); buf = {'b': ''}
     def feed(c):
         buf['b'] += c
@@ -1057,8 +1065,8 @@ def understand(sess, text, timeout=2.4):
           f'听众用语音回答，语音识别结果（可能有同音错字、漏字、人名听错）：“{text}”\n\n'
           '1. 结合情境、角色名和读音，把识别结果改成她最可能真正说的话（heard，保持她的原意和口吻，只改明显的识别错误；本来就通顺就原样保留）。'
           '例如“谁一/学二”多半是“选一/选二”，人名按读音改成剧里的角色名。\n'
-          '2. 判断 kind：她用字母或序号指某个选项（A/B、第一个、第二个）→ C1 或 C2；她说的和某个选项是同一个动作、同一个意思、没有多出来的要求 → C1 或 C2；'
-          '她说了别的做法/问题/要求，或在选项基础上加了自己的要求、或只说了“好/嗯”这类含糊的话 → FREE。拿不准就 FREE。\n'
+          '2. 判断 kind：她用字母或序号指某个选项（A/B、第一个、第二个）→ C1 或 C2；她把某个选项的原话几乎逐字念了出来 → C1 或 C2；'
+          '其余一律 FREE：只要她是用自己的话说的（哪怕意思和某个选项接近），或说了别的做法/问题/要求、或只说了“好/嗯”这类含糊的话，都是 FREE。拿不准就 FREE。\n'
           '3. intent：用一句话（' + ('中文' if lang == 'zh' else 'English') + '）说清她想做什么、想问谁什么、想让谁做什么；她话里的“你/他/她/那个电话/那件事”分别指剧里的哪个人、哪件事，要写明（FREE 时必填）。\n'
           '只输出 JSON：{"heard":"...","kind":"C1|C2|FREE","intent":"..."}')
     # 三个快模型同时问，谁先给出有效 JSON 用谁（11-10 单发时连 OpenRouter 握手超时，理解失败就又按原话误会了）
@@ -1091,6 +1099,14 @@ def her_understood(text, u, via, lang):
     return her
 
 
+def same_words(a, b):
+    """她说的和选项是不是几乎逐字相同（去标点空格大小写后相似度 ≥ 0.82，且长度相差不到三成）"""
+    import difflib
+    x = re.sub(r'[\W_]+', '', (a or '').lower()); y = re.sub(r'[\W_]+', '', (b or '').lower())
+    if not x or not y or abs(len(x) - len(y)) > 0.3 * max(len(x), len(y)): return False
+    return x == y or difflib.SequenceMatcher(None, x, y).ratio() >= 0.82
+
+
 def prepare_next(sess, text, via):
     """她用语音/打字回了一句：先理解（改同音错字、判断是不是选项、概括她的意图，最多 2.6 秒），再按理解后的版本开写下一集。
     11-10：先按原话写时，编剧把“她问 Sienna 刚才那通电话是谁”写反成了“你的电话”——意图必须一起给编剧。返回 {'n','text','matched','free','her'}。"""
@@ -1099,8 +1115,13 @@ def prepare_next(sess, text, via):
     k = pick_letter(text) if len(ch) >= 2 else None
     if k is not None: out['matched'] = ch[k]; return out
     u = understand(sess, text, 2.0) if text and len(ch) >= 2 else None  # 长连接后通常 0.9–1.5 秒；最多等 2 秒，超时按原话写
-    if u and u['kind'] in ('C1', 'C2'): out['matched'] = ch[0 if u['kind'] == 'C1' else 1]; return out
     heard = ((u or {}).get('heard') or '').strip()
+    # 11-11 她要求：严格按她说的写。原来模型觉得“意思差不多”就换成现成选项（她说“我就不走，今天就待在这了”，被换成选项
+    # “我不上车，我要站在这儿亲眼看看下来的是什么人”，后面按选项写，她的话就没了）。现在只有她几乎逐字念了选项才算选项，其余一律按她的原话现写。
+    if u and u['kind'] in ('C1', 'C2'):
+        c = ch[0 if u['kind'] == 'C1' else 1]
+        if same_words(text, c) or same_words(heard, c): out['matched'] = c; return out
+        u['kind'] = 'FREE'
     k = pick_letter(heard) if heard and len(ch) >= 2 else None
     if k is not None: out['matched'] = ch[k]; return out
     br = sel_bridge(sess, n - 1)
