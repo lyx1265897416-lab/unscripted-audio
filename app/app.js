@@ -4133,7 +4133,7 @@ function stillIndex(sid) {
 function stillOf(s, id) {
   const V = s.visuals, c = V && V.clips[id]; if (!c) return { low: '', hi: '' };
   const st = STX[s.id] && STX[s.id].set.has(id) ? `v/${s.id}/still/${id}.jpg` : '', hd = hdOf(c).poster || '', sq = posterOf(c);
-  if (slowNet()) return { low: hd ? '' : sq, hi: hd || st || sq };   // slow link: the 720 px picture (≈50 KB) is enough
+  if (slowNet()) return { low: hd || sq, hi: st || hd || sq };   // slow link: the small picture first (≈50 KB), the sharp one over it once it has loaded
   return { low: '', hi: st || hd || sq };
 }
 /** Which picture belongs to which part of the episode — a pure function of the position, so dragging the bar, tapping a line
