@@ -38,6 +38,12 @@ const store = {
 const Q = new URLSearchParams(location.search);
 const LANG = Q.get('lang') === 'zh' ? 'zh' : 'en';
 let MOCK = Q.get('mock') === '1';
+/* 11-11 a second UI kept beside the classic one: ?ui=narra — product name "narra", lyric-style player (review with 阿炫):
+ * full-bleed scene picture behind, the story scrolling like lyrics (earlier lines dim, the current one bright), no cover box or
+ * big title, call + share at the top right, the listening mode in the bottom toolbar, a small voice bubble at each choice point. */
+const NARRA = Q.get('ui') === 'narra';
+const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
+if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
 if (Q.has('k')) {
   store.set('ua.k', Q.get('k'));
   Q.delete('k');
@@ -546,12 +552,13 @@ const SHELF_ORDER = ['magnus', 'reborn', 'rian', 'hellqueen', 'island', 'starmat
 const NEW_BATCH = ['reborn', 'hellqueen', 'crackhigh', 'onestat', 'mythborne', 'heroacad', 'starmate', 'academia'];
 /** keep a shelf's order but alternate earlier series and the new batch, so neither clumps (taste-sorted rows stay roughly taste-sorted) */
 const weave = (list) => {
+  if (NARRA) return list.filter((x) => NEW_BATCH.indexOf(x.id) < 0).concat(list.filter((x) => NEW_BATCH.indexOf(x.id) >= 0));
   const a = list.filter((x) => NEW_BATCH.indexOf(x.id) < 0), b = list.filter((x) => NEW_BATCH.indexOf(x.id) >= 0), out = [];
   const firstNew = list.length && NEW_BATCH.indexOf(list[0].id) >= 0;
   while (a.length || b.length) { const p = firstNew ? [b, a] : [a, b]; if (p[0].length) out.push(p[0].shift()); if (p[1].length) out.push(p[1].shift()); }
   return out;
 };
-const shelfSort = (list) => list.map((x, i) => [x, SHELF_ORDER.indexOf(x.id), i]).sort((a, b) => (a[1] < 0 ? 999 + a[2] : a[1]) - (b[1] < 0 ? 999 + b[2] : b[1])).map((x) => x[0]);
+const shelfSort = (list) => (NARRA ? weave(list) : list).map((x, i) => [x, NARRA ? i : SHELF_ORDER.indexOf(x.id), i]).sort((a, b) => (a[1] < 0 ? 999 + a[2] : a[1]) - (b[1] < 0 ? 999 + b[2] : b[1])).map((x) => x[0]);
 const DETAIL = {};
 const byId = (id) => SERIES.find((s) => s.id === id);
 const GENRES = ['Werewolf', 'Billionaire', 'Romance', 'Fantasy', 'Adventure', 'Academy', 'Mystery', 'Thriller', 'Reality show', 'Cozy'];  // 11-10 Prota Top10 加冒险、学院
@@ -614,7 +621,7 @@ function openSheet(html, opts = {}) {
   if (prev) prev.el.classList.add('under');
   const entry = Object.assign({ el }, opts);
   sheetStack.push(entry);
-  root.classList.add('on');
+  root.classList.add('on'); syncPass();
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')));
   return entry;
 }
@@ -628,7 +635,9 @@ function closeSheet(entry) {
   const top = sheetStack[sheetStack.length - 1];
   if (top) top.el.classList.remove('under');
   else $('#sheets').classList.remove('on');
+  syncPass();
 }
+function syncPass() { const t = sheetStack[sheetStack.length - 1]; $('#sheets').classList.toggle('nr-pass', !!(t && t.mini)); }
 function closeAllSheets() { while (sheetStack.length) closeSheet(); }
 const topSheet = () => sheetStack[sheetStack.length - 1];
 function refreshSheets() { sheetStack.forEach((s) => s.refresh && s.refresh()); }
@@ -957,7 +966,7 @@ function setMediaSession() {
   try {
     const art = new URL(coverOf(s), location.href).toString();
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: `Ep ${P.ep.n} · ${P.ep.title || ''}`, artist: s.title, album: 'Unscripted Audio',
+      title: `Ep ${P.ep.n} · ${P.ep.title || ''}`, artist: s.title, album: BRAND,
       artwork: [{ src: art, sizes: '720x1280', type: 'image/jpeg' }],
     });
   } catch (e) { /* ignore */ }
@@ -1175,6 +1184,8 @@ function openChoiceSheet() {
   const nextN = ep.n + 1;
   const locked = !isUnlocked(P.id, nextN);
   const choices = (ep.choices || []).slice(0, 2);
+  // narra: hands-free / lean-back answers get a small voice bubble over the player (question + choices sit in the lyrics); "Type instead" opens the full sheet
+  const mini = NARRA && playerOpen && ((modeOf() === 'voice' && VOICE_OK && !VI.denied) || modeOf() === 'auto');
   const html = `
     <div class="ch-top">
       <img src="${esc(avatarOf(s))}" alt="">
@@ -1200,12 +1211,14 @@ function openChoiceSheet() {
     </div>
     <div class="ch-auto" id="ch-auto" hidden></div>
     <button class="ch-mode" data-act="mode-sheet">${ic(MODES[modeOf()].icon, 'xs')} ${MODES[modeOf()].name} · change how you listen</button>
+    <div class="ch-mini-row">${VOICE_OK ? `<button class="link-btn" data-act="hf-again">${ic('mic', 'xs')} Speak</button>` : ''}<button class="link-btn" data-act="ch-expand">${ic('pen', 'xs')} Type instead</button></div>
     <div class="ch-err" id="ch-err" hidden></div>`;
-  const entry = openSheet(html, { cls: 'choice-sheet', kind: 'choice', onClose: () => { stopMic(); hfStop(); stopAutoCountdown(); } });
+  const entry = openSheet(html, { cls: 'choice-sheet' + (mini ? ' nr-mini' : ''), kind: 'choice', mini, onClose: () => { stopMic(); hfStop(); stopAutoCountdown(); $('#player').classList.remove('nr-ask'); } });
+  if (mini) $('#player').classList.add('nr-ask');
   const inp = $('#ch-text', entry.el), send = $('.ch-send', entry.el);
   inp.addEventListener('input', () => { send.disabled = !inp.value.trim(); stopAutoCountdown(); });
   inp.addEventListener('focus', holdForHer);
-  entry.el.addEventListener('pointerdown', (e) => { if (!e.target.closest('[data-act="choose"],[data-act="silent"],.ch-send')) holdForHer(); }, { capture: true });
+  entry.el.addEventListener('pointerdown', (e) => { if (!e.target.closest('[data-act="choose"],[data-act="silent"],.ch-send' + (NARRA ? ',.hf-orb,[data-act="hf-again"]' : ''))) holdForHer(); }, { capture: true });
   $('form', entry.el).addEventListener('submit', (e) => {
     e.preventDefault();
     const t = inp.value.trim(); if (!t) return;
@@ -1729,6 +1742,10 @@ function updateModePill() {
   const note = $('#pl-note');
   if (note) note.hidden = !(VOICE_OK && !LOCK_VOICE_OK && IOS && modeOf() === 'voice');
   const m = MODES[modeOf()];
+  if (NARRA) {
+    if (el.dataset.m !== modeOf()) { el.dataset.m = modeOf(); el.innerHTML = `${ic({ voice: 'headphones', auto: 'volume', tap: 'hand' }[modeOf()])}<span>${{ voice: 'Hands-free', auto: 'Lean back', tap: 'Tap' }[modeOf()]}</span>`; }  // its own icons: Talk (mic) and Sleep (moon) sit in the same row
+    return;
+  }
   const html = `${ic(m.icon, 'sm')}<span><b>${m.name}</b> · ${m.short}</span>${ic('chevR', 'xs')}`;
   if (el.dataset.m !== modeOf()) { el.dataset.m = modeOf(); el.innerHTML = html; }
 }
@@ -2034,7 +2051,7 @@ function playAd(onDone) {
   ad.innerHTML = `
     <span class="ad-tag">AD</span><span class="ad-count" id="ad-c">5</span>
     <div class="ad-art"><svg viewBox="0 0 24 24" fill="none" stroke="#140906" stroke-width="2.6" stroke-linecap="round"><path d="M5 10v4M9.5 6.5v11M14 9v6M18.5 7.5v9"/></svg></div>
-    <h3>Unscripted VIP</h3>
+    <h3>${NARRA ? 'narra' : 'Unscripted'} VIP</h3>
     <p>Every episode unlocked. Every choice, no waiting. (Simulated ad)</p>
     <div class="ad-bar"><i id="ad-bar"></i></div>`;
   requestAnimationFrame(() => requestAnimationFrame(() => { const b = $('#ad-bar'); if (b) b.style.width = '100%'; }));
@@ -2124,7 +2141,7 @@ function openProfile() {
       <button class="opt" data-act="store"><span class="ol">${coinIc()} Coin store</span>${ic('chevR', 'sm')}</button>
       <button class="opt danger" data-act="reset"><span class="ol">Reset all data</span>${ic('trash', 'sm')}</button>
     </div>
-    <p class="foot-note" style="padding-bottom:0">${MOCK ? 'Demo mode · mock content' : 'Live mode'} · Unscripted Audio</p>`;
+    <p class="foot-note" style="padding-bottom:0">${MOCK ? 'Demo mode · mock content' : 'Live mode'} · ${BRAND}</p>`;
   const entry = openSheet(body(), { kind: 'profile' });
   entry.refresh = () => { const v = ($('#pf-name', entry.el) || {}).value; entry.el.innerHTML = '<div class="grab"></div>' + body(); if (v != null) $('#pf-name', entry.el).value = v; };
 }
@@ -3288,7 +3305,7 @@ function refreshCoins() {
 
 const topbar = () => `
   <header class="topbar">
-    <div class="logo">${LOGO}<span class="logo-word">unscripted<em>.</em></span></div>
+    <div class="logo">${LOGO}<span class="logo-word">${NARRA ? 'narra' : 'unscripted'}<em>.</em></span></div>
     <div class="tb-actions">
       <button class="icon-btn" data-act="go" data-to="explore" aria-label="Search">${ic('search')}</button>
       <button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span></button>
@@ -3763,7 +3780,47 @@ function renderPlayer() {
   const el = $('#player');
   if (!el.dataset.built) {
     el.dataset.built = '1';
-    el.innerHTML = `
+    const vids = `<img id="pl-art" alt=""><video id="pl-vid" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video><video id="pl-vid2" muted loop playsinline preload="auto" aria-hidden="true"></video>`;
+    const note = `<button class="pl-note" id="pl-note" data-act="open-safari" hidden>${ic('lock', 'xs')}<span>${tz('Answering with the screen locked needs Safari — tap to copy the link', '锁屏也能语音回答需要用 Safari 打开 · 点这里复制链接')}</span></button>`;
+    const transport = `
+        <div class="pl-prog">
+          <div class="pbar" id="pl-bar"><div class="trk"><div class="fill" id="pl-fill"></div><span class="knob" id="pl-knob"></span><div class="segs" id="pl-segs" hidden></div></div></div>
+          <div class="times"><span id="pl-el">0:00</span><span id="pl-tot">0:00</span></div>
+        </div>
+        <div class="pl-ctrl">
+          <button class="icon-btn edge" data-act="prev" aria-label="Previous episode">${ic('prev')}</button>
+          <button class="icon-btn" data-act="back10" aria-label="Back 10 seconds">${ic('back10')}</button>
+          <button class="big-play" data-act="toggle" id="pl-play" aria-label="Play">${ic('play')}</button>
+          <button class="icon-btn" data-act="fwd10" aria-label="Forward 10 seconds">${ic('fwd10')}</button>
+          <button class="icon-btn edge" data-act="next" aria-label="Next episode">${ic('next')}</button>
+        </div>`;
+    // narra: no cover box, no big title. The picture fills the top behind everything, the story scrolls like lyrics,
+    // call + share sit at the top right, and the listening mode is the last item of the bottom toolbar (where Share was).
+    el.innerHTML = NARRA ? `
+      <div class="pl-bg"><div class="pl-bg-img" id="pl-bgimg"></div></div>
+      <div class="nr-stage"><div class="pl-art">${vids}</div></div>
+      <div class="nr-shade"></div>
+      <header class="pl-top">
+        <button class="icon-btn" data-act="close-player" aria-label="Close player">${ic('down')}</button>
+        <div class="pl-top-t"><b id="pl-series" translate="no"></b><small id="pl-ep"></small></div>
+        <button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>
+        <button class="icon-btn" data-act="share" id="pl-share" aria-label="Share">${ic('share')}</button>
+      </header>
+      <div class="pl-body">
+        <div class="nr-gap"><span class="pl-badge" id="pl-badge" hidden></span></div>
+        ${note}
+        <div class="nr-lyr" id="nr-lyr"><div class="nr-roll" id="nr-roll"></div></div>
+        <div class="pl-sub" id="pl-sub" hidden></div>
+        <div class="pl-gen" id="pl-gen" hidden></div>${transport}
+        <div class="pl-tools">
+          <button class="tool" data-act="speed" id="pl-speed" aria-label="Playback speed"><b>1x</b>Speed</button>
+          <button class="tool" data-act="sleep-sheet" id="pl-sleep" aria-label="Sleep timer">${ic('moon')}<span>Sleep</span></button>
+          <button class="tool talk" data-act="talk" aria-label="Talk to the story">${ic('mic')}<span>Talk</span></button>
+          <button class="tool" data-act="pl-eps" aria-label="Episode list">${ic('list')}<span>Episodes</span></button>
+          <button class="tool" data-act="mode-sheet" id="pl-mode" aria-label="Listening mode"></button>
+        </div>
+        <span hidden><b id="pl-title"></b><button data-act="pl-save" id="pl-save"></button></span>
+      </div>` : `
       <div class="pl-bg"><div class="pl-bg-img" id="pl-bgimg"></div></div>
       <header class="pl-top">
         <button class="icon-btn" data-act="close-player" aria-label="Close player">${ic('down')}</button>
@@ -3815,7 +3872,7 @@ function renderPlayer() {
     vid.dataset.src = mo; vid.classList.remove('on'); vid.src = mo;
     vid.oncanplay = () => { vid.classList.add('on'); vid.play().catch(() => {}); };
   } else if (vid.paused) vid.play().catch(() => {});
-  $('#pl-series').textContent = s.title;
+  if (NARRA) fitTitle(s.title); else $('#pl-series').textContent = s.title;
   $('#pl-share').dataset.id = s.id;
   updateModePill();
   updatePlayerUI();
@@ -3904,8 +3961,10 @@ function updatePlayerUI(force) {
 
   // generating card / up-next card
   const gen = $('#pl-gen'), sub = $('#pl-sub');
-  if (P.gen || P.loading || P.upNext) {
+  if (NARRA && !P.upNext) { gen.hidden = true; gen.dataset.k = ''; sub.hidden = true; renderVisual(); renderLyrics(force); }  // narra: writing / loading states are lines of the lyric stream
+  else if (P.gen || P.loading || P.upNext) {
     gen.hidden = false; sub.hidden = true;
+    if (NARRA) renderLyrics(force);
     const key = P.gen ? `gen${P.gen.n}:${P.gen.status}` : P.loading ? 'load' : `up${P.upNext.ep.n}:${P.upNext.left}`;
     if (gen.dataset.k !== key) {
       gen.dataset.k = key;
@@ -3942,6 +4001,142 @@ function updatePlayerUI(force) {
   }
   tickUI();
 }
+/* ---------- narra: the story as scrolling lyrics ----------
+ * Items: her answer that led here → every line of the episode → at a choice point the question + the two choices →
+ * while the next episode is written: what she said + the writing status. Earlier lines are dim, the current one is bright
+ * and fills in word by word as it is spoken (timing is linear inside the line), the next two are faint. Tap a line to jump to it. */
+const LY = { sig: '', cur: -2, it: [], nodes: [], tok: null, placed: 0 };
+function lyricState() {
+  const ep = P.ep, s = byId(P.id), ss = getSess(P.id);
+  const it = []; let cur = -1;
+  const add = (o) => it.push(o) - 1;
+  if (!ep || P.loading) {
+    if (s && s.hook) add({ k: 'line', who: 'NARR', text: s.hook, i: -1 });
+    cur = add({ k: 'sys', text: P.loadStatus === 'voicing' ? 'Voicing Episode 1…' : 'Preparing Episode 1…' });
+    return { it, cur };
+  }
+  const said = ss && ss.chosen ? ss.chosen[ep.n - 1] : '';
+  if (ep.n > 1 && said) add({ k: 'you', text: said });
+  if (ep.kind === 'live') {
+    const lines = ep.lines || [], n = lines.length, at = [];
+    lines.forEach((l, i) => { at[i] = add({ k: 'line', who: l.who, text: cleanText(l.text), i, pend: l.url == null }); });
+    const unvoiced = P.idx < n && lines[P.idx].url == null;          // written, its voice is still on the way
+    const li = P.idx >= n ? n - 1 : unvoiced ? P.idx - 1 : P.idx;
+    cur = li >= 0 ? at[li] : -1;
+    if (!P.jobDone && !P.needChoice) { const w = add({ k: 'sys', text: 'writing next lines…' }); if (cur < 0) cur = w; }
+  } else {
+    const cues = ep.cues || [], base = it.length, t = audio.currentTime || 0;
+    cues.forEach((c, i) => add({ k: 'line', who: c.who, text: cleanText(c.text), i }));
+    if (!cues.length) cur = add({ k: 'line', who: 'NARR', text: s ? s.hook : '', i: -1 });
+    else {
+      let k = cues.findIndex((x) => t >= x.s && t < x.e);
+      if (k < 0) { for (let i = cues.length - 1; i >= 0; i--) if (cues[i].s <= t) { k = i; break; } }
+      cur = base + Math.max(0, k);
+    }
+  }
+  if (P.needChoice || P.gen) {
+    const q = add({ k: 'q', text: ep.prompt || (LANG === 'zh' ? '你怎么做？' : 'What do you do?') });
+    if (P.needChoice) { cur = q; (ep.choices || []).slice(0, 2).forEach((c, i) => add({ k: 'opt', i, text: c })); }
+    else {
+      const g = P.gen;
+      if (g.via === 'auto') add({ k: 'note', text: 'The story carries on by itself…' });
+      else if (g.via === 'silence' || !g.text) add({ k: 'you', text: '(stayed silent)', ui: true });
+      else add({ k: 'you', text: g.text });
+      cur = add({ k: 'sys', text: { writing: 'Writing your episode…', voicing: 'Voicing the first lines…', done: 'Starting…' }[g.status] || 'Writing your episode…' });
+    }
+  }
+  return { it, cur };
+}
+function lyHtml(o, j) {
+  const t = `<span class="ll-t" ${o.ui ? '' : 'translate="no"'}>${esc(o.text)}</span>`;
+  if (o.k === 'line') {
+    const nr = !o.who || o.who === 'NARR';
+    return `<div class="ll ${nr ? 'narr' : 'say'}${o.pend ? ' pend' : ''}" ${o.i >= 0 ? `data-act="ly-seek" data-j="${j}"` : ''}>${nr ? '' : `<span class="ll-who" translate="no">${esc(o.who)}</span>`}${t}</div>`;
+  }
+  if (o.k === 'you') return `<div class="ll you"><span class="ll-who">You</span>${t}</div>`;
+  if (o.k === 'q') return `<div class="ll q"><span class="ll-who">Your move</span>${t}</div>`;
+  if (o.k === 'opt') return `<button class="ll opt" data-act="choose" data-i="${o.i}"><i>${'AB'[o.i]}</i>${t}</button>`;
+  if (o.k === 'note') return `<div class="ll note"><span class="ll-t">${esc(o.text)}</span></div>`;
+  return `<div class="ll sys">${waveBars(7)}<span class="ll-t">${esc(o.text)}</span></div>`;
+}
+function renderLyrics(force) {
+  const box = $('#nr-lyr'), roll = $('#nr-roll'); if (!box || !roll) return;
+  const s = byId(P.id);
+  const { it, cur } = lyricState();
+  const sig = [P.id, P.ep ? P.ep.n : 0, P.needChoice ? 'c' : '', P.gen ? 'g' + P.gen.status : ''].join('|') + '|' + it.map((o) => o.k[0] + (o.pend ? 'p' : '') + o.text.length).join(',');
+  if (force || sig !== LY.sig) {
+    LY.sig = sig; LY.cur = -2; LY.tok = null;
+    box.style.setProperty('--accent-l', s && s.accent ? `color-mix(in srgb, ${s.accent} 58%, #fff)` : 'var(--b)');
+    roll.innerHTML = it.map(lyHtml).join('');
+    LY.nodes = Array.from(roll.children);
+  }
+  LY.it = it;
+  if (cur !== LY.cur) {
+    const old = LY.nodes[LY.cur], oi = old && it[LY.cur];
+    if (old && oi && LY.tok) { const t = $('.ll-t', old); if (t) t.textContent = oi.text; }
+    LY.tok = null; LY.cur = cur;
+    LY.nodes.forEach((n, j) => { n.classList.toggle('cur', j === cur); n.classList.toggle('past', j < cur); n.classList.toggle('far', j > cur + 2); });
+    const o = it[cur], node = LY.nodes[cur];
+    if (o && node && o.k === 'line' && !o.pend && o.i >= 0) {   // split the current line so it can fill in as it is spoken
+      const parts = o.text.match(/[㐀-鿿豈-﫿぀-ヿ]|[^\s㐀-鿿豈-﫿぀-ヿ]+\s*|\s+/g) || [o.text];
+      let n = 0; const ends = parts.map((x) => (n += x.trim().length || 0));
+      const t = $('.ll-t', node);
+      if (t && n) { t.innerHTML = parts.map((x) => `<span class="w">${esc(x)}</span>`).join(''); LY.tok = { els: Array.from(t.children), ends, total: n, on: -1 }; }
+    }
+    placeLyrics();
+  }
+  karaoke();
+}
+function placeLyrics() {
+  const box = $('#nr-lyr'), roll = $('#nr-roll'), n = LY.nodes[LY.cur]; if (!box || !roll || !n) return;
+  LY.placed = Date.now();
+  const H = box.clientHeight, room = H - n.offsetHeight;
+  let extra = 0;   // a question keeps its two choices in view
+  if (LY.it[LY.cur] && LY.it[LY.cur].k === 'q') for (let j = LY.cur + 1; j < LY.nodes.length; j++) extra += LY.nodes[j].offsetHeight + 8;
+  const lastOne = !LY.nodes.slice(LY.cur + 1).some((x) => !x.classList.contains('far'));   // nothing after it (e.g. "Writing your episode…"): sit lower, more of what came before stays in view
+  const top = Math.max(H * 0.06, Math.min(H * (lastOne ? 0.56 : 0.42), room - extra - H * 0.08));   // the current line sits a little below the middle-top: two earlier lines stay readable above it
+  roll.style.transform = `translateY(${Math.round(top - n.offsetTop)}px)`;
+}
+function lyProgress() {
+  const o = LY.it[LY.cur], ep = P.ep; if (!o || o.k !== 'line' || !ep) return 0;
+  if (P.needChoice || P.gen) return 1;
+  if (P.aux) return 0;
+  if (ep.kind === 'live') return !P.waiting && audio.duration ? clamp((audio.currentTime / audio.duration) * 1.04, 0, 1) : 0;
+  const c = (ep.cues || [])[o.i]; if (!c) return 0;
+  return clamp((((audio.currentTime || 0) - c.s) / Math.max(0.4, c.e - c.s)) * 1.08, 0, 1);
+}
+function karaoke() {
+  const k = LY.tok; if (!k) return;
+  const done = lyProgress() * k.total;
+  let on = -1; for (let i = 0; i < k.ends.length; i++) { if (k.ends[i] <= done + 0.5) on = i; else break; }
+  if (on === k.on) return;
+  k.els.forEach((e, i) => e.classList.toggle('on', i <= on)); k.on = on;
+}
+function lySeek(j) {
+  const o = (LY.it || [])[j], ep = P.ep;
+  if (!o || o.k !== 'line' || !ep || P.needChoice || P.gen || P.loading || j === LY.cur) return;
+  if (ep.kind === 'live') { const l = (ep.lines || [])[o.i]; if (l && l.url) { P.idx = o.i; liveAdvance(); } return; }
+  const c = (ep.cues || [])[o.i]; if (!c) return;
+  try { audio.currentTime = c.s + 0.02; } catch (e) { /* ignore */ }
+  tickUI();
+}
+if (NARRA) {
+  setInterval(() => {
+    if (!playerOpen) return;
+    if (LY.tok && isPlaying()) karaoke();
+    if (Date.now() - LY.placed > 1500) placeLyrics();   // fonts / the address bar change heights after the first paint
+  }, 110);
+  window.addEventListener('resize', () => placeLyrics());
+}
+/** narra header: the series title; scrolls slowly when it doesn't fit */
+function fitTitle(title) {
+  const b = $('#pl-series'); if (!b || b.dataset.t === title) return;
+  b.dataset.t = title; b.classList.remove('mq'); b.textContent = title;
+  requestAnimationFrame(() => {
+    if (b.dataset.t !== title || b.scrollWidth <= b.clientWidth + 2) return;
+    b.classList.add('mq'); b.innerHTML = `<span>${esc(title)}<i></i>${esc(title)}<i></i></span>`;
+  });
+}
 const miniSig = () => [P.id, P.ep && P.ep.n, P.ep && P.ep.title, !!P.gen, P.gen && P.gen.n, P.loading, P.needChoice, isPlaying()].join('|');
 function renderMiniLight() {
   const m = $('#mini');
@@ -3949,6 +4144,7 @@ function renderMiniLight() {
 }
 function renderSubtitle(force) {
   renderVisual();
+  if (NARRA) { renderLyrics(force); return; }
   const sub = $('#pl-sub'); const ep = P.ep;
   if (!ep) { sub.innerHTML = ''; return; }
   const s = byId(P.id);
@@ -4187,6 +4383,8 @@ document.addEventListener('click', (e) => {
     case 'hf-again': hfListen(); break;
     case 'hf-stop': if (HF.rec) HF.rec.stop(); break;
     case 'ch-wait': holdForHer(); break;
+    case 'ch-expand': { const t = topSheet(); if (t && t.kind === 'choice') { t.mini = false; t.el.classList.remove('nr-mini'); $('#player').classList.remove('nr-ask'); syncPass(); holdForHer(); const i = $('#ch-text', t.el); if (i) setTimeout(() => { try { i.focus({ preventScroll: true }); } catch (x) { /* ignore */ } }, 80); } break; }
+    case 'ly-seek': lySeek(+el.dataset.j); break;
     case 'me-chip': { const t = $('#pf-me'); if (t) { t.value = (t.value ? t.value.trim() + ' ' : '') + el.dataset.t; t.focus(); } break; }
     case 'ul-coins': {
       const t = topSheet(); if (!t || t.kind !== 'unlock') break;
@@ -4208,7 +4406,7 @@ document.addEventListener('click', (e) => {
     case 'call-silent': sendCallTurn('', 'silence'); break;
     case 'call-mute': toggleCallMute(); break;
     case 'open-safari': {
-      const u = location.origin + location.pathname + '?k=' + encodeURIComponent(TOKEN) + '&lang=' + LANG + (TTS !== 'v4' ? '&tts=' + TTS : '');
+      const u = location.origin + location.pathname + '?k=' + encodeURIComponent(TOKEN) + '&lang=' + LANG + (TTS !== 'v4' ? '&tts=' + TTS : '') + (NARRA ? '&ui=narra' : '');
       const done = () => toast(tz('Link copied — open Safari and paste it', '链接已复制，打开 Safari 粘贴到地址栏'));
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(done).catch(() => window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u));
       else window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u);
@@ -4294,7 +4492,7 @@ function onEpisodeTap(id, n, kind) {
 
 async function shareSeries(id) {
   const s = byId(id); if (!s) return;
-  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1');
+  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1'); if (NARRA) q.set('ui', 'narra');
   const url = `${location.origin}${location.pathname}?${q}#/series/${encodeURIComponent(id)}`;
   let ok = false;
   try {
@@ -4335,13 +4533,13 @@ let obStep = 0, obGenres = [];
 function renderOnboard() {
   const el = $('#onboard');
   el.hidden = false;
-  const pick = ['magnus', 'reborn', 'rian'].map(byId).filter(Boolean);
+  const pick = (NARRA ? ['magnus', 'rian', 'rafael'] : ['magnus', 'reborn', 'rian']).map(byId).filter(Boolean);
   const steps = `<div class="ob-steps">${[0, 1, 2].map((i) => `<i class="${i <= obStep ? 'on' : ''}"></i>`).join('')}</div>`;
   let body = '';
   if (obStep === 0) {
     body = `
       <div class="ob-body">
-        <div class="logo" style="justify-content:center;margin-top:8px">${LOGO}<span class="logo-word">unscripted<em>.</em></span></div>
+        <div class="logo" style="justify-content:center;margin-top:8px">${LOGO}<span class="logo-word">${NARRA ? 'narra' : 'unscripted'}<em>.</em></span></div>
         <div class="ob-collage">${pick.map((s) => `<img src="${esc(coverOf(s))}" alt="">`).join('')}</div>
         <h1 class="ob-title">Stories that <em>listen back.</em></h1>
         <p class="ob-sub">Audio series where every episode ends with your choice — and the next one is written and voiced live, just for you.</p>

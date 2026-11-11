@@ -1009,3 +1009,107 @@ h1, h2, h3, h4, p { margin: 0; }
 .pl-note { align-self: center; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin: -2px auto 8px; padding: 6px 12px; border-radius: 999px; background: rgba(255, 200, 80, .12); color: #FFC24B; font-size: 12px; font-weight: 600; line-height: 1.3; text-align: left; }
 .pl-note[hidden] { display: none; }
 .pl-note svg { flex: none; width: 13px; height: 13px; }
+
+/* =====================================================================
+ * narra UI (?ui=narra, 2026-11-11) — the classic UI above is untouched.
+ * Player: full-bleed scene picture behind, the story as scrolling lyrics,
+ * call + share top right, listening mode in the toolbar, voice bubble at choice points.
+ * ===================================================================== */
+.ch-mini-row { display: none; }
+.narra .player { background: #08080C; }
+.narra .pl-bg-img { opacity: .6; filter: blur(52px) saturate(1.35); }
+.narra .pl-bg::after { background: linear-gradient(180deg, rgba(8, 8, 12, .2) 0%, rgba(8, 8, 12, .66) 55%, #08080C 100%); }
+.narra .nr-stage {
+  position: absolute; left: 0; right: 0; top: 0; height: 66%; z-index: 0;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0, 0, 0, .45) 76%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0, 0, 0, .45) 76%, transparent 100%);
+}
+.narra .nr-stage .pl-art { position: absolute; inset: 0; height: auto; max-height: none; max-width: none; aspect-ratio: auto; border-radius: 0; box-shadow: none; background: transparent; }
+.narra .nr-stage .pl-art img, .narra .nr-stage .pl-art video { object-position: center 30%; }
+.narra .nr-shade {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(8, 8, 12, .6) 0%, rgba(8, 8, 12, .14) 13%, rgba(8, 8, 12, 0) 22%, rgba(8, 8, 12, .12) 30%, rgba(8, 8, 12, .64) 40%, rgba(8, 8, 12, .84) 50%, rgba(8, 8, 12, .94) 66%, #08080C 100%);
+}
+/* header: title + episode on the left, call and share on the right */
+.narra .pl-top { gap: 6px; padding: calc(var(--sat) + 6px) 10px 0; }
+.narra .pl-top .icon-btn { width: 40px; height: 40px; background: rgba(0, 0, 0, .3); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.narra .pl-top .icon-btn .ic { width: 20px; height: 20px; }
+.narra .pl-top-t { text-align: left; padding: 0 4px 0 6px; overflow: hidden; }
+.narra .pl-top-t b { font-family: var(--fd); font-size: 16px; font-weight: 800; letter-spacing: -.01em; padding: 0; text-shadow: 0 1px 10px rgba(0, 0, 0, .5); }
+.narra .pl-top-t small { font-size: 12px; letter-spacing: 0; font-weight: 600; color: rgba(255, 255, 255, .72); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 8px rgba(0, 0, 0, .5); }
+.narra .pl-top-t b.mq { text-overflow: clip; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 5%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent 0, #000 5%, #000 86%, transparent); }
+.narra .pl-top-t b.mq span { display: inline-block; animation: nrMq 18s linear infinite; }
+.narra .pl-top-t b.mq i { display: inline-block; width: 44px; }
+@keyframes nrMq { 0%, 14% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .narra .pl-top-t b.mq span { animation: none; } }
+/* body: picture window, then the lyrics, then transport */
+.narra .pl-body { padding: 0 22px calc(var(--sab) + 12px); }
+.narra .nr-gap { position: relative; flex: 0 1 30%; min-height: 36px; }
+.narra .nr-gap .pl-badge { left: 0; top: 12px; }
+.narra .pl-note { margin-bottom: 6px; }
+.narra .nr-lyr {
+  position: relative; flex: 1 1 0; min-height: 150px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 24%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 24%, #000 84%, transparent 100%);
+}
+.narra .nr-roll { position: absolute; left: 0; right: 0; top: 0; transition: transform .65s var(--ease); will-change: transform; }
+.narra .ll {
+  display: block; width: 100%; text-align: left; padding: 7px 0;
+  font-family: var(--fd); font-size: 20px; line-height: 1.4; font-weight: 700; letter-spacing: -.01em;
+  color: rgba(255, 255, 255, .3); text-shadow: 0 1px 14px rgba(0, 0, 0, .5);
+  transition: color .45s ease, opacity .45s ease;
+}
+.narra .ll[data-act] { cursor: pointer; }
+.narra .ll.narr { font-weight: 600; }
+.narra .ll.past { color: rgba(255, 255, 255, .42); }
+.narra .ll.cur { color: #fff; }
+.narra .ll.far { opacity: 0; pointer-events: none; }
+.narra .ll-who { display: block; font-family: var(--fb); font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--accent-l, var(--b)); opacity: .6; margin-bottom: 1px; text-shadow: none; }
+.narra .ll.cur .ll-who { opacity: 1; }
+.narra .ll .w { transition: color .22s linear; }
+.narra .ll.cur .w.on { color: var(--accent-l, var(--b)); }
+.narra .ll.you .ll-t { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+.narra .ll.you { opacity: .95; }
+.narra .ll.you.past { opacity: .6; }
+.narra .ll.q { font-size: 22px; line-height: 1.32; padding-top: 12px; }
+.narra .ll.q.past { font-size: 20px; }
+.narra .ll.opt {
+  display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 11px 14px; border-radius: 16px;
+  font-family: var(--fb); font-size: 15.5px; font-weight: 600; line-height: 1.35; letter-spacing: 0; color: #fff; text-shadow: none;
+  background: rgba(255, 255, 255, .09); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.narra .ll.opt .ll-t { flex: 1; min-width: 0; text-align: left; }
+.narra .ll.opt:active { background: var(--grad-soft); box-shadow: inset 0 0 0 1.5px var(--b); }
+.narra .ll.opt i { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 12.5px; background: var(--grad); color: #1A0B06; }
+.narra .ll.sys { display: flex; align-items: center; gap: 10px; font-family: var(--fb); font-size: 15px; font-weight: 700; letter-spacing: 0; color: var(--b); text-shadow: none; opacity: .55; }
+.narra .ll.sys.cur { opacity: 1; animation: pulseTxt 1.8s ease-in-out infinite; }
+.narra .ll.sys .wave { margin-top: 0; height: 18px; }
+.narra .ll.note { font-family: var(--fb); font-size: 15px; font-weight: 600; font-style: italic; }
+.narra .pl-prog { margin-top: 8px; }
+/* choice point: the transport steps back and a small voice bubble takes its place */
+.narra .pl-prog, .narra .pl-ctrl, .narra .pl-tools { transition: opacity .3s ease; }
+.narra .player.nr-ask .pl-prog, .narra .player.nr-ask .pl-ctrl, .narra .player.nr-ask .pl-tools { opacity: 0; pointer-events: none; }
+.narra .sheets.nr-pass { pointer-events: none; }
+.narra .sheets.nr-pass .scrim { opacity: 0; }
+.narra .sheets.nr-pass .sheet { pointer-events: auto; }
+.narra .sheet.nr-mini {
+  left: 16px; right: 16px; bottom: calc(var(--sab) + 34px); max-height: none; overflow: visible;
+  border-radius: 28px; padding: 14px 16px;
+  background: rgba(26, 26, 34, .8); -webkit-backdrop-filter: blur(26px) saturate(1.5); backdrop-filter: blur(26px) saturate(1.5);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(255, 255, 255, .13);
+  transform: translateY(46px) scale(.94); opacity: 0; transition: transform .36s var(--ease), opacity .26s ease;
+}
+.narra .sheet.nr-mini.on { transform: none; opacity: 1; }
+.narra .sheet.nr-mini > :not(.ch-hf):not(.ch-auto):not(.ch-mini-row):not(.ch-err) { display: none; }
+.narra .sheet.nr-mini .ch-hf { margin: 0; padding: 2px; background: none; box-shadow: none; }
+.narra .sheet.nr-mini .ch-hf.ask .hf-t span { display: none; }
+.narra .sheet.nr-mini .ch-auto { margin-top: 10px; background: rgba(255, 255, 255, .07); }
+.narra .sheet.nr-mini .ch-mini-row { display: flex; justify-content: center; gap: 22px; margin-top: 10px; }
+.narra .sheet.nr-mini .ch-mini-row .link-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
+.narra .sheet.nr-mini .ch-mini-row .ic { width: 14px; height: 14px; }
+@media (max-height: 700px) {
+  .narra .nr-gap { flex-basis: 22%; }
+  .narra .ll { font-size: 18px; padding: 6px 0; }
+  .narra .ll.q { font-size: 19.5px; }
+}
