@@ -429,13 +429,90 @@ def her_said(text, via, lang):
 KEYS_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9 ._-]{0,24}|NARR|TITLE|PROMPT|C1|C2|END|LINE|HANGUP)\s*[:：]\s*(.+)$')
 
 
+# ---------------- OpenRouter 长连接（11-10）----------------
+# 从这台机器直连 OpenRouter，每次新建 HTTPS 光握手约 1 秒、偶尔超时（理解她的话那一步 2.6 秒内常失败）。
+# 常驻几条握好手的连接，用完放回，空闲时每 40 秒保活一次。
+import http.client, queue as _queue
+_ORQ = _queue.LifoQueue()
+
+
+def _or_conn():
+    c = http.client.HTTPSConnection('openrouter.ai', timeout=20); c.connect(); return c
+
+
+def _or_warm(n=6):
+    for _ in range(n):
+        try: _ORQ.put((_or_conn(), time.time()))
+        except Exception: pass
+    while True:
+        time.sleep(20)
+        keep = []
+        while True:
+            try: keep.append(_ORQ.get_nowait())
+            except _queue.Empty: break
+        for c, t in keep:
+            try:
+                if time.time() - t > 15:
+                    c.request('GET', '/api/v1/key', headers={'Authorization': 'Bearer ' + os.environ.get('OPENROUTER_API_KEY', '')}); c.getresponse().read()
+                _ORQ.put((c, time.time()))
+            except Exception:
+                try: c.close()
+                except Exception: pass
+        for _ in range(max(0, n - _ORQ.qsize())):
+            try: _ORQ.put((_or_conn(), time.time()))
+            except Exception: pass
+
+
+threading.Thread(target=_or_warm, daemon=True).start()
+
+
+class OrResp:
+    """http.client 响应的包装：读完放回连接池，中途不要了就关掉连接"""
+    def __init__(self, conn, resp): self.c, self.r, self.ok = conn, resp, False
+    def __iter__(self):
+        while True:
+            line = self.r.readline()
+            if not line: break
+            yield line
+        self.ok = True
+    def read(self): b = self.r.read(); self.ok = True; return b
+    def __enter__(self): return self
+    def __exit__(self, *a):
+        if self.ok and not self.r.will_close: _ORQ.put((self.c, time.time()))
+        else:
+            try: self.c.close()
+            except Exception: pass
+
+
+def or_post(body, timeout):
+    """POST /api/v1/chat/completions，优先用池里握好手的连接（失败自动换新连接重试一次）"""
+    data = json.dumps(body).encode(); hdr = {'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'}
+    for attempt in range(3):
+        c = None
+        if attempt == 0:  # 第一次用池里的；断了（服务器关掉了空闲连接）就新开
+            try: c = _ORQ.get_nowait()[0]
+            except _queue.Empty: c = None
+        try:
+            if c is None: c = http.client.HTTPSConnection('openrouter.ai', timeout=timeout)
+            c.timeout = timeout
+            if c.sock: c.sock.settimeout(timeout)
+            c.request('POST', '/api/v1/chat/completions', body=data, headers=hdr)
+            r = c.getresponse()
+            if r.status != 200:
+                b = r.read(); c.close(); raise RuntimeError(f'openrouter {r.status}: {b[:200]!r}')
+            return OrResp(c, r)
+        except (http.client.HTTPException, ConnectionError, OSError) as e:
+            try: c.close()
+            except Exception: pass
+            if attempt == 2: raise
+    raise RuntimeError('openrouter unreachable')
+
+
 def openrouter_stream(model, sysm, user_msg, feed, max_tokens=1400, temperature=0.85, extra=None, timeout=60):
     body = {'model': model, 'max_tokens': max_tokens, 'temperature': temperature, 'stream': True,
             'messages': [{'role': 'system', 'content': sysm}, {'role': 'user', 'content': user_msg}], **(extra or {})}
-    req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
-                    headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
     out = ''
-    with op.open(req, timeout=timeout) as r:
+    with or_post(body, timeout) as r:
         for line in r:
             line = line.decode('utf8', 'ignore').strip()
             if not line.startswith('data:') or line.endswith('[DONE]'): continue
@@ -551,6 +628,12 @@ def next_msg(sess, her, bridge=None):
     if w:  # 她在听上一集时随口说的话（“对故事说话”）：下一集要接住
         pace += ('\n她在听上一集的时候还对故事说过：' + ' / '.join(f'“{x}”' for x in w) + '。这一集要明显回应、照她想要的方向走。') if lang == 'zh' else \
                 ('\nWhile listening to the last episode she also told the story: ' + ' / '.join(f'"{x}"' for x in w) + '. This episode must clearly answer that and go where she wants.')
+    if re.match(r'^(她自己说|She says)', her or ''):  # 11-10 她自由说的话：这一集按她的指令演，不绕回预设
+        pace += ('\n【最重要】她这次没有选现成的选项，而是自己说了上面那句话。这一集的主线就是执行/回应她这句话：第一句就接住；她要做的事这一集就让它发生、她问的问题角色要正面回答、她要角色做的事角色要有明确反应；'
+                 '不要只回应一句又绕回原来的剧情，不要改成两个选项里的做法，不要替她换成别的意思。语音识别可能有错字，按读音和上下文理解。' if lang == 'zh' else
+                 '\n[MOST IMPORTANT] She did not pick a ready-made option; she said the line above in her own words. This episode is about carrying out / answering exactly that: answer it in the first line; '
+                 'if she does something, it happens; if she asks something, the character answers it directly; if she tells a character to do something, they clearly react. Do not answer once and drift back to the planned plot, '
+                 'do not swap in one of the two options, do not change her meaning. Speech recognition may contain misheard words: infer from sound and context.')
     if bridge:
         pace += (f'\n她回答之后，旁白已经先说了一句：「{bridge}」。这一集紧接着这句往下写，别重复这句的内容。' if lang == 'zh'
                  else f'\nRight after she answered, the narrator already said: "{bridge}". Continue straight from that line without repeating it.')
@@ -677,19 +760,24 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
     if VIS.get(series): mth = threading.Thread(target=mapper, daemon=True); mth.start()
     else: mth = None
 
+    first_ev = threading.Event()
+
     def synth(i, who, text):
         first = i == 0
         try:
-            eng = 'flash' if not spec else sess.get('tts', 'v4')  # 11-09 她说完现写的那集：整集用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒），句句赶在播放前配好
+            eng = 'flash' if not spec else sess.get('tts', 'v4')
+            if not spec and i >= 3: first_ev.wait(4)  # 11-10：二十多句同时提交会在 Waku 排队、把第一句也拖到 10 秒；第 4 句起等第一句配好（最多 4 秒）再提交  # 11-09 她说完现写的那集：整集用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒），句句赶在播放前配好
             if job.get('_cancel'): ep['lines'][i]['url'] = ''; return
             # 她说完现写的那集：前三句走专用配音通道（不跟后台预写、过渡句排队；11-09 实测排队时第一句要 7–8 秒，单独 3–4 秒）
             # 11-10 卡顿：后台在预写下一集的两个分支（30 多句配音），正在播的这集第 4 句起跟它们排同一个队就会断——整集都走专用通道，第 4–6 句也两路
             u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (3 if (i == 1 and not spec) else 2 if (i < 6 and not spec) or (spec and i == SPEC_LINES) else 1), eng,
                            pool=CALL_POOL if (not spec or job.get('_committed')) else None)  # 她已经选了这条预写分支：剩下的句子也走专用通道
             ep['lines'][i]['url'] = u
+            if first: first_ev.set()
             threading.Thread(target=cache_line, args=(u,), daemon=True).start()
         except Exception:
             ep['lines'][i]['url'] = ''
+            if first: first_ev.set()
         job['t'][f'l{i}'] = round(time.time() - t0, 2)
     job['_synth'] = synth; job['_ths'] = ths; job['_mq'] = (mq, mev); job['_mth'] = None
 
@@ -773,14 +861,13 @@ def start_ep_specs(sess):
         threading.Thread(target=run_episode, args=(JOBS[jid], sess, next_msg(sess, her), {'base': len(sess['eps'])}, her), daemon=True).start()
 
 
-def fast_chat(prompt, max_tokens=200, timeout=8):
-    body = {'model': MAPPER, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': max_tokens, 'temperature': 0, 'reasoning': {'enabled': False}}
-    req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
-                    headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
-    return json.loads(op.open(req, timeout=timeout).read())['choices'][0]['message']['content'].strip()
+def fast_chat(prompt, max_tokens=200, timeout=8, model=None):
+    body = {'model': model or MAPPER, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': max_tokens, 'temperature': 0, 'reasoning': {'enabled': False}}
+    with or_post(body, timeout) as r:  # 长连接池（省掉每次约 1 秒的握手）
+        return json.loads(r.read())['choices'][0]['message']['content'].strip()
 
 
-_LET_ZH = re.compile(r'^(大写)?(我|那)?(就|还是|要)?(选|要|挑|走)?(选项)?(?P<k>a|ａ|b|ｂ|1|2|一|二|第一个|第二个|第一|第二|前面那个|后面那个|前一个|后一个|上面那个|下面那个|左边那个|右边那个)(个|吧|八|8|呀|啊|哦|嘛|了|好了|这个|那个)*$')
+_LET_ZH = re.compile(r'^(大写)?(我|那)?(就|还是|要)?(选|要|挑|走|谁|学|宣|旋|悬|许|须|雪|血)?(选项)?(?P<k>a|ａ|b|ｂ|1|2|一|二|第一个|第二个|第一|第二|前面那个|后面那个|前一个|后一个|上面那个|下面那个|左边那个|右边那个)(个|吧|八|8|呀|啊|哦|嘛|了|好了|这个|那个)*$')
 _LET_ZH2 = re.compile(r'^(我|那)?(就|还是|要)?(选|挑|上|宣|旋|悬|学)(选项)?(?P<k>诶|欸|哎|唉|地|比|必|逼|币|笔|臂|壁|毕|闭|鼻|避|碧|彼)(吧|八|呀|啊|了)*$')  # 中文识别常把单念的 A/B 写成同音字，只在前面有“选”时认
 _LET_EN = re.compile(r"^(i ?(ll|will|d|would)? ?(choose|pick|go with|take|select|say|want)|(let ?s|lets) go with|go with|choose|pick|take|select|maybe)? ?(option|letter|choice|the)? ?(?P<k>a|b|ay|bee|be|1|2|one|two|first|second|first one|second one|top one|bottom one|left one|right one)( one| option)?( please)?$")
 
@@ -940,16 +1027,70 @@ def sel_bridge(sess, n, lock=True):
     return d
 
 
+UNDERSTAND_MODELS = ('deepseek/deepseek-v4.1-flash', 'qwen/qwen3.6-flash', 'moonshotai/kimi-k3')
+
+
+def understand(sess, text, timeout=2.4):
+    """11-10 她说：交互点语音识别不准，自由输入要优先理解、按她的指令响应。
+    结合此刻的剧情、角色名和两个选项，先把识别的同音错字改对，再判断：选了 C1/C2，还是自由说了别的（FREE）。
+    返回 {'kind','heard','intent'}；失败返回 None。约 1–1.5 秒。"""
+    ep = sess['eps'][-1]; ch = (ep.get('choices') or [])[:2]; lang = sess['lang']
+    names = [k for k in VOICES.get(sess['series'], {}) if not k.startswith('_')][:6]
+    tail = '\n'.join(f"{l['who']}: {l['text']}" for l in (ep.get('lines') or [])[-4:])
+    pr = (f'有声互动剧的选择点。剧里的角色：{"、".join(names)}；听众名字：{sess.get("name") or "（未知）"}。\n'
+          f'此刻的情境：{ep.get("prompt", "")}\n最后几句：\n{tail}\n\n两个选项：\nC1: {ch[0] if ch else ""}\nC2: {ch[1] if len(ch) > 1 else ""}\n\n'
+          f'听众用语音回答，语音识别结果（可能有同音错字、漏字、人名听错）：“{text}”\n\n'
+          '1. 结合情境、角色名和读音，把识别结果改成她最可能真正说的话（heard，保持她的原意和口吻，只改明显的识别错误；本来就通顺就原样保留）。'
+          '例如“谁一/学二”多半是“选一/选二”，人名按读音改成剧里的角色名。\n'
+          '2. 判断 kind：她用字母或序号指某个选项（A/B、第一个、第二个）→ C1 或 C2；她说的和某个选项是同一个动作、同一个意思、没有多出来的要求 → C1 或 C2；'
+          '她说了别的做法/问题/要求，或在选项基础上加了自己的要求、或只说了“好/嗯”这类含糊的话 → FREE。拿不准就 FREE。\n'
+          '3. intent：用一句话（' + ('中文' if lang == 'zh' else 'English') + '）说清她想做什么、想问谁什么、想让谁做什么；她话里的“你/他/她/那个电话/那件事”分别指剧里的哪个人、哪件事，要写明（FREE 时必填）。\n'
+          '只输出 JSON：{"heard":"...","kind":"C1|C2|FREE","intent":"..."}')
+    # 三个快模型同时问，谁先给出有效 JSON 用谁（11-10 单发时连 OpenRouter 握手超时，理解失败就又按原话误会了）
+    box, ev = {}, threading.Event()
+    def ask(m):
+        try:
+            r = fast_chat(pr, 220, timeout, m); j = json.loads(r[r.find('{'):r.rfind('}') + 1])
+            if j.get('heard') is not None and not ev.is_set(): box['j'] = j; box['m'] = m; ev.set()
+        except Exception as e: box.setdefault('err', repr(e)[:120])
+    for m in UNDERSTAND_MODELS: threading.Thread(target=ask, args=(m,), daemon=True).start()
+    ev.wait(timeout + 0.3)
+    try:
+        if 'j' not in box: raise RuntimeError(box.get('err') or 'timeout')
+        j = box['j']
+        if j.get('kind') not in ('C1', 'C2', 'FREE'): j['kind'] = 'FREE'
+        print('understand', box.get('m'), repr(text[:40]), '->', j.get('kind'), repr((j.get('heard') or '')[:40]), repr((j.get('intent') or '')[:50]), flush=True)
+        return j
+    except Exception as e:
+        print('understand failed', repr(e)[:160], flush=True); return None
+
+
+def her_understood(text, u, via, lang):
+    """她自由说的话 + 理解后的意思，给编剧（按她的指令写）"""
+    heard = ((u or {}).get('heard') or '').strip() or text
+    her = her_said(heard, via, lang)
+    if u and u.get('intent'):
+        her += (f'\n（理解：{u["intent"]}）' if lang == 'zh' else f'\n(Meaning: {u["intent"]})')
+    if heard != text:
+        her += (f'（原始识别：“{text}”）' if lang == 'zh' else f' (raw recognition: "{text}")')
+    return her
+
+
 def prepare_next(sess, text, via):
-    """她用语音/打字回了一句：先按原话开写下一集（不等判断），同时判断她是不是在说某个选项。
-    返回 {'n','text','matched','free'}：free 是已经开写的那条（说的是选项、用预写集时作废）。"""
+    """她用语音/打字回了一句：先理解（改同音错字、判断是不是选项、概括她的意图，最多 2.6 秒），再按理解后的版本开写下一集。
+    11-10：先按原话写时，编剧把“她问 Sienna 刚才那通电话是谁”写反成了“你的电话”——意图必须一起给编剧。返回 {'n','text','matched','free','her'}。"""
     n = len(sess['eps']) + 1; ch = (sess['eps'][-1].get('choices') or [])[:2]
     out = {'n': n, 'text': text, 'matched': None, 'free': None}
     k = pick_letter(text) if len(ch) >= 2 else None
     if k is not None: out['matched'] = ch[k]; return out
-    br = sel_bridge(sess, n - 1); her = her_said(text, via, sess['lang'])
-    out['free'] = start_job(run_episode, sess, next_msg(sess, her, br and br['text']), None, her)
-    out['matched'] = match_choice(sess, text, 2.5) if text else None  # 下一集已经在按她的原话写了：判断慢就不等，当作她自己说的
+    u = understand(sess, text, 2.6) if text and len(ch) >= 2 else None
+    if u and u['kind'] in ('C1', 'C2'): out['matched'] = ch[0 if u['kind'] == 'C1' else 1]; return out
+    heard = ((u or {}).get('heard') or '').strip()
+    k = pick_letter(heard) if heard and len(ch) >= 2 else None
+    if k is not None: out['matched'] = ch[k]; return out
+    br = sel_bridge(sess, n - 1)
+    her = her_understood(text, u, via, sess['lang']) if u else her_said(text, via, sess['lang'])
+    out['free'] = start_job(run_episode, sess, next_msg(sess, her, br and br['text']), None, her); out['her'] = her
     return out
 
 
@@ -1490,7 +1631,12 @@ class H(BaseHTTPRequestHandler):
 
     def _send(self, code, body, ctype='application/json', cache='no-store'):
         b = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
+        # 11-11 公网隧道今天一个来回 3–10 秒：JSON 回包压一下（剧目列表 67 KB → 约 10 KB），慢的那一段少传
+        gz = ctype == 'application/json' and len(b) > 1200 and 'gzip' in (self.headers.get('Accept-Encoding') or '')
+        if gz:
+            import gzip; b = gzip.compress(b, 5)
         self.send_response(code); self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(b)))
+        if gz: self.send_header('Content-Encoding', 'gzip'); self.send_header('Vary', 'Accept-Encoding')
         self.send_header('Cache-Control', cache); self.send_header('Access-Control-Allow-Origin', '*'); self.end_headers(); self.wfile.write(b)
 
     def do_OPTIONS(self):
@@ -1504,6 +1650,12 @@ class H(BaseHTTPRequestHandler):
         if u.path.startswith('/api/'):
             if g('k') != TOKEN: return self._send(403, {'error': 'bad key'})
             if u.path == '/api/series': return self._send(200, [series_card(s, lang) for s in BASE])
+            if u.path == '/api/ep1pack':  # 11-11 所有剧第 1 集的文字稿 + 画面时间轴，一次给完（不建会话）：手机存好，点播放直接有字有画面，不用等 /api/play 过隧道
+                out = {}
+                for sid in BASE:
+                    c = ep1_cached(sid, lang)
+                    if c: out[sid] = ep1_with_visuals(c, sid, lang)
+                return self._send(200, out)
             if u.path.startswith('/api/series/'):
                 sid = u.path.split('/')[-1]
                 return self._send(200, series_detail(sid, lang)) if sid in BASE else self._send(404, {'error': 'no series'})
@@ -1725,19 +1877,19 @@ class H(BaseHTTPRequestHandler):
             sess = get_sess(body.get('sid'))
             if not sess: return self._send(404, {'error': 'session expired'})
             text = (body.get('text') or '').strip()[:400]; via = body.get('via') or 'free'
-            n = len(sess['eps']) + 1; matched = None; free = None
+            n = len(sess['eps']) + 1; matched = None; free = None; her_u = None
             pre = sess.get('_pre') if (sess.get('_pre') or {}).get('n') == n else None
             sess.pop('_pre', None)
             if pre:  # 识别时中转已经动手了（pre_next）：等它判断完（通常已经好了）
                 pre['ev'].wait(8); r = pre['res'] or {}
                 if text and (text == pre['text'] or text == r.get('matched')) and via in ('voice', 'free', 'option'):
-                    matched = r.get('matched'); free = r.get('free')
+                    matched = r.get('matched'); free = r.get('free'); her_u = r.get('her')
                     if via == 'option' and not matched: matched = text
                 elif r.get('free'): cancel_job(r['free'])
             if not pre or (free is None and matched is None):
                 if via in ('voice', 'free') and text:
-                    r = prepare_next(sess, text, via)  # 先按原话开写，同时判断是不是在说某个选项（不再先判断、再开写）
-                    matched, free = r['matched'], r['free']
+                    r = prepare_next(sess, text, via)  # 先按原话开写，同时理解她的话（改错字、判断选项、按意图重写）
+                    matched, free, her_u = r['matched'], r['free'], r.get('her')
             if via == 'auto':  # 闭眼听/被动收听：她没回应，故事自己往下走；有预先写好的就用第一个（默认走向），马上开播
                 ch = (sess['eps'][-1].get('choices') or [])
                 matched = ch[0] if ch and sess.get('spec') else None
@@ -1747,7 +1899,8 @@ class H(BaseHTTPRequestHandler):
             if not jid: sess['spec'] = {}
             her = her_said(matched, 'option', sess['lang']) if matched and via != 'auto' else her_said(text, via, sess['lang'])  # 说中了选项：现写也按“她选择：选项”写，和点选项一样
             br = sel_bridge(sess, n - 1) if not jid and via != 'auto' else None
-            log(sess['sid'], {'her': text, 'via': via, 'matched': matched, 'next': n, 'spec': bool(jid), 'early': bool(free), 'wishes': sess.get('wishes'), 'at': time.strftime('%F %T')})
+            if her_u and not matched: her = her_u
+            log(sess['sid'], {'her': text, 'understood': her_u, 'via': via, 'matched': matched, 'next': n, 'spec': bool(jid), 'early': bool(free), 'wishes': sess.get('wishes'), 'at': time.strftime('%F %T')})
             out = jid or free or start_job(run_episode, sess, next_msg(sess, her, br and br['text']), None, her)
             sess['wishes'] = []
             return self._send(200, {'job': out, 'matched': matched, 'via': via, 'spec': bool(jid), 'bridge': br})
