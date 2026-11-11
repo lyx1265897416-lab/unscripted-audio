@@ -1055,6 +1055,7 @@ async function newSession(id) {
     playEpisode(id, ep);
   } catch (e) {
     if (early && P.ep === early) { audio.pause(); P.ep = null; }
+    delete SIDP[skey(id)];   // so the next tap on Play starts over (see startOrContinue)
     console.warn(e);
     P.loading = false; P.want = false;
     updatePlayerUI();
@@ -1081,7 +1082,10 @@ async function waitJobEp(jobId, onTick) {
 
 /** Detail CTA: play Ep1 (new) or continue where she left off. */
 function startOrContinue(id) {
-  const ss = getSess(id);
+  let ss = getSess(id);
+  // 11-11 a start that never reached the relay (it was down / the tunnel dropped) leaves an Episode 1 with no script and no
+  // server session: start it again instead of resuming a story that can show no text and can't continue
+  if (ss && !ss.sid && !SIDP[skey(id)] && ss.eps && ss.eps.length === 1 && ss.eps[0].kind === 'produced' && !(ss.eps[0].cues || []).length && !MOCK) { delete SESS[skey(id)]; ss = null; }
   if (!ss || !ss.eps || !ss.eps.length) { newSession(id); return; }
   primeAudio(); setTimeout(micHold, 0);
   if (P.id === id && (P.ep || P.loading)) { openPlayer(); if (P.needChoice) setTimeout(openChoiceSheet, 380); else if (!isPlaying() && !P.gen && !P.loading) togglePlay(); return; }
@@ -4011,8 +4015,8 @@ function lyricState() {
   const it = []; let cur = -1;
   const add = (o) => it.push(o) - 1;
   if (!ep || P.loading) {
-    if (s && s.hook) add({ k: 'line', who: 'NARR', text: s.hook, i: -1 });
-    cur = add({ k: 'sys', text: P.loadStatus === 'voicing' ? 'Voicing Episode 1…' : 'Preparing Episode 1…' });
+    if (s && s.hook) cur = add({ k: 'line', who: 'NARR', text: s.hook, i: -1 });
+    if (P.loading || !s) cur = add({ k: 'sys', text: P.loadStatus === 'voicing' ? 'Voicing Episode 1…' : 'Preparing Episode 1…' });   // only while it really is loading (not after a failed start)
     return { it, cur };
   }
   const said = ss && ss.chosen ? ss.chosen[ep.n - 1] : '';
