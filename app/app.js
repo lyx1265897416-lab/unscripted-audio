@@ -1020,6 +1020,7 @@ if ('mediaSession' in navigator) {
 
 function skip(sec) {
   if (!P.ep || !P.cur) return;
+  VS.fastUntil = Date.now() + 1500;
   const d = audio.duration || 0;
   if (P.ep.kind !== 'live') { audio.currentTime = clamp(audio.currentTime + sec, 0, Math.max(0, d - 0.2)); tickUI(); return; }
   if (sec < 0) {
@@ -3984,10 +3985,7 @@ function warmVisuals(s) {
   if (NARRA && HD_IDS.has(s.id)) {
     const L = LIVEX[s.id];
     if (!L || !L.ready) return;   // wait for the live list before fetching anything else
-    if (L.live.length) {          // live mode: only the next live clip, and only on a good link
-      if (!slowNet()) clipBlob(`v/${s.id}/live/${L.live[((L.i || 0) + 1) % L.live.length]}.mp4`);
-      return;
-    }
+    if (L.live.length) { warmLive(s); return; }   // live mode: the live set itself (warmLive), nothing else
   }
   const ids = new Set(V.pool || []);
   const ss = getSess(s.id), ep = P.id === s.id && P.ep;
@@ -4013,7 +4011,7 @@ function queueClips(urls) {
   pump();
 }
 /* narra: every clip has a poster (same name, .jpg). It is on screen as soon as the line starts; the moving clip fades in over it when it has loaded. */
-const PS = { url: '', tok: 0, seen: new Set(), fail: 0 };
+const PS = { url: '', tok: 0, seen: new Set(), req: new Set(), fail: 0 };
 const posterOf = (clipUrl) => String(clipUrl || '').replace(/\.mp4$/, '.jpg');
 /* 11-11 (2) sharper backgrounds: the 13 realtime series have portrait HD versions of their scenes (build_hd.py →
  * v/<id>/hd/<clip>.mp4 + .jpg, up to 720×1080 like the covers; the stills are HD pictures only and move by CSS).
@@ -4027,20 +4025,77 @@ function liveIndex(sid) {
   LIVEX[sid] = { live: [], ready: false, i: 0 };
   fetch(absUrl(`v/${sid}/live/live.json`)).then((r) => (r.ok ? r.json() : null)).then((j) => {
     LIVEX[sid] = { live: (j && j.live) || [], ready: true, i: 0 };
-    if (LIVEX[sid].live.length) { const im = new Image(); im.src = absUrl(`v/${sid}/live/${LIVEX[sid].live[0]}.jpg`); VS.url = null; }
+    if (LIVEX[sid].live.length) { VS.url = null; const s = byId(sid); if (s) warmLive(s); }
   }).catch(() => { LIVEX[sid].ready = true; });
 }
-/** the live clip for this moment: Episode 1 → the fifth of the episode we are in; written episodes → changes every six lines.
- * While the narrator asks / she answers / the next episode is written, the one that was on stays. */
+/** 11-11 (4) "the background must follow the bar at once": which live clip belongs to which part of the episode is a pure
+ * function of the position, so dragging the bar / tapping a line / skipping lands on that part's background immediately.
+ * The plan follows the story's own picture timeline (the live clip that shows that scene starts where the scene starts),
+ * holds a clip at least MIN, and fills stretches longer than MAX with the other clips. Units: seconds (Episode 1) or lines. */
+function livePlan(s, ep, L) {
+  const live = L.live, K = live.length, produced = ep.kind !== 'live';
+  const units = produced ? (ep.visuals || []).map((x) => [x.s, x.clip]) : (ep.lines || []).map((l, i) => [i, l.clip]);
+  const total = produced ? (audio.duration || ep.dur || 0) : (ep.lines || []).length;
+  const key = [s.id, ep.n, ep.kind, units.length, Math.round(total)].join(':');
+  if (L.planKey === key && L.plan) return L.plan;
+  const MIN = produced ? 12 : 3, MAX = produced ? 36 : 7;
+  let pts = [];
+  units.forEach(([at, clip]) => {
+    const i = live.indexOf(clip); if (i < 0) return;
+    const last = pts[pts.length - 1];
+    if (last && (last[1] === i || at - last[0] < MIN)) return;
+    pts.push([at, i]);
+  });
+  if (!pts.length) pts = [[0, (ep.n || 0) % K]];
+  pts[0][0] = 0;
+  const used = new Array(K).fill(0), out = [];
+  pts.forEach((p) => { used[p[1]] += 1; });
+  pts.forEach((p, j) => {
+    out.push(p);
+    const end = j + 1 < pts.length ? pts[j + 1][0] : total, len = end - p[0];
+    if (K < 2 || len <= MAX) return;
+    const nextClip = j + 1 < pts.length ? pts[j + 1][1] : -1;
+    // Episode 1: even parts; a written episode still grows, so fixed steps (earlier parts never move)
+    const n = produced ? Math.ceil(len / MAX) : Math.floor((len - MIN) / MAX) + 1, step = produced ? len / n : MAX;
+    for (let q = 1; q < n; q++) {
+      const prev = out[out.length - 1][1];
+      let best = -1;
+      for (let c = 0; c < K; c++) { if (c === prev || (q === n - 1 && c === nextClip && K > 2)) continue; if (best < 0 || used[c] < used[best]) best = c; }
+      if (best < 0) break;
+      used[best] += 1; out.push([p[0] + q * step, best]);
+    }
+  });
+  L.planKey = key; L.plan = out;
+  return out;
+}
 function liveClip(s) {
   liveIndex(s.id);
   const L = LIVEX[s.id]; if (!L || !L.live.length) return '';
-  const K = L.live.length, ep = P.ep;
-  if (ep && !P.aux && !P.needChoice && !P.gen && !P.loading) {
-    if (ep.kind !== 'live') { const d = audio.duration || ep.dur || 0; if (d) L.i = Math.min(K - 1, Math.floor(((audio.currentTime || 0) / d) * K)); }
-    else L.i = (Math.floor(P.idx / 6) + (ep.n || 0)) % K;
+  const ep = P.ep;
+  if (ep && !P.aux && !P.needChoice && !P.gen && !P.loading) {   // while the narrator asks / she answers / the next episode is written, the one that was on stays
+    const plan = livePlan(s, ep, L);
+    let pos;
+    if (ep.kind !== 'live') { const d = audio.duration || ep.dur || 0; pos = P.scrubF != null ? P.scrubF * d : (audio.currentTime || 0); }
+    else { const n = (ep.lines || []).length; pos = P.scrubF != null ? Math.min(n - 1, Math.floor(P.scrubF * n)) : P.idx; }
+    let i = plan[0][1];
+    for (let j = 0; j < plan.length && plan[j][0] <= pos; j++) i = plan[j][1];
+    L.i = i;
   }
   return `v/${s.id}/live/${L.live[L.i || 0]}.mp4`;
+}
+/** keep the whole live set in memory so a switch never waits for the network: every poster at once (~85 KB each), then the
+ * clips one at a time (~1 MB each) — the one on screen first, then in the order the episode uses them. */
+function warmLive(s) {
+  const L = LIVEX[s.id]; if (!L || !L.ready || !L.live.length) return;
+  if (!L.pst) L.pst = L.live.map((id) => { const u = `v/${s.id}/live/${id}.jpg`, im = new Image(); im.onload = () => PS.seen.add(u); im.src = absUrl(u); return im; });
+  if (L.busy || P.id !== s.id) return;
+  if (slowNet() && !liveAffordable()) return;   // slow link: clips only once the story's audio is safely ahead
+  const order = [L.i || 0].concat((L.plan || []).map((p) => p[1]), L.live.map((_, i) => i));
+  const next = order.map((i) => `v/${s.id}/live/${L.live[i]}.mp4`).find((u) => !VBLOB.has(u));
+  if (!next) return;
+  L.busy = true;
+  const r = clipBlob(next), done = () => { L.busy = false; if (P.id === s.id) warmLive(s); };
+  (r && r.p ? r.p : Promise.resolve()).then(done, done);
 }
 /** slow link: a ~1 MB clip may only load when it won't starve the story's audio (well buffered ahead, or a per-line episode) */
 function liveAffordable() {
@@ -4077,7 +4132,7 @@ function showPoster(clipUrl, playUrl) {
     back.src = src; back.classList.add('on'); front.classList.remove('on');
     ['#pl-vid', '#pl-vid2'].forEach((q) => { const v = $(q); if (v && v.dataset.clip !== (playUrl || clipUrl)) v.classList.remove('on'); });   // the previous clip steps aside for the new picture; its own clip fades in when loaded
   };
-  const load = (u, isHi) => { const im = new Image(); im.onload = () => { PS.seen.add(u); put(im.src, isHi); }; im.onerror = () => { if (!isHi) PS.fail += 1; }; im.src = absUrl(u); };
+  const load = (u, isHi) => { const im = new Image(); im.onload = () => { PS.seen.add(u); put(im.src, isHi); }; im.onerror = () => { if (!isHi) PS.fail += 1; setTimeout(() => { if (PS.tok === tok && !gotHi && PS.url === key) PS.url = ''; }, 1500); }; im.src = absUrl(u); };   // a failed picture is asked for again (was: the old background stayed for good)
   if (hi && PS.seen.has(hi)) { load(hi, true); return; }
   if (low && !(hi && !slowNet())) load(low, false);   // good link + an HD picture: wait for it (the two are framed differently); slow link: small one first
   if (hi) load(hi, true);
@@ -4088,15 +4143,17 @@ function warmPosters(s) {   // the next few pictures of this episode
   const n = slowNet() ? 2 : 4;   // slow link: only the next picture or two, so they don't compete with the audio
   if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; ids = ep.visuals.filter((x) => x.e > t).slice(0, n).map((x) => x.clip); }
   else if (ep.kind === 'live') ids = (ep.lines || []).slice(P.idx, P.idx + n + 1).map((l) => l.clip).filter(Boolean);
-  ids.concat(slowNet() ? [] : (V.pool || []).slice(0, 2)).forEach((id) => { const c = V.clips[id]; const u = c && ((!slowNet() && hdOf(c).poster) || posterOf(c)); if (u && !PS.seen.has(u)) { const im = new Image(); im.onload = () => PS.seen.add(u); im.src = absUrl(u); } });
+  if (!slowNet() && ep.kind !== 'live' && ep.visuals) ids = ids.concat(ep.visuals.map((x) => x.clip));   // good link: every picture of this episode, so a jump anywhere shows its picture at once
+  ids.concat(slowNet() ? [] : (V.pool || []).slice(0, 2)).forEach((id) => { const c = V.clips[id]; const u = c && ((!slowNet() && hdOf(c).poster) || posterOf(c)); if (u && !PS.seen.has(u) && !PS.req.has(u)) { PS.req.add(u); const im = new Image(); im.onload = () => PS.seen.add(u); im.onerror = () => PS.req.delete(u); im.src = absUrl(u); } });
 }
 function visualClipId(s) {
   const V = s.visuals, ep = P.ep;
   if (!V) return null;
   let id = null;
   if (ep && !P.needChoice && !P.aux) {  // P.aux: the bed / spoken question is on the audio element, its time is not the episode's
-    if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; const v = ep.visuals.find(x => t >= x.s && t < x.e) || ep.visuals[ep.visuals.length - 1]; id = v && v.clip; }
-    else if (ep.kind === 'live') { const ln = (ep.lines || [])[P.idx]; id = ln && ln.clip; }
+    const sf = P.scrubF;   // the bar is being dragged: the picture of the spot under the finger, not of what is still playing
+    if (ep.kind !== 'live' && ep.visuals) { const t = sf != null ? sf * (audio.duration || ep.dur || 0) : (audio.currentTime || 0); const v = ep.visuals.find(x => t >= x.s && t < x.e) || ep.visuals[ep.visuals.length - 1]; id = v && v.clip; }
+    else if (ep.kind === 'live') { const ls = ep.lines || []; const ln = ls[sf != null ? Math.min(ls.length - 1, Math.floor(sf * ls.length)) : P.idx]; id = ln && ln.clip; }
   }
   if (id && V.prefer && id !== 'idle' && !id.startsWith(V.prefer)) id = null;  // 有预设完整版切片的剧：之前写好的集里配的旧画面也换成预设片段轮播
   if (!id || !V.clips[id]) { const pool = (V.pool || []).filter(x => V.clips[x]); if (!pool.length) return null; id = pool[Math.floor(Date.now() / 7000) % pool.length]; }
@@ -4107,11 +4164,15 @@ function renderVisual(force) {
   const a = $('#pl-vid'), b = $('#pl-vid2'); if (!a || !b) return;
   const id = visualClipId(s); if (!id) return;
   let url = s.visuals.clips[id];
+  if (NARRA) a.parentNode.classList.toggle('nr-fast', Date.now() < (VS.fastUntil || 0));   // right after a drag / jump the change is quick, not a slow dissolve
   const lv = NARRA ? liveClip(s) : '';
+  let viaBlob = false;
   if (lv) {
-    // 11-11 (3) "a live video behind, not a slideshow": super-resolved seamless loops (build_live.py), one per fifth of the episode
-    url = lv; showPoster(lv, lv);
-    if (url !== VS.url && slowNet() && !liveAffordable()) return;   // slow link: its still picture first; the clip follows once the audio is safely ahead
+    // 11-11 (3) "a live video behind, not a slideshow": super-resolved seamless loops (build_live.py)
+    url = lv; showPoster(lv, lv); warmLive(s);
+    const got = VBLOB.get(url);
+    if (url !== VS.url && !(got && got.obj) && slowNet() && !liveAffordable()) return;   // slow link: its still picture first; the clip follows once the audio is safely ahead
+    viaBlob = true;
   } else if (NARRA) {
     hdIndex(s.id);
     const hd = hdOf(url);
@@ -4120,27 +4181,40 @@ function renderVisual(force) {
     if ((slowNet() && !PS.fail) || (hd.poster && !hd.video)) { VS.url = url; [a, b].forEach((v) => v.classList.remove('on')); return; }
     if (hd.video) url = hd.video;
   }
-  if (url === VS.url && !force) return;
-  if (url === VS.url) { const f = a.classList.contains('on') ? a : b; if (f.paused) f.play().catch(() => {}); return; }
+  if (url === VS.url) {
+    const f = a.dataset.clip === url ? a : (b.dataset.clip === url ? b : null);
+    // back on a clip whose picture had stepped in front of it (jump away and back): bring the loaded clip up again
+    if (f && !f.classList.contains('on') && f.readyState >= 3) { f.play().catch(() => {}); f.classList.add('on'); (f === a ? b : a).classList.remove('on'); }
+    else if (force && f && f.classList.contains('on') && f.paused) f.play().catch(() => {});
+    return;
+  }
   VS.url = url;
   const tok = ++VS.tok;
   const front = a.classList.contains('on') ? a : (b.classList.contains('on') ? b : null), back = front === a ? b : a;
   const br = clipBlob(url);
   back.oncanplay = null; back.onplaying = null;
-  back.src = (br && br.obj) || absUrl(url); back.dataset.clip = url;
-  // phones often don't load a hidden video until play() is called: start it now (muted) and fade it in on its first frame
-  const show = () => {
-    back.oncanplay = null; back.onplaying = null;
+  const start = (src) => {
     if (VS.tok !== tok) return;
-    back.classList.add('on');
-    if (front && front !== back) { front.classList.remove('on'); setTimeout(() => { if (!front.classList.contains('on')) front.pause(); }, 700); }
+    back.src = src; back.dataset.clip = url;
+    // phones often don't load a hidden video until play() is called: start it now (muted) and fade it in on its first frame
+    const show = () => {
+      back.oncanplay = null; back.onplaying = null;
+      if (VS.tok !== tok) return;
+      back.classList.add('on');
+      if (front && front !== back) { front.classList.remove('on'); setTimeout(() => { if (!front.classList.contains('on')) front.pause(); }, 700); }
+    };
+    back.onplaying = show;
+    back.oncanplay = () => { back.play().then(show).catch(show); };
+    try { back.load(); back.play().catch(() => {}); } catch (e) { /* ignore */ }
   };
-  back.onplaying = show;
-  back.oncanplay = () => { back.play().then(show).catch(show); };
-  try { back.load(); back.play().catch(() => {}); } catch (e) { /* ignore */ }
+  // live clips always come from memory (one download per clip, and the next switch to it is instant); its picture is up meanwhile
+  if (viaBlob && br && !br.obj && br.p) br.p.then((o) => start(o || absUrl(url)), () => start(absUrl(url)));
+  else start((br && br.obj) || absUrl(url));
   warmVisuals(s);
 }
-setInterval(() => { const pl = $('#player'); if (pl && pl.dataset.built && P.id) renderVisual(); }, 1000);
+setInterval(() => { const pl = $('#player'); if (pl && pl.dataset.built && P.id) renderVisual(); }, NARRA ? 400 : 1000);
+/* a jump (drag released, ±10 s, a tapped line, lock-screen seek): the background of the new spot at once, with a quick change */
+audio.addEventListener('seeking', () => { VS.fastUntil = Date.now() + 1500; if (P.ep && !P.aux && playerOpen) renderVisual(); });
 let lastSubKey = '';
 function updatePlayerUI(force) {
   renderMiniLight();
@@ -4320,7 +4394,8 @@ function karaoke() {
 function lySeek(j) {
   const o = (LY.it || [])[j], ep = P.ep;
   if (!o || o.k !== 'line' || !ep || P.needChoice || P.gen || P.loading || j === LY.cur) return;
-  if (ep.kind === 'live') { const l = (ep.lines || [])[o.i]; if (l && l.url) { P.idx = o.i; liveAdvance(); } return; }
+  VS.fastUntil = Date.now() + 1500;
+  if (ep.kind === 'live') { const l = (ep.lines || [])[o.i]; if (l && l.url) { P.idx = o.i; liveAdvance(); renderVisual(); } return; }
   const c = (ep.cues || [])[o.i]; if (!c) return;
   try { audio.currentTime = c.s + 0.02; } catch (e) { /* ignore */ }
   tickUI();
@@ -4434,14 +4509,16 @@ function bindScrub(bar) {
     P.scrubF = f;
     $('#pl-fill').style.width = (f * 100) + '%'; $('#pl-knob').style.left = (f * 100) + '%';
     if (ep.kind !== 'live') { const d = audio.duration || ep.dur || 0; $('#pl-el').textContent = fmtTime(f * d); }
+    VS.fastUntil = Date.now() + 1500; renderVisual();   // the background follows the finger
   };
   const apply = (f) => {
-    P.scrubF = null;
+    P.scrubF = null; VS.fastUntil = Date.now() + 1500;
     const ep = P.ep; if (!ep || !P.cur || P.needChoice || P.gen) return;
     if (ep.kind !== 'live') { const d = audio.duration || ep.dur; if (d) { audio.currentTime = f * d; tickUI(); } return; }
     const lines = ep.lines || [];
     const i = Math.min(lines.length - 1, Math.floor(f * lines.length));
     if (i !== P.idx && lines[i] && lines[i].url) { P.idx = i; liveAdvance(); }
+    renderVisual();
   };
   bar.addEventListener('pointerdown', (e) => { drag = true; try { bar.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } preview(at(e)); });
   bar.addEventListener('pointermove', (e) => { if (drag) preview(at(e)); });
