@@ -144,7 +144,9 @@ def select(sid):
 
 
 # 人工看过缩略图后的更正：模型把只露下半张脸 / 半张脸的大特写也算成了“脸”；咪的主角是猫，模型按“没有人脸”标成局部
-FIXQ = {'magnus': {'p056': 'part', 'p077': 'part'}}
+FIXQ = {'magnus': {'p056': 'part', 'p077': 'part', 'p058': 'part', 'p002': 'part', 'p059': 'bad'},   # 只露下半张脸 / 半张脸 / 手挡着眼睛 → part；低头看不见眼睛 → bad
+        'hear': {'o06': 'bad', 'o12': 'bad'}, 'rafael': {'o04': 'bad'}, 'rowan': {'o03': 'bad'}, 'rian': {'c02': 'bad'}, 'dorian': {'o00': 'bad'},   # 垂眼 / 闭眼（模型判成睁眼）
+        'villa': {'o05': 'bad'}, 'milo': {'o03': 'bad'}, 'mask': {'o09': 'bad'}}   # 没有主体的岩石边、全黑帧、和剧情无关的人像
 CAT = {'mii'}
 
 
