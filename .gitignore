@@ -49,3 +49,5 @@ data/shots/
 qa/demo/
 # 第 1 集音效设计（按剧本逐句挑的，和剧本一样只留本机）
 data/sfx/
+# 静态图选帧质检结果（只留本机）
+data/stills/

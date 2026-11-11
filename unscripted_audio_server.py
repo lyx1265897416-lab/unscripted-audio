@@ -1694,21 +1694,45 @@ def asr_stream(h, q):
                                                                               'X-Choice': '1' if final and sess else '0', 'X-Partial': '0' if final else '1'})
         return json.loads(op.open(req, timeout=20).read())
 
+    def quiet_cut(seg):
+        """一长段里找个停顿切开（6–12 秒之间最长的一段安静，≥0.2 秒）；找不到就在 12 秒处切。返回字节偏移"""
+        import array
+        a = array.array('h'); a.frombytes(seg[6 * 32000:12 * 32000]); hop = 320
+        e = [sum(x * x for x in a[i:i + hop]) / hop for i in range(0, len(a) - hop + 1, hop)]
+        if not e: return 12 * 32000
+        thr = max(sorted(e)[len(e) // 5] * 3, 90000.0)   # 比最安静的 20% 稍高（至少约 -40 dBFS）
+        best, run, at = 0, 0, None
+        for i, v in enumerate(e + [1e18]):
+            if v < thr: run += 1
+            else:
+                if run > best: best, at = run, i - run // 2
+                run = 0
+        return (6 * 32000 + at * hop * 2) if best >= 10 and at is not None else 12 * 32000
+
+    def join(head, t):
+        if not head: return t
+        return head + ('' if re.search(r'[一-鿿，。！？]$', head) or not t else ' ') + t
+
     def worker():
-        last = ''
+        last = ''; cut = 0; head = ''   # 11-11 她可以一口气说到 60 秒：说过的前半段按停顿切开、认一次就定下来，每一遍只重认最近十来秒，出字速度不随时长变慢
         while not st['closed']:
             n = len(buf) // 2 * 2; final = st['end']
             if not final and (n < 9600 or n - st['done'] < 3200): time.sleep(0.03); continue   # 至少 0.3 秒声音；有 0.1 秒新声音才再认一遍
             st['done'] = n
-            try: r = recog(bytes(buf[max(0, n - 16000 * 2 * 40):n]), final) if n >= 3200 else {'text': ''}
+            try:
+                while n - cut > 14 * 32000:
+                    k = quiet_cut(bytes(buf[cut:cut + 12 * 32000 + 640]))
+                    head = join(head, (recog(bytes(buf[cut:cut + k]), False).get('text') or '').strip()); cut += k
+                r = recog(bytes(buf[cut:n]), final and not head) if n - cut >= 3200 else {'text': ''}
             except Exception as e: r = {'text': '', 'error': repr(e)[:80]}
-            text = (r.get('text') or '').strip()
+            text = join(head, (r.get('text') or '').strip())
             try:
                 if final:
                     ws_send(h.wfile, lock, json.dumps({'final': text, 'lang': r.get('lang'), 'ms': r.get('ms')}, ensure_ascii=False))
                     if sess and g('go') == '1' and text: threading.Thread(target=pre_next, args=(sess, text[:400]), daemon=True).start()  # 选择点上的回答：马上开写下一集
                     log('asr-stream', {'sid': g('sid'), 'final': text, 'sec': round(n / 32000, 1), 'asr_ms': r.get('ms'), 'at': time.strftime('%F %T')})
                     break
+                if lang != 'zh' and n < 2 * 32000 and re.search(r'[\u4e00-\u9fff]', text): continue   # 英文版：开头两秒里冒出来的中文多半是误认（“嗯”“一”），不显示
                 if text and text != last and not re.fullmatch(r'[嗯啊呃哦唔额一。，,.!?！？\s]+', text):   # 刚开口那零点几秒常被认成“嗯”“一”：不推，等下一遍
                     last = text; ws_send(h.wfile, lock, json.dumps({'t': text, 'at': round(n / 32000, 2)}, ensure_ascii=False))
             except Exception: break

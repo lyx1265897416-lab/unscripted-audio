@@ -1614,7 +1614,9 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
       if (manual) { if (now - t0 > max) finish(true); return; }
       if (blind) { if (now - t0 > wait + 1500) finish(true); return; }  // can't hear levels: send the whole window, the recognizer decides
       if (!speechAt && now - t0 > wait) { finish(false); return; }
-      if (speechAt && (now - lastVoice > 800 || now - t0 > max)) finish(true);   // she stopped → recognise and go (11-09: was 1.1 s)
+      // she stopped → recognise and go. A short answer ends after 0.9 s of quiet; once she has been talking for 3 s she may pause
+      // to think (1.6 s). No other limit while she is speaking, up to `max` (60 s at a choice point).
+      if (speechAt && (now - lastVoice > (now - speechAt > 3000 ? 1600 : 900) || now - speechAt > max)) finish(true);
     }, 100);
   })();
   return { done, stop: () => finish(true), cancel: () => { canceled = true; finish(false); } };
@@ -1815,7 +1817,7 @@ function hfListen() {
   const key = HF.key;
   startAutoCountdown(WAIT, 'Listening · the story continues in', true);
   const h = HF.rec = recordAnswer({
-    wait: WAIT * 1000, max: 15000,
+    wait: WAIT * 1000, max: 60000,   // 11-11: once she is speaking there is no cut-off until she has finished (60 s at most)
     onPartial: (t) => { if (HF.rec === h) askText(t); },   // her words appear in the answer box as she says them
     onState: (s, x) => {
       if (HF.rec !== h) return;
@@ -2381,7 +2383,7 @@ function openProfile() {
     <span class="field-l">How you listen</span>
     <button class="opt mode-row" data-act="mode-sheet"><span class="ol">${ic(MODES[modeOf()].icon)} ${MODES[modeOf()].name} · ${MODES[modeOf()].short}</span>${ic('chevR', 'sm')}</button>
     <span class="field-l">Story language</span>
-    <div class="segc"><button class="${LANG === 'en' ? 'on' : ''}" data-act="lang" data-l="en">English</button><button class="${LANG === 'zh' ? 'on' : ''}" data-act="lang" data-l="zh">中文</button></div>
+    <div class="segc"><button class="${LANG === 'en' ? 'on' : ''}" data-act="lang" data-l="en">English</button><button class="${LANG === 'zh' ? 'on' : ''}" data-act="lang" data-l="zh">${LANG === 'zh' ? '中文' : 'Chinese'}</button></div>
     <div class="toggle-row"><span>Auto-unlock episodes<small>Spend ${PRICE} coins automatically on Ep 4+</small></span><button class="switch ${S.autoUnlock ? 'on' : ''}" data-act="auto-unlock" role="switch" aria-checked="${S.autoUnlock}" aria-label="Auto-unlock"></button></div>
     <div class="toggle-row"><span>VIP (test)<small>Makes every episode free</small></span><button class="switch ${S.vip ? 'on' : ''}" data-act="vip" role="switch" aria-checked="${S.vip}" aria-label="VIP"></button></div>
     <div class="sh-list" style="margin-top:12px">
@@ -3190,7 +3192,7 @@ function renderCallUI(force) {
         : `<div class="cl-think">${!call.t0 ? tz('Connecting', '正在接通') : call.direction === 'outgoing' && call.turn === 0 ? tz(`${esc(name)} picked up`, `${esc(name)} 接起来了`) : tz(`${esc(name)} is thinking`, `${esc(name)} 在想`)}<span class="dots-pulse"><i></i><i></i><i></i></span></div>`;
     } else if (call.phase === 'your-turn' && EAR.on) {
       key = 'live' + call.turn + ':' + call.idx;
-      html = `${call.said ? `<p class="cl-you">${tz('You', '你')}：${esc(call.said)}</p>` : ''}${call.caption ? `<span class="who">${esc(name)}</span><p class="txt dim">${esc(call.caption.text)}</p>` : ''}<p class="cl-hint2">${call.muted ? tz('Mic muted', '麦克风已静音') : tz('On the call — talk any time', '通话中 · 随时可以说话')}</p>`;
+      html = `${call.said ? `<p class="cl-you">${tz('You: ', '你：')}${esc(call.said)}</p>` : ''}${call.caption ? `<span class="who">${esc(name)}</span><p class="txt dim">${esc(call.caption.text)}</p>` : ''}<p class="cl-hint2">${call.muted ? tz('Mic muted', '麦克风已静音') : tz('On the call — talk any time', '通话中 · 随时可以说话')}</p>`;
     } else if (call.phase === 'your-turn') {
       const ls = call.listen || 'listening';
       key = 'you' + call.turn + ls;
@@ -3202,7 +3204,7 @@ function renderCallUI(force) {
       html = `<div class="cl-listen ${call.listen}"><i class="cl-wave"><b></b><b></b><b></b><b></b><b></b></i><span>${call.listen === 'speaking' ? tz('Listening…', '在听你说…') : tz('Got it…', '听到了…')}</span></div>`;
     } else if (call.caption) {
       key = 'cap' + call.turn + ':' + call.idx;
-      html = `${call.said ? `<p class="cl-you">${tz('You', '你')}：${esc(call.said)}</p>` : ''}<span class="who">${esc(name)}</span><p class="txt fade ${call.phase === 'your-turn' ? 'dim' : ''}">${esc(call.caption.text)}</p>${EAR.on && !call.muted ? `<p class="cl-hint2">${tz('Talk any time — he’ll stop and listen', '随时可以插话，他会停下来听你说')}</p>` : ''}`;
+      html = `${call.said ? `<p class="cl-you">${tz('You: ', '你：')}${esc(call.said)}</p>` : ''}<span class="who">${esc(name)}</span><p class="txt fade ${call.phase === 'your-turn' ? 'dim' : ''}">${esc(call.caption.text)}</p>${EAR.on && !call.muted ? `<p class="cl-hint2">${tz('Talk any time — he’ll stop and listen', '随时可以插话，他会停下来听你说')}</p>` : ''}`;
     } else { key = 'empty'; html = ''; }
     if (cap.dataset.k !== key || force) { cap.dataset.k = key; cap.innerHTML = html; }
   }
@@ -4181,7 +4183,7 @@ const STX = {};
 function stillIndex(sid) {
   if (!NARRA || STX[sid]) return;
   STX[sid] = { set: new Set(), ready: false };
-  const done = (j) => { STX[sid] = { set: new Set((j && j.still) || []), ready: true }; PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true); };
+  const done = (j) => { STX[sid] = { set: new Set((j && j.still) || []), q: (j && j.q) || {}, ready: true }; const s0 = byId(sid); if (s0 && s0.visuals) s0.visuals._planKey = ''; PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true); };
   fetch(absUrl(`v/${sid}/still/index.json`)).then((r) => (r.ok ? r.json() : null)).then(done).catch(() => done(null));
 }
 /** the pictures of one scene clip: hi = the sharpest there is, low = a small one to put up first on a slow link */
@@ -4200,14 +4202,22 @@ function stillOf(s, id) {
  * Units: seconds (Episode 1) or lines (written episodes). */
 function stillPlan(s, ep) {
   const V = s.visuals, produced = ep.kind !== 'live';
-  const ok = (id) => !!(id && V.clips[id] && !(V.prefer && id !== 'idle' && !id.startsWith(V.prefer)));
-  const units = (produced ? (ep.visuals || []).map((x) => [x.s, x.clip]) : (ep.lines || []).map((l, i) => [i, l.clip])).filter((u) => ok(u[1]));
+  /* 11-11 (9) picture quality (still/index.json "q", from build_stills_v2.py): "bad" (closed eyes, ghosting — a frame that says
+   * nothing clear) is never shown; "part" (a hand, a torso, a turned-away head) only where the words being spoken are about
+   * that — a touch, a wrist, a hand; stand-ins are whole faces first, then empty shots and props. */
+  const QL = (STX[s.id] && STX[s.id].q) || {}, ql = (id) => QL[id] || 'face';
+  const ok = (id) => !!(id && V.clips[id] && ql(id) !== 'bad' && !(V.prefer && id !== 'idle' && !id.startsWith(V.prefer)));
+  const BODY = /\b(hands?|wrists?|fingers?|fingertips?|palms?|knuckles?|neck|throat|lips|mouth|jaw|chin|shoulders?|chest|arms?|knees?|foot|feet|ears?|collar|pulse|grip|grips|touch|touches)\b|手|腕|指|掌|颈|脖|唇|嘴|下巴|肩|胸|臂|膝|脚|耳|领口|脉搏|握|碰|摸/i;
+  const said = produced ? (a, b) => (ep.cues || []).filter((c) => c.e > a && c.s < b).map((c) => c.text).join(' ') : (a, b) => (ep.lines || []).slice(a, b).map((l) => l.text || '').join(' ');
+  const units = (produced ? (ep.visuals || []).map((x) => [x.s, x.clip, x.e]) : (ep.lines || []).map((l, i) => [i, l.clip, i + 1]))
+    .filter((u) => ok(u[1]) && (ql(u[1]) !== 'part' || BODY.test(said(u[0], u[2]))));
   let total = produced ? ((P.ep === ep && audio.duration) || ep.dur || 0) : (ep.lines || []).length;
   if (produced && !total && units.length) total = units[units.length - 1][0] + 12;   // length not known yet
   const open = !produced && P.ep === ep && !P.jobDone;   // still being written: more lines will come
   const key = [s.id, ep.n, ep.kind, units.length, Math.round(total), open ? 'o' : ''].join(':');
   if (V._planKey === key && V._plan) return V._plan;
-  const rest = (V.pool || []).concat(Object.keys(V.clips)).filter(ok);   // stand-ins, always in the same order
+  const rest0 = (V.pool || []).concat(Object.keys(V.clips)).filter((id) => ok(id) && ql(id) !== 'part');
+  const rest = rest0.filter((id) => ql(id) === 'face').concat(rest0.filter((id) => ql(id) !== 'face'));   // stand-ins, always in the same order: faces first, then empty shots / props
   const used = {}, out = [];
   const put = (at, id) => { if (!id) return; out.push([at, id]); used[id] = (used[id] || 0) + 1; };
   /* the picture for the stretch [a, b): the story's own picture there if it is not the one already up, else a stand-in —
@@ -4216,7 +4226,7 @@ function stillPlan(s, ep) {
     const prev = out.length ? out[out.length - 1][1] : null, seen = Object.keys(used).length;
     for (const u of units) if (u[0] >= a && u[0] < b && u[1] !== prev && (!used[u[1]] || seen >= 5)) return u[1];   // back to a picture already shown only once five different ones have been up
     let best = null;
-    for (const id of units.filter((u) => u[0] < b).map((u) => u[1]).concat(rest)) {
+    for (const id of units.filter((u) => u[0] < b && ql(u[1]) !== 'part').map((u) => u[1]).concat(rest)) {
       if (id === prev || id === nextId) continue;
       if (best == null || (used[id] || 0) < (used[best] || 0)) best = id;
     }
