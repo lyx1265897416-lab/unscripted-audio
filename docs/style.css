@@ -1026,6 +1026,12 @@ h1, h2, h3, h4, p { margin: 0; }
 }
 .narra .nr-stage .pl-art { position: absolute; inset: 0; height: auto; max-height: none; max-width: none; aspect-ratio: auto; border-radius: 0; box-shadow: none; background: transparent; }
 .narra .nr-stage .pl-art img, .narra .nr-stage .pl-art video { object-position: center 30%; }
+/* posters: one frame of each scene clip, on screen the moment the line starts (the clip fades in over it once loaded) */
+.narra .nr-stage .pl-art img.pst { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .9s ease; }
+.narra .nr-stage .pl-art img.pst.on { opacity: 1; animation: nrKb 16s ease-in-out infinite alternate; }
+.narra .nr-stage .pl-art img.pst:not([src]) { visibility: hidden; }
+@keyframes nrKb { from { transform: scale(1); } to { transform: scale(1.07); } }
+@media (prefers-reduced-motion: reduce) { .narra .nr-stage .pl-art img.pst.on { animation: none; } }
 .narra .nr-shade {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background: linear-gradient(180deg, rgba(8, 8, 12, .6) 0%, rgba(8, 8, 12, .14) 13%, rgba(8, 8, 12, 0) 22%, rgba(8, 8, 12, .12) 30%, rgba(8, 8, 12, .64) 40%, rgba(8, 8, 12, .84) 50%, rgba(8, 8, 12, .94) 66%, #08080C 100%);

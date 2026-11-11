@@ -39,6 +39,7 @@
     'Not written yet': '还没写', 'Up next': '下一集',
     // choice sheet & voice
     'or answer in your own words': '或者用你自己的话回答', 'say A or B, or answer in your own words': '可以直接说 A 或 B，也可以用你自己的话回答', 'Say it your way…': '用你的话说…', 'Your answer': '你的回答', 'Speak your answer': '说出你的回答', 'Stay silent': '保持沉默',
+    'Still connecting to the story server — keep listening': '还在连接服务器，先接着听',
     'Your move': '轮到你了', 'Tap': '点选', 'Type instead': '改用打字',
     'Wait for me': '等等我', 'Paused — take your time': '已暂停 —— 慢慢来', 'The story continues in': '故事将继续：', 'Lean back · the story continues in': '躺着听 · 故事将继续：',
     'Listening · the story continues in': '正在听 · 没听到就继续：', 'Mic is off · the story continues in': '麦克风已关 · 故事将继续：', 'The story carries on…': '故事继续…',

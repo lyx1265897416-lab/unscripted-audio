@@ -233,6 +233,12 @@ async function loadRelay() {
     return !!API_BASE;
   } catch (e) { API_BASE = API_BASE || ''; return !!API_BASE; }
 }
+/** two tunnels: ask both for /health once and stay on whichever answers first (one of them is often seconds slower) */
+function pickFastBase() {
+  if (API_BASES.length < 2) return;
+  let done = false;
+  API_BASES.forEach((b) => { fetch(b + '/health', withTimeout({ cache: 'no-store' }, 8000)).then((r) => { if (r.ok && !done) { done = true; if (API_BASE !== b) { API_BASE = b; store.set('ua.relay', b); } } }).catch(() => {}); });
+}
 function nextBase() {
   if (API_BASES.length < 2) return false;
   API_BASE = API_BASES[(API_BASES.indexOf(API_BASE) + 1) % API_BASES.length];
@@ -255,12 +261,33 @@ const absUrl = (u) => (u && API_BASE && u[0] === '/' && u[1] !== '/' ? API_BASE 
 /** fetch with one retry after re-reading relay.json when the tunnel may have rotated (network error only). */
 function withTimeout(init, ms) {  // a stalled tunnel request must not hang the player (phones wait 60 s+ by default); short, so we fail over fast
   if (init && init.signal) return init;
-  const c = new AbortController(); setTimeout(() => c.abort(), ms || ((init && init.method === 'POST') ? 25000 : 9000));
+  const c = new AbortController(); setTimeout(() => c.abort(), ms || ((init && init.method === 'POST') ? 25000 : 12000));
   return Object.assign({}, init, { signal: c.signal });
 }
+/* 11-11 slow links (she tested on ~30 KB/s to GitHub / Cloudflare): everything heavy that used to preload in parallel
+ * (five Episode-1 files, 40 scene clips) starved the page itself. NET keeps a rough picture of the link so preloading
+ * only happens when it can afford to: kbs = download speed of the page's own files, rt = a plain API round trip. */
+const NET = { kbs: 0, rt: 0 };
+function netProbe() {
+  try {
+    const v = performance.getEntriesByType('resource')
+      .filter((e) => /\/(app\.js|style\.css|i18n\.js|covers\/)/.test(e.name) && e.transferSize > 6000 && e.responseEnd > e.responseStart)
+      .map((e) => e.transferSize / 1024 / Math.max(0.03, (e.responseEnd - e.responseStart) / 1000)).sort((a, b) => b - a);
+    if (v.length) NET.kbs = v[0];
+  } catch (e) { /* ignore */ }
+}
+const slowNet = () => {
+  if (Q.get('net') === 'slow') return true;   // test switches: &net=slow behaves as on a slow link, &net=fast as on a good one
+  if (Q.get('net') === 'fast') return false;
+  if (!NET.kbs) netProbe();
+  const c = navigator.connection;
+  return (NET.kbs > 0 && NET.kbs < 150) || NET.rt > 2500 || !!(c && (c.saveData || /(^|-)2g|3g/.test(c.effectiveType || '')));
+};
 async function apiFetch(build, init, ms) {
   try {
+    const t0 = performance.now();
     const r = await fetch(build(), withTimeout(init, ms));
+    if (!ms && !(init && init.method === 'POST')) { const dt = performance.now() - t0; NET.rt = NET.rt ? NET.rt * 0.5 + dt * 0.5 : dt; }
     if (r.status === 502 || r.status === 530 || r.status === 1033) throw new Error('tunnel ' + r.status);   // Cloudflare: tunnel is down
     return r;
   } catch (e) {
@@ -278,7 +305,7 @@ const RealAPI = {
       Object.entries(params || {}).forEach(([k, v]) => { if (v != null) u.searchParams.set(k, v); });
       return u.toString();
     };
-    const r = await apiFetch(build, { cache: 'no-store' }, params && params.wait ? 14000 : 9000);
+    const r = await apiFetch(build, { cache: 'no-store' }, params && params.wait ? 14000 : 0);
     if (!r.ok) {
       let msg = 'HTTP ' + r.status;
       try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (e) { /* ignore */ }
@@ -593,6 +620,9 @@ const matchGenre = (s, g) => {
   return (s.genres || []).some((x) => keys.indexOf(x) >= 0) || (s.tags || []).some((t) => keys.indexOf(t) >= 0);
 };
 const coverOf = (s) => s.cover || `covers/${s.id}.jpg`;
+/** small covers for cards (covers/t = 360 px ≈ 40 KB, the full one is ≈ 160 KB); falls back to the full cover if the small one is missing */
+const thumbOf = (s) => { const c = coverOf(s); return /^covers\/[\w-]+\.jpg$/.test(c) ? c.replace('covers/', 'covers/t/') : c; };
+const thumbImg = (s) => `<img src="${esc(thumbOf(s))}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">`;
 const motionOf = (s) => s.motion || (MOCK ? `motion/${s.id}.mp4` : null);
 const avatarOf = (s) => s.avatar || `avatars/${s.id}.jpg`;
 
@@ -1032,12 +1062,24 @@ async function newSession(id) {
     recordStart(id); save();
     playEpisode(id, early);
   }
+  const mine = getSess(id);
   const sidP = SIDP[skey(id)] = (async () => {
-    const res = await API.play({ series: id, name: S.name || '' });
-    let ep = res.ep;
-    if (!ep && res.job) ep = await waitJobEp(res.job, (j) => { P.loadStatus = j.status; updatePlayerUI(); });
-    if (!ep) throw new Error('No episode returned');
-    return { res, ep };
+    // 11-11 the tunnel can take 10–25 s or drop a request; Episode 1 is already playing from the page's own file,
+    // so keep asking in the background instead of giving up after one try
+    const waits = early ? [0, 1500, 3000, 6000, 10000, 15000] : [0, 2000];
+    let err = null;
+    for (let i = 0; i < waits.length; i++) {
+      if (waits[i]) await sleep(waits[i]);
+      if (early && getSess(id) !== mine) throw new Error('restarted');
+      try {
+        const res = await API.play({ series: id, name: S.name || '' });
+        let ep = res.ep;
+        if (!ep && res.job) ep = await waitJobEp(res.job, (j) => { P.loadStatus = j.status; updatePlayerUI(); });
+        if (!ep) throw new Error('No episode returned');
+        return { res, ep };
+      } catch (e) { err = e; }
+    }
+    throw err || new Error('no answer');
   })();
   try {
     const { res, ep } = await sidP;
@@ -1054,18 +1096,48 @@ async function newSession(id) {
     save();
     playEpisode(id, ep);
   } catch (e) {
-    if (early && P.ep === early) { audio.pause(); P.ep = null; }
-    delete SIDP[skey(id)];   // so the next tap on Play starts over (see startOrContinue)
+    delete SIDP[skey(id)];
     console.warn(e);
+    if (early && getSess(id) === mine) {   // the audio is already playing: let it play; the script and the session join as soon as the relay answers (sidReady)
+      P.loading = false; updatePlayerUI();
+      if (e && e.message !== 'restarted') toast(tz('Still connecting to the story server — keep listening', '还在连接服务器，先接着听'));
+      return;
+    }
     P.loading = false; P.want = false;
     updatePlayerUI();
     toast(`Couldn't start the story. ${esc(e.message || '')}`);
   }
 }
-const SIDP = {};
+const SIDP = {}, SIDLATE = {};
+async function prefetchScripts() {
+  if (MOCK || !API || !API.get || !SERIES.length) return;
+  const tk = 'ua.ep1pack.' + LANG, last = store.get(tk, 0) || 0;
+  const missing = SERIES.some((s) => s.ep1 && s.ep1.ready && !((store.get('ua.ep1.' + s.id + '.' + LANG, null) || {}).cues || []).length);
+  if (!missing && Date.now() - last < 6 * 3600e3) return;
+  try {
+    const pack = await API.get('api/ep1pack', null, true);
+    Object.entries(pack || {}).forEach(([id, ep]) => { if (ep && ep.audio && (ep.cues || []).length) store.set('ua.ep1.' + id + '.' + LANG, ep); });
+    store.set(tk, Date.now());
+    const ss = P.id && getSess(P.id);   // the one playing right now gets its text at once
+    if (ss && P.ep && P.ep === ss.eps[0] && !(P.ep.cues || []).length && pack[P.id] && pack[P.id].audio === P.ep.audio) { Object.assign(P.ep, pack[P.id], { kind: 'produced' }); updatePlayerUI(true); }
+  } catch (e) { /* older relay or unreachable: /api/play still brings the script */ }
+}
 async function sidReady(id) {  // Episode 1 starts before /api/play returns; anything that needs the server session waits here
   const ss = getSess(id); if (!ss) return null;
   if (!ss.sid && SIDP[skey(id)]) { try { const r = await SIDP[skey(id)]; if (!ss.sid) ss.sid = r.res.sid; } catch (e) { /* ignore */ } }
+  if (!ss.sid && !MOCK && ss.eps && ss.eps.length === 1 && ss.eps[0].kind === 'produced') {
+    // the start never reached the relay (it was down / the link dropped): open the server session now, for the same Episode 1
+    if (!SIDLATE[skey(id)]) SIDLATE[skey(id)] = API.play({ series: id, name: S.name || '' }).finally(() => { setTimeout(() => { delete SIDLATE[skey(id)]; }, 3000); });
+    try {
+      const res = await SIDLATE[skey(id)];
+      if (res && res.sid && !ss.sid) {
+        ss.sid = res.sid;
+        if (res.ep && res.ep.audio === ss.eps[0].audio) { Object.assign(ss.eps[0], res.ep, { kind: 'produced' }); store.set('ua.ep1.' + id + '.' + LANG, res.ep); }
+        save();
+        if (P.id === id && P.ep === ss.eps[0]) updatePlayerUI(true);
+      }
+    } catch (e) { /* still unreachable */ }
+  }
   return ss.sid;
 }
 async function waitJobEp(jobId, onTick) {
@@ -1085,7 +1157,11 @@ function startOrContinue(id) {
   let ss = getSess(id);
   // 11-11 a start that never reached the relay (it was down / the tunnel dropped) leaves an Episode 1 with no script and no
   // server session: start it again instead of resuming a story that can show no text and can't continue
-  if (ss && !ss.sid && !SIDP[skey(id)] && ss.eps && ss.eps.length === 1 && ss.eps[0].kind === 'produced' && !(ss.eps[0].cues || []).length && !MOCK) { delete SESS[skey(id)]; ss = null; }
+  if (ss && !ss.sid && !SIDP[skey(id)] && ss.eps && ss.eps.length === 1 && ss.eps[0].kind === 'produced' && !MOCK) {
+    const c = store.get('ua.ep1.' + id + '.' + LANG, null);
+    if (c && c.audio === ss.eps[0].audio && !(ss.eps[0].cues || []).length) Object.assign(ss.eps[0], c, { kind: 'produced' });   // the script is on this device already
+    sidReady(id);
+  }
   if (!ss || !ss.eps || !ss.eps.length) { newSession(id); return; }
   primeAudio(); setTimeout(micHold, 0);
   if (P.id === id && (P.ep || P.loading)) { openPlayer(); if (P.needChoice) setTimeout(openChoiceSheet, 380); else if (!isPlaying() && !P.gen && !P.loading) togglePlay(); return; }
@@ -3319,7 +3395,7 @@ const topbar = () => `
 
 const card = (s, extra = '') => `
   <button class="card" data-act="open" data-id="${esc(s.id)}">
-    <div class="cv"><img src="${esc(coverOf(s))}" alt="" loading="lazy"><span class="tag-live">LIVE</span></div>
+    <div class="cv">${thumbImg(s)}<span class="tag-live">LIVE</span></div>
     <div class="t">${esc(s.title)}</div>
     <div class="m">${extra || `${ic('headphones')} ${esc((s.stats || {}).plays || '')}`}</div>
   </button>`;
@@ -3347,7 +3423,7 @@ function renderHome() {
   const heroes = sorted.slice(0, 5);
   const cont = continueItems();
   setTimeout(() => cont.slice(0, 2).forEach((x) => warmResume(x.id || (x.s && x.s.id))), 400);  // the top "continue" rows start instantly
-  setTimeout(() => heroes.slice(0, 2).forEach((s) => warmEp1(s)), 900);  // "Play now" on the first featured stories starts from memory
+  setTimeout(() => { if (!slowNet()) heroes.slice(0, 2).forEach((s) => warmEp1(s)); }, 1500);  // "Play now" on the first featured stories starts from memory
   const fav = (S.genres && S.genres[0]) || 'Werewolf';
   const becauseLabel = fav === 'Werewolf' ? 'werewolf romance' : fav.toLowerCase();
   const because = SERIES.filter((s) => (S.genres.length ? S.genres.some((g) => matchGenre(s, g)) : matchGenre(s, 'Werewolf') || matchGenre(s, 'Romance')));
@@ -3361,7 +3437,7 @@ function renderHome() {
       <div class="hero-track" id="hero">
         ${heroes.map((s, i) => `
           <div class="hero-slide" data-act="open" data-id="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.title)}">
-            <img src="${esc(coverOf(s))}" alt="" ${i ? 'loading="lazy"' : ''}>
+            <img src="${esc(slowNet() ? thumbOf(s) : coverOf(s))}" alt="" ${i ? 'loading="lazy"' : ''} onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
             <div class="hero-info">
               <span class="hero-badge"><span class="dot"></span>Written live from your choices</span>
               <h2 class="hero-title">${esc(s.title)}</h2>
@@ -3380,7 +3456,7 @@ function renderHome() {
       <div class="shelf-h"><h3>Continue Listening</h3><button class="more" data-act="go" data-to="library">See all</button></div>
       <div class="row">${cont.map((pr) => { const s = byId(pr.id); return `
         <button class="card wide" data-act="continue" data-id="${esc(s.id)}">
-          <div class="cv"><img src="${esc(coverOf(s))}" alt="" loading="lazy"><span class="cont-play">${ic(pr.needChoice ? 'spark' : 'play')}</span></div>
+          <div class="cv">${thumbImg(s)}<span class="cont-play">${ic(pr.needChoice ? 'spark' : 'play')}</span></div>
           <div class="t">${esc(s.title)}</div>
           <div class="m">${esc(progressLabel(pr))}</div>
           <div class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></div>
@@ -3392,7 +3468,7 @@ function renderHome() {
       <div class="row">${top.slice(0, 10).map((s, i) => `
         <button class="top-card" data-act="open" data-id="${esc(s.id)}" aria-label="#${i + 1} ${esc(s.title)}">
           <span class="rank">${i + 1}</span>
-          <span class="cv"><img src="${esc(coverOf(s))}" alt="" loading="lazy"></span>
+          <span class="cv">${thumbImg(s)}</span>
         </button>`).join('')}</div>
     </section>
     ${shelf('New Releases', fresh.map((s) => card(s)))}
@@ -3419,7 +3495,7 @@ function setupHero() {
   const upd = () => {
     const w = track.clientWidth; if (!w) return;
     i = Math.round(track.scrollLeft / (track.firstElementChild.clientWidth + 10));
-    const sl = track.children[i]; if (sl && sl.dataset.id) warmEp1(byId(sl.dataset.id));
+    const sl = track.children[i]; if (sl && sl.dataset.id && !slowNet()) warmEp1(byId(sl.dataset.id));
     dots.forEach((d, k) => d.classList.toggle('on', k === i));
   };
   track.addEventListener('scroll', () => { requestAnimationFrame(upd); }, { passive: true });
@@ -3471,7 +3547,7 @@ function renderExploreResults() {
 }
 const resRow = (s) => `
   <button class="res-row" data-act="open" data-id="${esc(s.id)}">
-    <span class="cv"><img src="${esc(coverOf(s))}" alt="" loading="lazy"></span>
+    <span class="cv">${thumbImg(s)}</span>
     <span class="rt"><b>${esc(s.title)}</b><span>${esc(s.lead)} · ${ic('star', 'xs')} ${esc(String((s.stats || {}).rating || ''))} · ${esc((s.stats || {}).plays || '')} plays</span><p>${esc(s.hook)}</p></span>
   </button>`;
 
@@ -3486,7 +3562,7 @@ function renderLibrary() {
       const s = byId(pr.id);
       return `<div class="lib-row">
         <button class="open" data-act="continue" data-id="${esc(s.id)}">
-          <span class="cv"><img src="${esc(coverOf(s))}" alt="" loading="lazy"></span>
+          <span class="cv">${thumbImg(s)}</span>
           <span class="lt"><b>${esc(s.title)}</b><span>${esc(progressLabel(pr))}${pr.title ? ' · ' + esc(pr.title) : ''}</span><span class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></span></span>
         </button>
         <button class="rm" data-act="lib-rm" data-k="${esc(skey(s.id))}" aria-label="Remove">${ic('trash', 'sm')}</button>
@@ -3498,7 +3574,7 @@ function renderLibrary() {
       const pr = S.progress[skey(s.id)];
       return `<div class="lib-row">
         <button class="open" data-act="open" data-id="${esc(s.id)}">
-          <span class="cv"><img src="${esc(coverOf(s))}" alt="" loading="lazy"></span>
+          <span class="cv">${thumbImg(s)}</span>
           <span class="lt"><b>${esc(s.title)}</b><span>${pr ? esc(progressLabel(pr)) : esc(s.lead)}</span>${pr ? `<span class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></span>` : ''}</span>
         </button>
         <button class="rm" data-act="unsave" data-id="${esc(s.id)}" aria-label="Remove">${ic('trash', 'sm')}</button>
@@ -3515,7 +3591,7 @@ function renderLibrary() {
       const s = byId(h.id);
       return `<div class="lib-row">
         <button class="open" data-act="hist-play" data-id="${esc(s.id)}" data-n="${h.n}">
-          <span class="cv"><img src="${esc(coverOf(s))}" alt="" loading="lazy"></span>
+          <span class="cv">${thumbImg(s)}</span>
           <span class="lt"><b>${esc(s.title)}</b><span>Ep ${h.n} · ${esc(h.title || '')}</span><span>${timeAgo(h.at)}</span></span>
         </button>
         <button class="rm" data-act="hist-rm" data-at="${h.at}" aria-label="Remove">${ic('trash', 'sm')}</button>
@@ -3603,10 +3679,11 @@ function warmResume(id) {
   const ep = ss.eps.find((e) => e.n === pr.ep) || ss.eps[ss.eps.length - 1];
   if (!ep) return;
   if (ep.kind === 'live') (ep.lines || []).slice(pr.ep === ep.n ? pr.line || 0 : 0).filter((l) => l.url).slice(0, 4).forEach((l) => fetchBlob(l.url));
-  else if (ep.audio && !WARM.some((a) => a.dataset.u === ep.audio)) { try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.dataset.u = ep.audio; a.src = absUrl(ep.audio); a.load(); WARM.push(a); while (WARM.length > 3) { const o = WARM.shift(); o.removeAttribute('src'); o.load(); } } catch (e) { /* ignore */ } }
+  else if (ep.audio && !slowNet() && !WARM.some((a) => a.dataset.u === ep.audio)) { try { const a = new Audio(); a.preload = 'auto'; a.muted = true; a.dataset.u = ep.audio; a.src = absUrl(ep.audio); a.load(); WARM.push(a); while (WARM.length > 3) { const o = WARM.shift(); o.removeAttribute('src'); o.load(); } } catch (e) { /* ignore */ } }
 }
-function warmEp1(s) {
+function warmEp1(s, must) {
   const u = s && s.ep1 && s.ep1.audio;
+  if (slowNet() && !must) return;   // slow link: no whole-file preloads; Play streams from the first bytes instead
   if (u && !getSess(s.id)) fetchLocalBlob(u);
   if (!u || MOCK || getSess(s.id) || /^ep1\//.test(u) || WARM.some((a) => a.dataset.u === u)) return;
   try {
@@ -3617,7 +3694,11 @@ function warmEp1(s) {
 async function showDetail(id) {
   const s = byId(id); if (!s) { location.hash = '#/home'; return; }
   warmEp1(s); warmResume(id);
-  if (s.visuals) [...((s.ep1 && s.ep1.visuals) || []).slice(0, 3).map((x) => x.clip), ...(s.visuals.pool || []).slice(0, 1)].forEach((c) => s.visuals.clips[c] && clipBlob(s.visuals.clips[c]));  // first pictures ready before Play
+  if (s.visuals) [...((s.ep1 && s.ep1.visuals) || []).slice(0, 3).map((x) => x.clip), ...(s.visuals.pool || []).slice(0, 1)].forEach((c) => {
+    const u = s.visuals.clips[c]; if (!u) return;
+    if (NARRA) { const im = new Image(); im.src = absUrl(posterOf(u)); }   // the first pictures (posters) are there before Play
+    if (!slowNet()) clipBlob(u);
+  });  // first pictures ready before Play
   if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
   detailId = id;
   renderDetail();
@@ -3802,7 +3883,7 @@ function renderPlayer() {
     // call + share sit at the top right, and the listening mode is the last item of the bottom toolbar (where Share was).
     el.innerHTML = NARRA ? `
       <div class="pl-bg"><div class="pl-bg-img" id="pl-bgimg"></div></div>
-      <div class="nr-stage"><div class="pl-art">${vids}</div></div>
+      <div class="nr-stage"><div class="pl-art">${vids.replace('<video', '<img class="pst" id="pl-pst" alt=""><img class="pst" id="pl-pst2" alt=""><video')}</div></div>
       <div class="nr-shade"></div>
       <header class="pl-top">
         <button class="icon-btn" data-act="close-player" aria-label="Close player">${ic('down')}</button>
@@ -3866,7 +3947,7 @@ function renderPlayer() {
   // 动态封面（Pocket FM 式）：静音循环短片盖在封面上，能播了才淡入；没有短片就只显示封面
   const vid = $('#pl-vid'), mo = motionOf(s);
   if (VS.sid !== s.id) {  // another series: drop the old one's picture at once (its cover shows) instead of leaving it up until the new clip loads
-    VS.sid = s.id; VS.url = null; VS.tok++;
+    VS.sid = s.id; VS.url = null; VS.tok++; PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
     [vid, $('#pl-vid2')].forEach((v) => { v.classList.remove('on'); v.oncanplay = null; v.onplaying = null; try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ } delete v.dataset.src; });
     warmVisuals(s);
   }
@@ -3900,7 +3981,47 @@ function warmVisuals(s) {
   ((ep && ep.visuals) || (s.ep1 && s.ep1.visuals) || []).forEach((x) => ids.add(x.clip));
   ((ep && ep.lines) || []).forEach((l) => l.clip && ids.add(l.clip));
   if (ss && !ep) ((ss.eps[ss.eps.length - 1] || {}).lines || []).forEach((l) => l.clip && ids.add(l.clip));
-  [...ids].slice(0, 40).forEach((id) => V.clips[id] && clipBlob(V.clips[id]));
+  queueClips([...ids].slice(0, 40).map((id) => V.clips[id]).filter(Boolean));
+}
+/* clips load a few at a time, in the order they will be needed (was: up to 40 at once, which stalled the audio on slow links) */
+const CQ = { list: [], busy: 0 };
+function queueClips(urls) {
+  if (NARRA && slowNet() && !PS.fail) return;   // narra on a slow link shows the posters only
+  CQ.list = urls.filter((u) => !VBLOB.has(u)).concat(CQ.list.filter((u) => urls.indexOf(u) < 0 && !VBLOB.has(u))).slice(0, 60);
+  const pump = () => {
+    while (CQ.busy < (slowNet() ? 1 : 3) && CQ.list.length) {
+      const u = CQ.list.shift(); if (VBLOB.has(u)) continue;
+      const r = clipBlob(u); CQ.busy++;
+      const done = () => { CQ.busy--; pump(); };
+      (r && r.p ? r.p : Promise.resolve()).then(done, done);
+    }
+  };
+  pump();
+}
+/* narra: every clip has a poster (same name, .jpg). It is on screen as soon as the line starts; the moving clip fades in over it when it has loaded. */
+const PS = { url: '', tok: 0, seen: new Set(), fail: 0 };
+const posterOf = (clipUrl) => String(clipUrl || '').replace(/\.mp4$/, '.jpg');
+function showPoster(clipUrl) {
+  const a = $('#pl-pst'), b = $('#pl-pst2'); if (!a || !b) return;
+  const p = posterOf(clipUrl); if (!p || p === PS.url) return;
+  PS.url = p; const tok = ++PS.tok;
+  const im = new Image();
+  im.onload = () => {
+    PS.seen.add(p);
+    if (PS.tok !== tok) return;
+    const front = a.classList.contains('on') ? a : b, back = front === a ? b : a;
+    back.src = im.src; back.classList.add('on'); front.classList.remove('on');
+    ['#pl-vid', '#pl-vid2'].forEach((q) => { const v = $(q); if (v && v.dataset.clip !== clipUrl) v.classList.remove('on'); });   // the previous clip steps aside for the new picture; its own clip fades in when loaded
+  };
+  im.onerror = () => { PS.fail += 1; };   // no posters on this host (yet): the clips themselves are used instead
+  im.src = absUrl(p);
+}
+function warmPosters(s) {   // the next few pictures of this episode
+  const V = s && s.visuals, ep = P.ep; if (!V || !ep) return;
+  let ids = [];
+  if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; ids = ep.visuals.filter((x) => x.e > t).slice(0, 4).map((x) => x.clip); }
+  else if (ep.kind === 'live') ids = (ep.lines || []).slice(P.idx, P.idx + 5).map((l) => l.clip).filter(Boolean);
+  ids.concat((V.pool || []).slice(0, 2)).forEach((id) => { const u = V.clips[id] && posterOf(V.clips[id]); if (u && !PS.seen.has(u)) { PS.seen.add(u); const im = new Image(); im.src = absUrl(u); } });
 }
 function visualClipId(s) {
   const V = s.visuals, ep = P.ep;
@@ -3919,6 +4040,7 @@ function renderVisual(force) {
   const a = $('#pl-vid'), b = $('#pl-vid2'); if (!a || !b) return;
   const id = visualClipId(s); if (!id) return;
   const url = s.visuals.clips[id];
+  if (NARRA) { showPoster(url); warmPosters(s); if (slowNet() && !PS.fail) { VS.url = url; [a, b].forEach((v) => v.classList.remove('on')); return; } }
   if (url === VS.url && !force) return;
   if (url === VS.url) { const f = a.classList.contains('on') ? a : b; if (f.paused) f.play().catch(() => {}); return; }
   VS.url = url;
@@ -3926,7 +4048,7 @@ function renderVisual(force) {
   const front = a.classList.contains('on') ? a : (b.classList.contains('on') ? b : null), back = front === a ? b : a;
   const br = clipBlob(url);
   back.oncanplay = null; back.onplaying = null;
-  back.src = (br && br.obj) || absUrl(url);
+  back.src = (br && br.obj) || absUrl(url); back.dataset.clip = url;
   // phones often don't load a hidden video until play() is called: start it now (muted) and fade it in on its first frame
   const show = () => {
     back.oncanplay = null; back.onplaying = null;
@@ -4611,11 +4733,12 @@ async function boot() {
     if (MOCK) throw new Error('mock');
     const ck = 'ua.series.' + LANG, cachedList = store.get(ck, null), lastRelay = store.get('ua.relay', '');
     // Seen this app before on this phone: open from the cached list + last relay address at once, check relay.json in the background
-    if (Array.isArray(cachedList) && cachedList.length && lastRelay) { API_BASE = lastRelay; loadRelay().then((ok) => { if (!ok) API_BASE = lastRelay; }); }
-    else await loadRelay();
+    if (Array.isArray(cachedList) && cachedList.length && lastRelay) { API_BASE = lastRelay; loadRelay().then((ok) => { if (!ok) API_BASE = lastRelay; pickFastBase(); }); }
+    else { await loadRelay(); pickFastBase(); }
     const fresh = RealAPI.series().then((list) => {
       if (!Array.isArray(list) || !list.length) throw new Error('empty');
       store.set(ck, list);
+      setTimeout(prefetchScripts, 600);
       return list;
     });
     if (Array.isArray(cachedList) && cachedList.length) {
@@ -4640,7 +4763,8 @@ async function boot() {
   }
   // drop live sessions with a different language/mode? keys already include both.
   if (location.hash === '#/player') history.replaceState(null, '', location.pathname + location.search + '#/home');
-  setTimeout(warmRings, 2500);
+  setTimeout(() => { if (!slowNet()) warmRings(); }, 2500);
+  setTimeout(prefetchScripts, 1800);
   if (!S.onboarded) { renderOnboard(); showTab('home'); }
   else { const top = grantWelcome(); if (top) setTimeout(() => toast(`${coinIc('sm')} +${top} coins · Welcome bonus`), 900); route(); primeMicOnEntry(); if (modeOf() === 'voice') fetchLocalBlob(`ack.${LANG}.mp3`); }
   if (TTS !== 'v4') setTimeout(() => toast(LANG === 'zh' ? `配音测试：${TTS === 'turbo' ? 'Eleven v4 Turbo（低延迟）' : 'Eleven Turbo v2.5（实时）'} · 第 2 集起生效` : `Voice test: ${TTS === 'turbo' ? 'Eleven v4 Turbo (low latency)' : 'Eleven Turbo v2.5 (realtime)'} · from Episode 2`), 900);
