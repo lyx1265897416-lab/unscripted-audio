@@ -3942,8 +3942,9 @@ function renderPlayer() {
     bindScrub($('#pl-bar'));
   }
   const s = byId(P.id); if (!s) return;
-  $('#pl-bgimg').style.backgroundImage = `url('${coverOf(s)}')`;
-  const art = $('#pl-art'); if (art.getAttribute('src') !== coverOf(s)) art.src = coverOf(s);
+  const cov = slowNet() ? thumbOf(s) : coverOf(s);   // slow link: the small cover (≈40 KB) instead of the full one (≈160 KB)
+  $('#pl-bgimg').style.backgroundImage = `url('${cov}')`;
+  const art = $('#pl-art'); if (art.getAttribute('src') !== cov) { art.onerror = () => { art.onerror = null; art.src = coverOf(s); }; art.src = cov; }
   // 动态封面（Pocket FM 式）：静音循环短片盖在封面上，能播了才淡入；没有短片就只显示封面
   const vid = $('#pl-vid'), mo = motionOf(s);
   if (VS.sid !== s.id) {  // another series: drop the old one's picture at once (its cover shows) instead of leaving it up until the new clip loads
@@ -4019,9 +4020,10 @@ function showPoster(clipUrl) {
 function warmPosters(s) {   // the next few pictures of this episode
   const V = s && s.visuals, ep = P.ep; if (!V || !ep) return;
   let ids = [];
-  if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; ids = ep.visuals.filter((x) => x.e > t).slice(0, 4).map((x) => x.clip); }
-  else if (ep.kind === 'live') ids = (ep.lines || []).slice(P.idx, P.idx + 5).map((l) => l.clip).filter(Boolean);
-  ids.concat((V.pool || []).slice(0, 2)).forEach((id) => { const u = V.clips[id] && posterOf(V.clips[id]); if (u && !PS.seen.has(u)) { PS.seen.add(u); const im = new Image(); im.src = absUrl(u); } });
+  const n = slowNet() ? 2 : 4;   // slow link: only the next picture or two, so they don't compete with the audio
+  if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; ids = ep.visuals.filter((x) => x.e > t).slice(0, n).map((x) => x.clip); }
+  else if (ep.kind === 'live') ids = (ep.lines || []).slice(P.idx, P.idx + n + 1).map((l) => l.clip).filter(Boolean);
+  ids.concat(slowNet() ? [] : (V.pool || []).slice(0, 2)).forEach((id) => { const u = V.clips[id] && posterOf(V.clips[id]); if (u && !PS.seen.has(u)) { PS.seen.add(u); const im = new Image(); im.src = absUrl(u); } });
 }
 function visualClipId(s) {
   const V = s.visuals, ep = P.ep;
