@@ -64,7 +64,13 @@ def _mcp():
         try: return WakuMCP()
         except Exception as e: print('waku mcp init', k, repr(e)[:100], flush=True); time.sleep(2 + 2 * k)
     return WakuMCP()
-for _ in range(10): POOL.put(_mcp())
+def _fill_pool(n):
+    for _ in range(n):
+        try: POOL.put(_mcp())
+        except Exception as e: print('pool', repr(e)[:100], flush=True)
+# 11-11 配音通道放到后台建（3 路并行，共 10 条）：原来 10 条串行建完才开始接请求，网络慢的时候重启一次线上要断几分钟；
+# 现在重启后页面、剧目列表、第 1 集文字稿马上能用，要配音的请求等第一条通道建好（POOL.get 会等）
+for _n in (4, 3, 3): threading.Thread(target=_fill_pool, args=(_n,), daemon=True).start()
 CALL_HEDGE = [int(x) for x in os.environ.get('CALL_HEDGE', '3,2').split(',')]  # 11-10 Waku 每句 3–6 秒波动大：第 1 句三路、第 2 句两路取最快  # 正文第 1、2 句各发几路
 CALL_POOL = queue.Queue()  # 11-09 通话专用配音通道：剧集在后台整集配音时，通话不跟它排队（原来排到 20 秒）
 CALL_POOL_N = [0]
@@ -1083,7 +1089,7 @@ def prepare_next(sess, text, via):
     out = {'n': n, 'text': text, 'matched': None, 'free': None}
     k = pick_letter(text) if len(ch) >= 2 else None
     if k is not None: out['matched'] = ch[k]; return out
-    u = understand(sess, text, 2.6) if text and len(ch) >= 2 else None
+    u = understand(sess, text, 2.0) if text and len(ch) >= 2 else None  # 长连接后通常 0.9–1.5 秒；最多等 2 秒，超时按原话写
     if u and u['kind'] in ('C1', 'C2'): out['matched'] = ch[0 if u['kind'] == 'C1' else 1]; return out
     heard = ((u or {}).get('heard') or '').strip()
     k = pick_letter(heard) if heard and len(ch) >= 2 else None

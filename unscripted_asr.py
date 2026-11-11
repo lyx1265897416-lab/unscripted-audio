@@ -160,7 +160,7 @@ def transcribe_sv(path, hint=''):
     r = st.result
     lang = (getattr(r, 'lang', '') or '').strip('<|>')
     text = (r.text or '').strip()
-    if SVZH and lang in ('yue', 'ja', 'ko') and hint != 'en':
+    if SVZH and lang in ('yue', 'ja', 'ko') and hint != 'en' and len(re.sub(r'\W', '', text)) >= 3:  # 11-11：“嗯”重认成了“不”——两个字以内的语气词不重认
         st = SVZH.create_stream(); st.accept_waveform(16000, x); SVZH.decode_stream(st)
         print('sv relang', lang, repr(text[:30]), '->', repr((st.result.text or '')[:30]), flush=True)
         text, lang = (st.result.text or '').strip(), 'zh'
@@ -203,17 +203,28 @@ def letter_pass(path, lang):
 LETTERISH = re.compile(r'(^|[^a-z])[ab]([^a-z]|$)|第[一二]|选项|^(我|那)?(就|还是|要)?(选|挑|上|宣|旋|悬|学)(诶|欸|哎|唉|地|比|必|逼|币|笔|臂|壁|毕|闭|鼻|避|碧|彼)[吧八呀啊了。.!！]*$', re.I)
 
 
+_MLX_SLOW = [0.0]  # 上次 MLX 超时的时间：之后 90 秒内不再等它（11-11 “Okay, your way.” 等 MLX 3 秒超时，识别拖到 5.4 秒）
+
+
+def tiny_answer(text):
+    """真正可能是“单念字母”的回答：中文 ≤3 个字、英文 ≤2 个词（“Okay, your way.” 这种完整短句不用再认）"""
+    z = re.sub(r'[\s，。！？、,.!?~…"\'：:]+', '', text or '')
+    return len(z) <= 3 if re.search(r'[\u4e00-\u9fff]', z) else len(re.findall(r"[A-Za-z']+", text or '')) <= 2
+
+
 def transcribe(path, hint, ctx='', fast=False, choice=False):
     r = _transcribe(path, hint, ctx, fast)
     txt0 = (r.get('text') or '').strip()
     # 已经像字母回答（含“选地/选臂/上臂”这类同音字，中转按同音字认）就不再等 MLX（11-09 MLX 偶尔 2–4 秒，锁屏时拖到超时）
-    if choice and MLX and txt0 and short_answer(txt0) and not LETTERISH.search(txt0.lower()):
+    if (choice and MLX and txt0 and tiny_answer(txt0) and not LETTERISH.search(txt0.lower())
+            and time.time() - _MLX_SLOW[0] > 90 and MLXQ.qsize() == 0):  # MLX 忙或刚超时过：不等它
         t = time.time()
         try:
-            txt = on_mlx(lambda: letter_pass(path, r.get('lang') or hint or 'en'), 3)
+            txt = on_mlx(lambda: letter_pass(path, r.get('lang') or hint or 'en'), 1.0)
             if txt and not JUNK.search(txt) and short_answer(txt):
                 r = dict(r, text=txt, engine=r.get('engine', '') + '+letter', fast_text=r.get('text'), ms=r.get('ms', 0) + int((time.time() - t) * 1000))
         except Exception as e:
+            if isinstance(e, TimeoutError): _MLX_SLOW[0] = time.time()
             print('letter pass failed', repr(e)[:120], flush=True)
     return r
 
