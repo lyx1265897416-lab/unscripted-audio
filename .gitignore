@@ -39,3 +39,9 @@ data/ep1/mythborne.*
 data/ep1/heroacad.*
 data/ep1/starmate.*
 data/ep1/academia.*
+
+# 剧照返修图（含 Prota 原图改画，只留本机）
+data/fixed_stills/
+data/fixed_stills.json
+data/still_qa*.json
+data/covers_orig/

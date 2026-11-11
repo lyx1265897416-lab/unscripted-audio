@@ -68,7 +68,8 @@ def square(src, out, a=0.0, b=None):
 
 def kenburns(img, out, secs=8):
     """剧照：按脸取景的“呼吸式”慢推（framing.still_clip：亚像素逐帧、以脸为锚点、8 秒无缝循环，不抖）"""
-    return FR.still_clip(img, out, secs)
+    import fix_stills  # 有返修图（肢体崩坏、手指错、名牌字已修正，fix_stills.py）就用返修图
+    return FR.still_clip(fix_stills.fixed(img), out, secs)
 
 
 def opening_shots(cid):
