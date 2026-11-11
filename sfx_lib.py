@@ -1,0 +1,83 @@
+"""通用音效库（11-11 她要求：关键片段加特定音效渲染环境、带入氛围）。
+实时写的集（第 2 集起）：中转按旁白句子的字面匹配（sfx_of），每集最多 4 个、不连着放；手机用 WebAudio 在那一句开头轻轻放。
+第 1 集不用这张表：build_audio.py 让模型读整集剧本挑关键处、为每一处单独生成音效，混进成片。
+音效文件：app/sfx/<id>.mp3（build_audio.py sfxlib 生成）。匹配只认“有声音发生”的写法（门砰地关上），不认只提到东西（他站在门边）。"""
+import re
+
+LIB = {
+    'door_slam': dict(p='A heavy wooden door slams shut, single hit, short room echo', d=2.0,
+                      en=r'door (slams|bangs|slammed)|slams? (the|a|his|her) door', zh=r'门.{0,6}(砰|摔上|重重关上|猛地关上)|摔门'),
+    'door_open': dict(p='A door handle turns and a door creaks open slowly, quiet interior', d=2.5,
+                      en=r'door (creaks|swings|opens|clicks open|slides open)', zh=r'门.{0,4}(吱呀|被推开|推开了|缓缓打开|开了)'),
+    'door_close': dict(p='A door closes softly and the latch clicks, quiet interior', d=2.0,
+                       en=r'door (clicks shut|closes|shuts)|latch clicks|lock (clicks|turns)', zh=r'门.{0,4}(轻轻关上|合上|关上了|咔哒)|门锁.{0,3}(响|咔)'),
+    'knock': dict(p='Three firm knocks on a wooden door, close, dry', d=2.0,
+                  en=r'\bknock(s|ed|ing)?\b', zh=r'敲门|敲了.{0,3}门|叩门'),
+    'footsteps': dict(p='Slow deliberate footsteps of hard-soled shoes approaching on a stone floor, four steps', d=3.0,
+                      en=r'footsteps|footfalls|heels (click|strike)', zh=r'脚步声|皮鞋声|高跟鞋.{0,6}(声|响)'),
+    'glass_break': dict(p='A drinking glass shatters on a hard floor, sharp, short', d=2.0,
+                        en=r'glass (shatters|breaks|smashes)|shatter(s|ed)', zh=r'(玻璃|杯子|酒杯).{0,8}(碎|摔|裂)'),
+    'glass_clink': dict(p='Two crystal glasses clink together once, bright and delicate', d=1.5,
+                        en=r'glass(es)? clink|clink of (glass|crystal)|toast', zh=r'碰杯|酒杯.{0,4}(相碰|轻碰|叮)'),
+    'thunder': dict(p='A deep roll of distant thunder, low rumble fading out', d=4.0,
+                    en=r'thunder', zh=r'雷声|打雷|惊雷|闷雷'),
+    'rain': dict(p='Rain starts falling on a window, soft steady patter', d=4.0,
+                 en=r'rain (starts|begins|falls|hammers|patters)|starts to rain', zh=r'下起.{0,2}雨|雨.{0,3}(落|打|敲|砸)'),
+    'wind': dict(p='A cold gust of wind sweeps past, airy whoosh rising then fading', d=3.0,
+                 en=r'wind (howls|picks up|whips|rises|cuts)|gust', zh=r'风声|起风|一阵.{0,2}风|风.{0,3}(呼啸|灌进|卷)'),
+    'heartbeat': dict(p='A close human heartbeat, slow heavy double thumps, three beats, intimate and muffled', d=3.0,
+                      en=r'heartbeat|heart (pounds|hammers|races|slams|thuds|stutters|kicks)|pulse (jumps|races|pounds)', zh=r'心跳|心脏.{0,4}(狂跳|撞|擂)|心口.{0,3}跳'),
+    'phone_buzz': dict(p='A smartphone vibrates twice on a wooden table, short buzzes', d=2.0,
+                       en=r'phone (buzzes|vibrates|lights up|hums)|buzz(es)? in your (pocket|hand)', zh=r'手机.{0,5}(震|嗡)'),
+    'phone_ring': dict(p='A modern phone ringtone rings twice, clean and bright', d=3.0,
+                       en=r'phone (rings|starts ringing)|ringtone', zh=r'手机.{0,4}响|铃声响|电话.{0,3}响'),
+    'notify': dict(p='A soft bright digital notification chime, single glassy ping', d=1.5,
+                   en=r'\b(chime|ping|notification|beep)s?\b|panel (flickers|lights|appears|opens)|screen (flashes|lights up)', zh=r'提示音|叮的一声|叮——|面板.{0,4}(亮|弹出|浮现)|屏幕.{0,3}亮'),
+    'howl': dict(p='A lone wolf howls in the distance at night, long and mournful', d=4.0,
+                 en=r'\bhowl(s|ing)?\b', zh=r'狼嚎|嚎叫|长嚎'),
+    'growl': dict(p='A low menacing animal growl, deep in the chest, close', d=2.5,
+                  en=r'\bgrowl(s|ing)?\b|snarl(s|ing)?', zh=r'低吼|咆哮|低低地吼'),
+    'fire': dict(p='A fire crackles and pops, warm, close', d=4.0,
+                 en=r'fire (crackles|pops|spits)|flames? (crackle|leap|roar)', zh=r'(火|篝火|壁炉|火焰).{0,5}(噼啪|爆|窜)'),
+    'splash': dict(p='A body plunges into water with a big splash, then bubbles', d=3.0,
+                   en=r'splash(es)?|plunge[sd]? into|hits the water', zh=r'水花|扑通|落水|跳进.{0,3}(水|海)'),
+    'wave': dict(p='A single ocean wave rolls in and breaks on the shore, then hisses back', d=5.0,
+                 en=r'wave (crashes|breaks|slams)|waves (crash|break)|surf (pounds|breaks)', zh=r'(浪|海浪|潮水).{0,4}(拍|打|涌|砸)'),
+    'crowd_gasp': dict(p='A room full of people gasps in surprise at once, then hushed murmur', d=3.0,
+                       en=r'(crowd|room|guests|everyone|hall) (gasps|goes silent|falls silent|murmurs)|a gasp (runs|ripples)', zh=r'(全场|人群|宾客|众人).{0,6}(惊呼|哗然|倒吸|安静)|一片(哗然|惊呼)'),
+    'applause': dict(p='Polite applause from a medium crowd in a hall, short', d=3.5,
+                     en=r'applause|(crowd|room|everyone) (cheers|claps)|clapping', zh=r'掌声|鼓掌|欢呼'),
+    'bell': dict(p='A large clock tower bell tolls once, deep and resonant, long tail', d=4.0,
+                 en=r'bell (tolls|rings|chimes)|clock (strikes|chimes)', zh=r'钟声|钟.{0,3}(敲|响)|铃.{0,2}响'),
+    'engine': dict(p='A car engine starts and revs once, interior perspective', d=3.0,
+                   en=r'engine (roars|starts|turns over|growls|revs)|tires (screech|squeal)', zh=r'引擎.{0,4}(轰|响|发动)|发动机.{0,3}(响|轰)|轮胎.{0,3}(尖叫|摩擦)'),
+    'car_door': dict(p='A car door closes with a solid thunk, close', d=1.5,
+                     en=r'car door (slams|closes|shuts|opens)', zh=r'车门.{0,4}(关|开|砰)'),
+    'gunshot': dict(p='A single distant gunshot with echo, outdoors', d=2.5,
+                    en=r'gunshot|shot rings|gun (fires|goes off)', zh=r'枪声|枪响|开了一枪'),
+    'blade': dict(p='A steel sword is drawn from its scabbard, metallic ring', d=2.0,
+                  en=r'(sword|blade|dagger|knife) (rings|sings|slides|is drawn|hisses)|draws (his|her|a|the) (sword|blade)', zh=r'(剑|刀|匕首).{0,4}(出鞘|拔出|铮)|拔(剑|刀)'),
+    'impact': dict(p='A hard body impact, a punch landing on a padded target, short and dry', d=1.5,
+                   en=r'(fist|punch|kick|blow) (lands|connects|slams|cracks)|slams? into the (wall|mat|floor|ground)', zh=r'(拳|一拳|一脚).{0,6}(砸|落在|击中|轰)|撞在.{0,3}(墙|地)'),
+    'explosion': dict(p='A large distant explosion, deep boom with debris rumble', d=4.0,
+                      en=r'explo(sion|des|ded)|blast (rips|shakes)|meteor (hits|strikes|slams)', zh=r'爆炸|轰然|轰的一声|巨响'),
+    'magic': dict(p='A shimmering magical sparkle, rising glassy chimes with airy whoosh, bright fantasy spell', d=3.0,
+                  en=r'(magic|spell|light|glow|rune|circle|portal|skill) (flares|ignites|blooms|surges|bursts|hums|opens|activates)|shimmer(s|ing)?', zh=r'(魔法|法阵|咒|光芒|符文|技能|传送).{0,6}(亮起|绽开|涌|发动|启动|闪)|光.{0,2}(炸开|亮起)'),
+    'whoosh': dict(p='A fast airy whoosh passing left to right, short', d=1.5,
+                   en=r'\bwhoosh|(rushes|blurs|streaks|darts) past|in a blink', zh=r'嗖|一闪而过|掠过|瞬间.{0,3}(闪|移)'),
+    'paper': dict(p='A sheet of paper is unfolded and rustles, close and dry', d=2.0,
+                  en=r'(paper|page|letter|envelope|contract) (rustles|unfolds|tears|slides)|tears? open the envelope', zh=r'(纸|信|信封|合同|文件).{0,5}(展开|撕|沙沙|滑)'),
+    'keys': dict(p='A ring of keys jingles and a key turns in a lock', d=2.5,
+                 en=r'keys (jingle|rattle|clink)|key turns', zh=r'钥匙.{0,4}(响|转|叮当)'),
+    'meow': dict(p='A small kitten meows once, cute and short', d=1.5,
+                 en=r'\bmeows?\b|mews?\b', zh=r'喵'),
+    'purr': dict(p='A cat purring contentedly, close, soft and warm', d=4.0,
+                 en=r'\bpurr(s|ing)?\b', zh=r'呼噜'),
+}
+_RX = {'en': [(k, re.compile(v['en'], re.I)) for k, v in LIB.items()], 'zh': [(k, re.compile(v['zh'])) for k, v in LIB.items()]}
+
+
+def sfx_of(text, lang):
+    for k, rx in _RX['zh' if lang == 'zh' else 'en']:
+        if rx.search(text or ''): return k
+    return None

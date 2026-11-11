@@ -10,6 +10,8 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from wakumcp import WakuMCP
+import audio_level as AL
+import sfx_lib as SFX
 
 ROOT = Path(__file__).resolve().parent
 APP, DATA, CACHE, LOGS = ROOT / 'app', ROOT / 'data', ROOT / 'cache', ROOT / 'logs'
@@ -106,7 +108,10 @@ def cache_line(u, timeout=25):
     try:
         b = op.open(U.Request(u), timeout=timeout).read()
         if b:
-            tmp = f.with_suffix('.part' + rid(4)); tmp.write_bytes(b); tmp.rename(f); return f
+            tmp = f.with_suffix('.part' + rid(4)); tmp.write_bytes(b)
+            try: AL.level_file(tmp)   # 11-11 每句拉到同一响度：旁白和各角色、第 1 集和后面几集不再忽大忽小（约 0.15 秒）
+            except Exception as e: print('level failed', repr(e)[:80], flush=True)
+            tmp.rename(f); return f
     except Exception as e:
         print(time.strftime('%m-%d %H:%M:%S'), 'cache_line failed', u[-40:], repr(e)[:80], flush=True)
     return None
@@ -802,6 +807,10 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
             import difflib
             if difflib.SequenceMatcher(None, re.sub(r'\W', '', v), re.sub(r'\W', '', job['_bridge'])).ratio() > 0.55: return
         i = len(ep['lines']); ep['lines'].append({'who': who, 'text': re.sub(r'\[[^\]]*\]\s*', '', v), 'url': None, 'clip': clip})
+        if who == 'NARR':   # 11-11 关键处的音效：旁白写到“有声音发生”的句子（门砰地关上、雷声、心跳……），每集最多 4 个、不连着两句都放
+            sx = [j for j, l in enumerate(ep['lines']) if l.get('sfx')]
+            k_sfx = SFX.sfx_of(ep['lines'][i]['text'], lang) if len(sx) < 4 and (not sx or i - sx[-1] >= 2) else None
+            if k_sfx and k_sfx not in {ep['lines'][j]['sfx'] for j in sx}: ep['lines'][i]['sfx'] = k_sfx
         job['status'] = 'voicing'; job['_got_lines'] = True
         job['t'].setdefault('first_line', round(time.time() - t0, 2))
         job['_raw'][i] = (who, v)

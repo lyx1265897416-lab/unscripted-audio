@@ -783,7 +783,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; } };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; } };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -847,7 +847,8 @@ function liveAdvance() {
   P.lineStart = 0;
   for (let i = 0; i < P.idx; i++) P.lineStart += (ep.durs && ep.durs[i]) || 0;
   loadSrc(ln.url, 0);
-  if (P.want) doPlay();
+  if (P.want) { doPlay(); if (ln.sfx) sfxPlay(ln.sfx); }   // the sound this line names (a door, thunder, a heartbeat…), quietly under the voice
+  lines.slice(P.idx + 1, P.idx + 5).forEach((l) => { if (l.sfx) sndBuf(`sfx/${l.sfx}.mp3`); });
   preloadNext(); warmLines(ep);
   renderVisual();
   saveProgress();
@@ -1588,6 +1589,60 @@ function keepAlive() { if (!P.aux || !audio.loop) playAux('bed.mp3', { loop: tru
 function stopAux() { if (P.aux) { P.aux = false; P.auxEnd = null; audio.loop = false; audio.volume = 1; try { audio.pause(); } catch (e) { /* ignore */ } } }
 function bedStart() { keepAlive(); }
 function bedStop() { stopAux(); }
+
+/* 11-11 (6) sound layer for the episodes written live (Episode 1 has its music and effects mixed into the file):
+ * a very quiet, bright music loop for the series (bgm/<id>.mp3) and a short effect at the lines that name a sound
+ * (line.sfx → sfx/<id>.mp3, tagged by the relay). WebAudio, so the level is exact on every phone (an <audio> element's volume is
+ * ignored on iOS) and nothing touches the story's own <audio>. With the screen locked the context sleeps: the voices carry on
+ * without music, which is fine. The files sit at -24 dBFS; voices are levelled to -19: music 23 dB under, effects 6 dB under. */
+const SND = { buf: new Map(), src: null, g: null, sid: '', on: false, off: 0, t0: 0 };
+const BGM_GAIN = 0.126, SFX_GAIN = 0.9;
+function sndBuf(url) {
+  if (!actx) return Promise.resolve(null);
+  if (SND.buf.has(url)) return SND.buf.get(url);
+  const p = fetch(absUrl(url)).then((r) => (r.ok ? r.arrayBuffer() : null))
+    .then((b) => (b ? new Promise((res) => { try { actx.decodeAudioData(b, res, () => res(null)); } catch (e) { res(null); } }) : null))
+    .catch(() => null);
+  SND.buf.set(url, p);
+  p.then((x) => { if (!x) SND.buf.delete(url); });
+  return p;
+}
+function bgmStop() {
+  SND.on = false;
+  const src = SND.src, g = SND.g; SND.src = SND.g = null;
+  if (!src || !actx) return;
+  SND.off += actx.currentTime - SND.t0;   // pick the loop up where it left off
+  try { const t = actx.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8); } catch (e) { /* ignore */ }
+  setTimeout(() => { try { src.stop(); } catch (e) { /* ignore */ } }, 900);
+}
+function bgmStart(sid) {
+  if (SND.sid !== sid) SND.off = 0;
+  SND.on = true; SND.sid = sid;
+  sndBuf(`bgm/${sid}.mp3`).then((buf) => {
+    if (!buf || !SND.on || SND.sid !== sid || SND.src || !actx || actx.state !== 'running') { if (!buf) { SND.on = false; SND.failAt = Date.now(); } return; }
+    const src = actx.createBufferSource(), g = actx.createGain(), t = actx.currentTime;
+    src.buffer = buf; src.loop = true;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(BGM_GAIN, t + 2);
+    src.connect(g); g.connect(actx.destination);
+    src.start(0, SND.off % buf.duration);
+    SND.src = src; SND.g = g; SND.t0 = t;
+  });
+}
+function bgmSync() {
+  const ep = P.ep;
+  const want = !!(!MOCK && actx && actx.state === 'running' && ep && ep.kind === 'live' && P.want && !P.needChoice && !P.gen && !P.aux && !callActive());
+  if (want && (!SND.on || SND.sid !== P.id)) { if (SND.on) bgmStop(); if (Date.now() - (SND.failAt || 0) > 30000) bgmStart(P.id); }   // a missing / failed track is not asked for again for 30 s
+  else if (!want && SND.on) bgmStop();
+}
+setInterval(bgmSync, 500);
+function sfxPlay(id) {
+  if (!id || !actx || actx.state !== 'running') return;
+  sndBuf(`sfx/${id}.mp3`).then((buf) => {
+    if (!buf || !actx || actx.state !== 'running' || !P.want) return;
+    const src = actx.createBufferSource(), g = actx.createGain();
+    src.buffer = buf; g.gain.value = SFX_GAIN; src.connect(g); g.connect(actx.destination); src.start();
+  });
+}
 
 const HF = { phase: '', rec: null, heard: '', key: '', ask: '' };
 let autoT = 0, autoLeft = 0;
