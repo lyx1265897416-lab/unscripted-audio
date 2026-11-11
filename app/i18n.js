@@ -41,6 +41,7 @@
     'or answer in your own words': '或者用你自己的话回答', 'say A or B, or answer in your own words': '可以直接说 A 或 B，也可以用你自己的话回答', 'Say it your way…': '用你的话说…', 'Your answer': '你的回答', 'Speak your answer': '说出你的回答', 'Stay silent': '保持沉默',
     'Still connecting to the story server — keep listening': '还在连接服务器，先接着听',
     'Your move': '轮到你了', 'Tap': '点选', 'Type instead': '改用打字',
+    'Say or type your answer…': '说出或输入你的回答…', 'Listening — say your answer…': '正在听 —— 直接说出你的回答…', 'Type your answer…': '输入你的回答…', 'Microphone is off — type your answer or tap a choice': '麦克风没开 —— 可以打字，或点一个选项',
     'Wait for me': '等等我', 'Paused — take your time': '已暂停 —— 慢慢来', 'The story continues in': '故事将继续：', 'Lean back · the story continues in': '躺着听 · 故事将继续：',
     'Listening · the story continues in': '正在听 · 没听到就继续：', 'Mic is off · the story continues in': '麦克风已关 · 故事将继续：', 'The story carries on…': '故事继续…',
     'Didn’t catch that — the story carries on': '没听清 —— 故事先往下走', 'The story carries on by itself…': '故事正在自己往下走…', 'You stayed silent.': '你没有说话。', 'Stayed silent': '没有说话',

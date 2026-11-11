@@ -1788,12 +1788,13 @@ class H(BaseHTTPRequestHandler):
             try:
                 from urllib.parse import quote
                 sess = get_sess(q.get('sid', [''])[0]); hint = ''
+                part = q.get('partial', [''])[0] == '1'  # 她还在说：把已录到的先认出来显示在输入框里（11-11），不触发写下一集、不做字母复认
                 if sess:  # 选项原文 + 角色名当提示，识别更准（11-09）
                     ch = (sess['eps'][-1].get('choices') or [])[:2]
                     hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
-                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0] or (sess or {}).get('lang', ''), 'X-Hint': quote(hint[:300]), 'X-Choice': '1' if sess else '0'})
+                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0] or (sess or {}).get('lang', ''), 'X-Hint': quote(hint[:300]), 'X-Choice': '1' if sess and not part else '0', 'X-Partial': '1' if part else '0'})
                 r = json.loads(op.open(req, timeout=30).read())
-                if sess and q.get('go', [''])[0] == '1' and (r.get('text') or '').strip():  # 选择点上的回答：马上开写下一集
+                if sess and not part and q.get('go', [''])[0] == '1' and (r.get('text') or '').strip():  # 选择点上的回答：马上开写下一集
                     threading.Thread(target=pre_next, args=(sess, r['text'].strip()[:400]), daemon=True).start()
                 return self._send(200, r)
             except Exception as e:

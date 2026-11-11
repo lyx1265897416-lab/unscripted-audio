@@ -317,7 +317,7 @@ class H(BaseHTTPRequestHandler):
             else:
                 r = transcribe(g, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1')
                 r['gate'] = why; r['ms'] = int((time.time() - t0) * 1000)
-            keep_sample(p, data, r)
+            if self.headers.get('X-Partial') != '1': keep_sample(p, data, r)   # 边说边认的中间结果不留样本
         except Exception as e:
             r = {'text': '', 'error': repr(e)[:200]}
         finally:

@@ -340,8 +340,9 @@ const RealAPI = {
   specs(sid) { return this.get('api/specs', { sid }, false); },
   cue(sid, n) { return this.get('api/cue', { sid, n }, false); },
   wish(sid, text) { return this.post('api/wish', { sid, text }); },
-  async asr(blob) {
-    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid); if (P.needChoice) u.searchParams.set('go', '1'); return u.toString(); },
+  async asr(blob, opt) {   // opt.partial: what she has said so far, shown while she is still talking (never starts the next episode)
+    const part = !!(opt && opt.partial);
+    const r = await apiFetch(() => { const u = new URL(apiUrl('api/asr')); u.searchParams.set('k', TOKEN); u.searchParams.set('lang', LANG); const ss = P.id && getSess(P.id); if (ss && ss.sid) u.searchParams.set('sid', ss.sid); if (part) u.searchParams.set('partial', '1'); else if (P.needChoice) u.searchParams.set('go', '1'); return u.toString(); },
       { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
@@ -1264,13 +1265,12 @@ function openChoiceSheet() {
   if (!P.ep || !P.needChoice) return;
   if (topSheet() && topSheet().kind === 'choice') return;
   maybeSpecs(true);
+  if (askInline()) { updatePlayerUI(); return; }   // narra player: the question, A, B and the answer box are lines of the lyric stream — no sheet
   const s = byId(P.id);
   const ep = P.ep;
   const nextN = ep.n + 1;
   const locked = !isUnlocked(P.id, nextN);
   const choices = (ep.choices || []).slice(0, 2);
-  // narra: hands-free / lean-back answers get a small voice bubble over the player (question + choices sit in the lyrics); "Type instead" opens the full sheet
-  const mini = NARRA && playerOpen && ((modeOf() === 'voice' && VOICE_OK && !VI.denied) || modeOf() === 'auto');
   const html = `
     <div class="ch-top">
       <img src="${esc(avatarOf(s))}" alt="">
@@ -1296,14 +1296,12 @@ function openChoiceSheet() {
     </div>
     <div class="ch-auto" id="ch-auto" hidden></div>
     <button class="ch-mode" data-act="mode-sheet">${ic(MODES[modeOf()].icon, 'xs')} ${MODES[modeOf()].name} · change how you listen</button>
-    <div class="ch-mini-row">${VOICE_OK ? `<button class="link-btn" data-act="hf-again">${ic('mic', 'xs')} Speak</button>` : ''}<button class="link-btn" data-act="ch-expand">${ic('pen', 'xs')} Type instead</button></div>
     <div class="ch-err" id="ch-err" hidden></div>`;
-  const entry = openSheet(html, { cls: 'choice-sheet' + (mini ? ' nr-mini' : ''), kind: 'choice', mini, onClose: () => { stopMic(); hfStop(); stopAutoCountdown(); $('#player').classList.remove('nr-ask'); } });
-  if (mini) $('#player').classList.add('nr-ask');
+  const entry = openSheet(html, { cls: 'choice-sheet', kind: 'choice', onClose: () => { stopMic(); hfStop(); stopAutoCountdown(); } });
   const inp = $('#ch-text', entry.el), send = $('.ch-send', entry.el);
   inp.addEventListener('input', () => { send.disabled = !inp.value.trim(); stopAutoCountdown(); });
   inp.addEventListener('focus', holdForHer);
-  entry.el.addEventListener('pointerdown', (e) => { if (!e.target.closest('[data-act="choose"],[data-act="silent"],.ch-send' + (NARRA ? ',.hf-orb,[data-act="hf-again"]' : ''))) holdForHer(); }, { capture: true });
+  entry.el.addEventListener('pointerdown', (e) => { if (!e.target.closest('[data-act="choose"],[data-act="silent"],.ch-send')) holdForHer(); }, { capture: true });
   $('form', entry.el).addEventListener('submit', (e) => {
     e.preventDefault();
     const t = inp.value.trim(); if (!t) return;
@@ -1522,8 +1520,16 @@ function micLevel() {
 /** Record one answer. Waits up to `wait` ms for her to start speaking; after she starts, stops after ~1.1 s of quiet (or `max`).
  * manual: hold-to-talk (no auto stop; call stop()). When the level meter is unavailable (page locked, audio context asleep)
  * it records the whole window and lets the recognizer decide whether anything was said. */
-function recordAnswer({ wait = 5000, max = 15000, manual = false, onState } = {}) {
+function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPartial } = {}) {
   let rec = null, chunks = [], t0 = 0, speechAt = 0, lastVoice = 0, timer = 0, finished = false, canceled = false, floor = 0, n = 0, blind = false;
+  let pBusy = false, pAt = 0, pN = 0;
+  /* live transcript (11-11): while she talks, what has been recorded so far is recognised again every ~0.7 s and handed to onPartial */
+  const partial = async () => {
+    if (!onPartial || pBusy || finished || !speechAt || chunks.length === pN || Date.now() - pAt < 700) return;
+    pBusy = true; pN = chunks.length;
+    try { const r = await API.asr(new Blob(chunks.slice(), { type: (rec && rec.mimeType) || 'audio/webm' }), { partial: true }); const t = ((r && r.text) || '').trim(); if (!finished && t) onPartial(t); } catch (e) { /* ignore */ }
+    pBusy = false; pAt = Date.now();
+  };
   let resolve; const done = new Promise((r) => { resolve = r; });
   const st = (s, x) => { try { onState && onState(s, x); } catch (e) { /* ignore */ } };
   micBusy++;
@@ -1556,6 +1562,7 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState } = {}
         n += 1; if (n <= 4) floor = Math.max(floor, lv);
         if (n > 2 && lv > Math.max(0.02, floor * 2.4)) { if (!speechAt) { speechAt = now; st('speaking'); } lastVoice = now; }
       }
+      partial();
       if (manual) { if (now - t0 > max) finish(true); return; }
       if (blind) { if (now - t0 > wait + 1500) finish(true); return; }  // can't hear levels: send the whole window, the recognizer decides
       if (!speechAt && now - t0 > wait) { finish(false); return; }
@@ -1598,7 +1605,7 @@ function startAutoCountdown(sec, label, visualOnly) {
   autoLeft = sec;
   const n = P.ep && P.ep.n;
   const paint = () => {
-    const el = $('#ch-auto'); if (!el) return;
+    const el = autoEl(); if (!el) return;
     el.hidden = false;
     el.innerHTML = `<span class="ca-ring" style="--p:${(autoLeft / sec) * 100}"></span><span>${esc(label)} <b class="tnum">${autoLeft}s</b></span><button class="link-btn" data-act="ch-wait">Wait for me</button>`;
   };
@@ -1610,13 +1617,14 @@ function startAutoCountdown(sec, label, visualOnly) {
     paint();
   }, 1000);
 }
-function stopAutoCountdown() { clearInterval(autoT); autoT = 0; const el = $('#ch-auto'); if (el) { el.hidden = true; el.innerHTML = ''; } }
+const autoEl = () => $('#ch-auto') || $('#nr-hint');   // the choice sheet's countdown row, or (narra player) the small line under the answer box
+function stopAutoCountdown() { clearInterval(autoT); autoT = 0; ['#ch-auto', '#nr-hint'].forEach((q) => { const el = $(q); if (el) { el.hidden = true; el.innerHTML = ''; } }); }
 /** She touched the choice sheet: stop the clock and the mic, wait for her to pick or finish typing. */
 function holdForHer() {
   if (!P.needChoice) return;
   const was = autoT || HF.rec;
   stopAutoCountdown(); hfStop();
-  if (was) { const el = $('#ch-auto'); if (el) { el.hidden = false; el.innerHTML = `${ic('hand', 'sm')}<span>Paused — take your time</span>`; } }
+  if (was) { const el = autoEl(); if (el) { el.hidden = false; el.innerHTML = `${ic('hand', 'sm')}<span>Paused — take your time</span>`; } }
 }
 function continueOnItsOwn(why) {
   if (!P.needChoice) return;
@@ -1694,18 +1702,19 @@ function hfListen() {
   if (!P.needChoice || !VOICE_OK) return;
   if (VI.stream && (document.hidden || !actx || actx.state !== 'running')) {   // locked: piece-by-piece, ends when she does
     stopAutoCountdown(); if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
-    keepAlive(); HF.phase = 'listen'; HF.heard = ''; paintHF();
+    keepAlive(); HF.phase = 'listen'; HF.heard = ''; askText(''); paintHF();
     hfListenLocked(HF.key); return;
   }
   stopAutoCountdown();
   if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
   keepAlive();
-  HF.phase = 'listen'; HF.heard = ''; paintHF();
+  HF.phase = 'listen'; HF.heard = ''; askText(''); paintHF();
   earcon('open');
   const key = HF.key;
   startAutoCountdown(WAIT, 'Listening · the story continues in', true);
   const h = HF.rec = recordAnswer({
     wait: WAIT * 1000, max: 15000,
+    onPartial: (t) => { if (HF.rec === h) askText(t); },   // her words appear in the answer box as she says them
     onState: (s, x) => {
       if (HF.rec !== h) return;
       if (s === 'speaking') { stopAutoCountdown(); HF.phase = 'speaking'; paintHF(); }
@@ -1732,7 +1741,50 @@ function hfStop(silent) {
   if (P.aux && !audio.loop && P.auxEnd) { const f = P.auxEnd; P.auxEnd = null; try { audio.pause(); } catch (e) { /* ignore */ } f(); }
   if (!silent) { HF.phase = ''; paintHF(); }
 }
+/* narra player (11-11): the answer box under A and B — same size as an option. She can type in it (a real caret once tapped) or
+ * just talk: while the mic is open a ring turns at its end and her words fill in as they are recognised. */
+const askInline = () => NARRA && playerOpen;
+function askText(t) {
+  const inp = $('#nr-in'); if (!inp || document.activeElement === inp) return;
+  inp.value = t; paintAsk(); placeLyrics();
+}
+function askSend() {
+  const inp = $('#nr-in'), t = inp ? inp.value.trim() : ''; if (!t) return;
+  inp.blur(); submitChoice(t, 'free');
+}
+function paintAsk() {
+  const box = $('#nr-inbox'); if (!box) return;
+  const ph = HF.phase, inp = $('#nr-in'), ghost = $('#nr-ghost'), ring = $('#nr-ring'), send = $('#nr-send'), mic = $('.in-mic', box), hint = $('#nr-hint');
+  const focused = document.activeElement === inp, hearing = ph === 'listen' || ph === 'speaking', busy = hearing || ph === 'thinking';
+  if (ph === 'heard' && HF.heard && !focused) inp.value = HF.heard;
+  const val = inp.value;
+  box.classList.toggle('live', busy); box.classList.toggle('focus', focused);
+  ring.hidden = !busy; ring.classList.toggle('wait', ph === 'listen');
+  send.hidden = busy || !val.trim();
+  if (mic) { mic.dataset.act = hearing ? 'hf-stop' : 'nr-mic'; mic.setAttribute('aria-label', hearing ? 'Stop listening' : 'Speak your answer'); }
+  const tip = !VOICE_OK ? 'Type your answer…' : busy ? 'Listening — say your answer…' : 'Say or type your answer…';
+  inp.placeholder = tip;
+  ghost.className = 'in-ghost' + (val ? '' : ' ph');
+  if (val) { ghost.setAttribute('translate', 'no'); ghost.innerHTML = esc(val) + '<i class="caret"></i>'; }
+  else { ghost.removeAttribute('translate'); ghost.innerHTML = '<i class="caret"></i><span>' + tip + '</span>'; }
+  if (hint && !autoT) {
+    const t = ph === 'ask' ? `${ic('headphones', 'xs')}<span>The narrator is asking…</span>` : ph === 'thinking' ? '<span>Got it — one moment…</span>' : ph === 'denied' ? '<span>Microphone is off — type your answer or tap a choice</span>' : '';
+    hint.hidden = !t; hint.innerHTML = t;
+  }
+}
+function bindAsk() {
+  const inp = $('#nr-in'), box = $('#nr-inbox'); if (!inp || !box || box.dataset.bound) return;
+  box.dataset.bound = '1';
+  const opts = box.parentNode.querySelectorAll('.ll.opt');
+  if (opts.length) box.style.minHeight = opts[opts.length - 1].offsetHeight + 'px';   // the same height as the option above it
+  inp.addEventListener('focus', () => { holdForHer(); paintAsk(); });
+  inp.addEventListener('blur', paintAsk);
+  inp.addEventListener('input', () => { stopAutoCountdown(); paintAsk(); placeLyrics(); });
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askSend(); } });
+  paintAsk();
+}
 function paintHF() {
+  paintAsk();
   const el = $('#ch-hf'); if (!el) return;
   const ph = HF.phase;
   if (!ph) { el.hidden = true; el.innerHTML = ''; return; }
@@ -3701,8 +3753,8 @@ async function showDetail(id) {
   warmEp1(s); warmResume(id);
   if (s.visuals) [...((s.ep1 && s.ep1.visuals) || []).slice(0, 3).map((x) => x.clip), ...(s.visuals.pool || []).slice(0, 1)].forEach((c) => {
     const u = s.visuals.clips[c]; if (!u) return;
-    if (NARRA) { liveIndex(id); hdIndex(id); const im = new Image(); im.src = absUrl(posterOf(u)); }   // the first pictures (posters) are there before Play
-    if (!slowNet() && !(NARRA && HD_IDS.has(id))) clipBlob(u);
+    if (NARRA) { stillIndex(id); hdIndex(id); return; }   // narra: stills only (their lists first; the pictures follow in warmStills)
+    if (!slowNet()) clipBlob(u);
   });  // first pictures ready before Play
   if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
   detailId = id;
@@ -3951,9 +4003,9 @@ function renderPlayer() {
   $('#pl-bgimg').style.backgroundImage = `url('${slowNet() ? thumbOf(s) : coverOf(s)}')`;   // blurred backdrop: the plain cover is enough
   const art = $('#pl-art'); if (art.getAttribute('src') !== cov) { art.onerror = () => { art.onerror = null; art.src = coverOf(s); }; art.src = cov; }
   // 动态封面（Pocket FM 式）：静音循环短片盖在封面上，能播了才淡入；没有短片就只显示封面
-  const vid = $('#pl-vid'), mo = motionOf(s);
+  const vid = $('#pl-vid'), mo = NARRA ? '' : motionOf(s);   // narra: a still background, no moving cover
   if (VS.sid !== s.id) {  // another series: drop the old one's picture at once (its cover shows) instead of leaving it up until the new clip loads
-    VS.sid = s.id; VS.url = null; VS.tok++; liveIndex(s.id); hdIndex(s.id); PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
+    VS.sid = s.id; VS.url = null; VS.tok++; stillIndex(s.id); hdIndex(s.id); PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
     [vid, $('#pl-vid2')].forEach((v) => { v.classList.remove('on'); v.oncanplay = null; v.onplaying = null; try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ } delete v.dataset.src; });
     warmVisuals(s);
   }
@@ -3982,23 +4034,17 @@ function clipBlob(url) {
 }
 function warmVisuals(s) {
   const V = s && s.visuals; if (!V) return;
-  if (NARRA && HD_IDS.has(s.id)) {
-    const L = LIVEX[s.id];
-    if (!L || !L.ready) return;   // wait for the live list before fetching anything else
-    if (L.live.length) { warmLive(s); return; }   // live mode: the live set itself (warmLive), nothing else
-  }
+  if (NARRA) { warmStills(s); return; }   // narra shows stills only: no clips to fetch
   const ids = new Set(V.pool || []);
   const ss = getSess(s.id), ep = P.id === s.id && P.ep;
   ((ep && ep.visuals) || (s.ep1 && s.ep1.visuals) || []).forEach((x) => ids.add(x.clip));
   ((ep && ep.lines) || []).forEach((l) => l.clip && ids.add(l.clip));
   if (ss && !ep) ((ss.eps[ss.eps.length - 1] || {}).lines || []).forEach((l) => l.clip && ids.add(l.clip));
-  queueClips([...ids].slice(0, 40).map((id) => V.clips[id]).filter(Boolean).map((u) => { const hd = NARRA ? hdOf(u) : {}; return hd.video || (hd.poster ? '' : u); }).filter(Boolean));
+  queueClips([...ids].slice(0, 40).map((id) => V.clips[id]).filter(Boolean));
 }
 /* clips load a few at a time, in the order they will be needed (was: up to 40 at once, which stalled the audio on slow links) */
 const CQ = { list: [], busy: 0 };
 function queueClips(urls) {
-  if (NARRA && slowNet() && !PS.fail) return;   // narra on a slow link shows the posters only
-  if (NARRA && P.id && HD_IDS.has(P.id) && !(HDX[P.id] || {}).ready) return;   // wait for the HD list, so the square copies aren't downloaded for nothing
   CQ.list = urls.filter((u) => !VBLOB.has(u)).concat(CQ.list.filter((u) => urls.indexOf(u) < 0 && !VBLOB.has(u))).slice(0, 60);
   const pump = () => {
     while (CQ.busy < (slowNet() ? 1 : 3) && CQ.list.length) {
@@ -4011,107 +4057,85 @@ function queueClips(urls) {
   pump();
 }
 /* narra: every clip has a poster (same name, .jpg). It is on screen as soon as the line starts; the moving clip fades in over it when it has loaded. */
-const PS = { url: '', tok: 0, seen: new Set(), req: new Set(), fail: 0 };
+const PS = { url: '', tok: 0, seen: new Set(), req: new Set(), fail: 0, busy: 0 };
 const posterOf = (clipUrl) => String(clipUrl || '').replace(/\.mp4$/, '.jpg');
 /* 11-11 (2) sharper backgrounds: the 13 realtime series have portrait HD versions of their scenes (build_hd.py →
  * v/<id>/hd/<clip>.mp4 + .jpg, up to 720×1080 like the covers; the stills are HD pictures only and move by CSS).
  * hd/index.json says which clips have one; until it has loaded, and for everything else, the square clips are used. */
 const HDX = {};
 const HD_IDS = new Set(STYLE_REAL.concat(STYLE_SEMI));
-/* live set per series: v/<id>/live/live.json = {"live": [clip ids in episode order]} */
-const LIVEX = {};
-function liveIndex(sid) {
-  if (!NARRA || LIVEX[sid] || !HD_IDS.has(sid)) return;
-  LIVEX[sid] = { live: [], ready: false, i: 0 };
-  fetch(absUrl(`v/${sid}/live/live.json`)).then((r) => (r.ok ? r.json() : null)).then((j) => {
-    LIVEX[sid] = { live: (j && j.live) || [], ready: true, i: 0 };
-    if (LIVEX[sid].live.length) { VS.url = null; const s = byId(sid); if (s) warmLive(s); }
-  }).catch(() => { LIVEX[sid].ready = true; });
+/* 11-11 (5) static backgrounds ("a still picture that fits what is being told, not a moving clip"): every scene clip has a
+ * portrait still (build_stills.py → v/<id>/still/<clip>.jpg, 1080×1620, super-resolved where the source was small);
+ * still/index.json lists them. narra shows stills only — the <video> layers stay empty. */
+const STX = {};
+function stillIndex(sid) {
+  if (!NARRA || STX[sid]) return;
+  STX[sid] = { set: new Set(), ready: false };
+  const done = (j) => { STX[sid] = { set: new Set((j && j.still) || []), ready: true }; PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true); };
+  fetch(absUrl(`v/${sid}/still/index.json`)).then((r) => (r.ok ? r.json() : null)).then(done).catch(() => done(null));
 }
-/** 11-11 (4) "the background must follow the bar at once": which live clip belongs to which part of the episode is a pure
- * function of the position, so dragging the bar / tapping a line / skipping lands on that part's background immediately.
- * The plan follows the story's own picture timeline (the live clip that shows that scene starts where the scene starts),
- * holds a clip at least MIN, and fills stretches longer than MAX with the other clips. Units: seconds (Episode 1) or lines. */
-function livePlan(s, ep, L) {
-  const live = L.live, K = live.length, produced = ep.kind !== 'live';
+/** the pictures of one scene clip: hi = the sharpest there is, low = a small one to put up first on a slow link */
+function stillOf(s, id) {
+  const V = s.visuals, c = V && V.clips[id]; if (!c) return { low: '', hi: '' };
+  const st = STX[s.id] && STX[s.id].set.has(id) ? `v/${s.id}/still/${id}.jpg` : '', hd = hdOf(c).poster || '', sq = posterOf(c);
+  if (slowNet()) return { low: hd ? '' : sq, hi: hd || st || sq };   // slow link: the 720 px picture (≈50 KB) is enough
+  return { low: '', hi: st || hd || sq };
+}
+/** Which picture belongs to which part of the episode — a pure function of the position, so dragging the bar, tapping a line
+ * or skipping lands on that part's picture at once. It follows the story's own picture timeline (the picture changes where the
+ * scene changes) but holds each picture at least MIN, so the background doesn't flicker through short cuts.
+ * Units: seconds (Episode 1) or lines (written episodes). */
+function stillPlan(s, ep) {
+  const V = s.visuals, produced = ep.kind !== 'live';
   const units = produced ? (ep.visuals || []).map((x) => [x.s, x.clip]) : (ep.lines || []).map((l, i) => [i, l.clip]);
-  const total = produced ? (audio.duration || ep.dur || 0) : (ep.lines || []).length;
-  const key = [s.id, ep.n, ep.kind, units.length, Math.round(total)].join(':');
-  if (L.planKey === key && L.plan) return L.plan;
-  const MIN = produced ? 12 : 3, MAX = produced ? 36 : 7;
-  let pts = [];
-  units.forEach(([at, clip]) => {
-    const i = live.indexOf(clip); if (i < 0) return;
+  const key = [s.id, ep.n, ep.kind, units.length].join(':');
+  if (V._planKey === key && V._plan) return V._plan;
+  const MIN = produced ? 12 : 3, ok = (id) => id && V.clips[id] && !(V.prefer && id !== 'idle' && !id.startsWith(V.prefer));
+  const pts = [];
+  units.forEach(([at, id]) => {
+    if (!ok(id)) return;
     const last = pts[pts.length - 1];
-    if (last && (last[1] === i || at - last[0] < MIN)) return;
-    pts.push([at, i]);
+    if (last && (last[1] === id || at - last[0] < MIN)) return;
+    pts.push([at, id]);
   });
-  if (!pts.length) pts = [[0, (ep.n || 0) % K]];
-  pts[0][0] = 0;
-  const used = new Array(K).fill(0), out = [];
-  pts.forEach((p) => { used[p[1]] += 1; });
-  pts.forEach((p, j) => {
-    out.push(p);
-    const end = j + 1 < pts.length ? pts[j + 1][0] : total, len = end - p[0];
-    if (K < 2 || len <= MAX) return;
-    const nextClip = j + 1 < pts.length ? pts[j + 1][1] : -1;
-    // Episode 1: even parts; a written episode still grows, so fixed steps (earlier parts never move)
-    const n = produced ? Math.ceil(len / MAX) : Math.floor((len - MIN) / MAX) + 1, step = produced ? len / n : MAX;
-    for (let q = 1; q < n; q++) {
-      const prev = out[out.length - 1][1];
-      let best = -1;
-      for (let c = 0; c < K; c++) { if (c === prev || (q === n - 1 && c === nextClip && K > 2)) continue; if (best < 0 || used[c] < used[best]) best = c; }
-      if (best < 0) break;
-      used[best] += 1; out.push([p[0] + q * step, best]);
-    }
-  });
-  L.planKey = key; L.plan = out;
-  return out;
+  if (!pts.length) { const pool = (V.pool || []).filter(ok); if (pool.length) pts.push([0, pool[(ep.n || 0) % pool.length]]); }
+  if (pts.length) pts[0][0] = 0;
+  V._planKey = key; V._plan = pts;
+  return pts;
 }
-function liveClip(s) {
-  liveIndex(s.id);
-  const L = LIVEX[s.id]; if (!L || !L.live.length) return '';
-  const ep = P.ep;
-  if (ep && !P.aux && !P.needChoice && !P.gen && !P.loading) {   // while the narrator asks / she answers / the next episode is written, the one that was on stays
-    const plan = livePlan(s, ep, L);
+function stillClip(s) {
+  const V = s.visuals, ep = P.ep; if (!V || !ep) return V && V._cur && V._curSid === s.id ? V._cur : null;
+  if (!P.aux && !P.needChoice && !P.gen && !P.loading) {   // while the narrator asks / she answers / the next episode is written, the picture that was up stays
+    const plan = stillPlan(s, ep); if (!plan.length) return null;
     let pos;
     if (ep.kind !== 'live') { const d = audio.duration || ep.dur || 0; pos = P.scrubF != null ? P.scrubF * d : (audio.currentTime || 0); }
     else { const n = (ep.lines || []).length; pos = P.scrubF != null ? Math.min(n - 1, Math.floor(P.scrubF * n)) : P.idx; }
-    let i = plan[0][1];
-    for (let j = 0; j < plan.length && plan[j][0] <= pos; j++) i = plan[j][1];
-    L.i = i;
+    let id = plan[0][1];
+    for (let j = 0; j < plan.length && plan[j][0] <= pos; j++) id = plan[j][1];
+    V._cur = id; V._curSid = s.id;
+  } else if (!V._cur) { const plan = stillPlan(s, ep); if (plan.length) V._cur = plan[plan.length - 1][1]; }
+  return V._cur || null;
+}
+/** keep this episode's pictures in memory so a switch (or a drag) never waits for the network: two at a time, the one on
+ * screen first, then in the order the episode uses them; on a slow link only the next two. */
+function warmStills(s) {
+  const V = s.visuals, ep = P.ep; if (!V || !ep || PS.busy >= 2) return;
+  const plan = stillPlan(s, ep), cur = Math.max(0, plan.findIndex((p) => p[1] === V._cur));
+  const order = plan.slice(cur).concat(slowNet() ? [] : plan.slice(0, cur)).slice(0, slowNet() ? 3 : 60);
+  for (const p of order) {
+    const u = stillOf(s, p[1]).hi; if (!u || PS.seen.has(u) || PS.req.has(u)) continue;
+    PS.req.add(u); PS.busy += 1;
+    const im = new Image(), fin = (good) => { PS.busy -= 1; if (good) PS.seen.add(u); else setTimeout(() => PS.req.delete(u), 4000); if (P.id === s.id) warmStills(s); };
+    im.onload = () => fin(true); im.onerror = () => fin(false); im.src = absUrl(u);
+    if (PS.busy >= 2) return;
   }
-  return `v/${s.id}/live/${L.live[L.i || 0]}.mp4`;
-}
-/** keep the whole live set in memory so a switch never waits for the network: every poster at once (~85 KB each), then the
- * clips one at a time (~1 MB each) — the one on screen first, then in the order the episode uses them. */
-function warmLive(s) {
-  const L = LIVEX[s.id]; if (!L || !L.ready || !L.live.length) return;
-  if (!L.pst) L.pst = L.live.map((id) => { const u = `v/${s.id}/live/${id}.jpg`, im = new Image(); im.onload = () => PS.seen.add(u); im.src = absUrl(u); return im; });
-  if (L.busy || P.id !== s.id) return;
-  if (slowNet() && !liveAffordable()) return;   // slow link: clips only once the story's audio is safely ahead
-  const order = [L.i || 0].concat((L.plan || []).map((p) => p[1]), L.live.map((_, i) => i));
-  const next = order.map((i) => `v/${s.id}/live/${L.live[i]}.mp4`).find((u) => !VBLOB.has(u));
-  if (!next) return;
-  L.busy = true;
-  const r = clipBlob(next), done = () => { L.busy = false; if (P.id === s.id) warmLive(s); };
-  (r && r.p ? r.p : Promise.resolve()).then(done, done);
-}
-/** slow link: a ~1 MB clip may only load when it won't starve the story's audio (well buffered ahead, or a per-line episode) */
-function liveAffordable() {
-  try {
-    if (!P.ep || P.ep.kind === 'live') return NET.kbs === 0 || NET.kbs > 40;
-    const b = audio.buffered, t = audio.currentTime || 0;
-    for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.5 && b.end(i) >= Math.min((audio.duration || 0) - 1, t + 90)) return true;
-  } catch (e) { /* ignore */ }
-  return false;
 }
 function hdIndex(sid) {
   if (!NARRA || HDX[sid] || !HD_IDS.has(sid)) return;
   HDX[sid] = { video: new Set(), poster: new Set() };
   fetch(absUrl(`v/${sid}/hd/index.json`)).then((r) => (r.ok ? r.json() : null)).then((j) => {
     HDX[sid] = { video: new Set((j && j.video) || []), poster: new Set((j && j.poster) || []), ready: true };
-    VS.url = null; const s = byId(sid); if (s && P.id === sid) warmVisuals(s);
+    PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true);
   }).catch(() => { HDX[sid].ready = true; });
 }
 function hdOf(clipUrl) {
@@ -4119,10 +4143,9 @@ function hdOf(clipUrl) {
   if (!x) return {};
   return { poster: x.poster.has(m[2]) ? `v/${m[1]}/hd/${m[2]}.jpg` : '', video: x.video.has(m[2]) ? `v/${m[1]}/hd/${m[2]}.mp4` : '' };
 }
-/** the picture for this clip: the small poster at once, the HD one over it as soon as it has loaded */
-function showPoster(clipUrl, playUrl) {
+/** put a picture up: the small one at once (slow link), the sharp one over it as soon as it has loaded */
+function showPoster(low, hi) {
   const a = $('#pl-pst'), b = $('#pl-pst2'); if (!a || !b) return;
-  const low = posterOf(clipUrl), hi = hdOf(clipUrl).poster || '';
   const key = hi || low; if (!key || key === PS.url) return;
   PS.url = key; const tok = ++PS.tok; let gotHi = false;
   const put = (src, isHi) => {
@@ -4130,21 +4153,11 @@ function showPoster(clipUrl, playUrl) {
     if (isHi) gotHi = true;
     const front = a.classList.contains('on') ? a : b, back = front === a ? b : a;
     back.src = src; back.classList.add('on'); front.classList.remove('on');
-    ['#pl-vid', '#pl-vid2'].forEach((q) => { const v = $(q); if (v && v.dataset.clip !== (playUrl || clipUrl)) v.classList.remove('on'); });   // the previous clip steps aside for the new picture; its own clip fades in when loaded
   };
   const load = (u, isHi) => { const im = new Image(); im.onload = () => { PS.seen.add(u); put(im.src, isHi); }; im.onerror = () => { if (!isHi) PS.fail += 1; setTimeout(() => { if (PS.tok === tok && !gotHi && PS.url === key) PS.url = ''; }, 1500); }; im.src = absUrl(u); };   // a failed picture is asked for again (was: the old background stayed for good)
   if (hi && PS.seen.has(hi)) { load(hi, true); return; }
-  if (low && !(hi && !slowNet())) load(low, false);   // good link + an HD picture: wait for it (the two are framed differently); slow link: small one first
+  if (low && low !== hi) load(low, false);
   if (hi) load(hi, true);
-}
-function warmPosters(s) {   // the next few pictures of this episode
-  const V = s && s.visuals, ep = P.ep; if (!V || !ep) return;
-  let ids = [];
-  const n = slowNet() ? 2 : 4;   // slow link: only the next picture or two, so they don't compete with the audio
-  if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; ids = ep.visuals.filter((x) => x.e > t).slice(0, n).map((x) => x.clip); }
-  else if (ep.kind === 'live') ids = (ep.lines || []).slice(P.idx, P.idx + n + 1).map((l) => l.clip).filter(Boolean);
-  if (!slowNet() && ep.kind !== 'live' && ep.visuals) ids = ids.concat(ep.visuals.map((x) => x.clip));   // good link: every picture of this episode, so a jump anywhere shows its picture at once
-  ids.concat(slowNet() ? [] : (V.pool || []).slice(0, 2)).forEach((id) => { const c = V.clips[id]; const u = c && ((!slowNet() && hdOf(c).poster) || posterOf(c)); if (u && !PS.seen.has(u) && !PS.req.has(u)) { PS.req.add(u); const im = new Image(); im.onload = () => PS.seen.add(u); im.onerror = () => PS.req.delete(u); im.src = absUrl(u); } });
 }
 function visualClipId(s) {
   const V = s.visuals, ep = P.ep;
@@ -4162,25 +4175,18 @@ function visualClipId(s) {
 function renderVisual(force) {
   const s = byId(P.id); if (!s || !s.visuals) return;
   const a = $('#pl-vid'), b = $('#pl-vid2'); if (!a || !b) return;
-  const id = visualClipId(s); if (!id) return;
-  let url = s.visuals.clips[id];
-  if (NARRA) a.parentNode.classList.toggle('nr-fast', Date.now() < (VS.fastUntil || 0));   // right after a drag / jump the change is quick, not a slow dissolve
-  const lv = NARRA ? liveClip(s) : '';
-  let viaBlob = false;
-  if (lv) {
-    // 11-11 (3) "a live video behind, not a slideshow": super-resolved seamless loops (build_live.py)
-    url = lv; showPoster(lv, lv); warmLive(s);
-    const got = VBLOB.get(url);
-    if (url !== VS.url && !(got && got.obj) && slowNet() && !liveAffordable()) return;   // slow link: its still picture first; the clip follows once the audio is safely ahead
-    viaBlob = true;
-  } else if (NARRA) {
-    hdIndex(s.id);
-    const hd = hdOf(url);
-    showPoster(url, hd.video || url); warmPosters(s);
-    // posters only: on a slow link, and for stills that have an HD picture (the square moving copy would only blur it)
-    if ((slowNet() && !PS.fail) || (hd.poster && !hd.video)) { VS.url = url; [a, b].forEach((v) => v.classList.remove('on')); return; }
-    if (hd.video) url = hd.video;
+  if (NARRA) {
+    // 11-11 (5): a still picture that fits what is being told right now; no moving clips
+    stillIndex(s.id); hdIndex(s.id);
+    if (!STX[s.id].ready || (HD_IDS.has(s.id) && !(HDX[s.id] || {}).ready)) return;   // two tiny lists; the cover is up meanwhile
+    const sid = stillClip(s); if (!sid) return;
+    a.parentNode.classList.toggle('nr-fast', Date.now() < (VS.fastUntil || 0));   // right after a drag / jump the change is quick, not a slow dissolve
+    const pic = stillOf(s, sid);
+    showPoster(pic.low, pic.hi); warmStills(s);
+    return;
   }
+  const id = visualClipId(s); if (!id) return;
+  const url = s.visuals.clips[id];
   if (url === VS.url) {
     const f = a.dataset.clip === url ? a : (b.dataset.clip === url ? b : null);
     // back on a clip whose picture had stepped in front of it (jump away and back): bring the loaded clip up again
@@ -4207,9 +4213,7 @@ function renderVisual(force) {
     back.oncanplay = () => { back.play().then(show).catch(show); };
     try { back.load(); back.play().catch(() => {}); } catch (e) { /* ignore */ }
   };
-  // live clips always come from memory (one download per clip, and the next switch to it is instant); its picture is up meanwhile
-  if (viaBlob && br && !br.obj && br.p) br.p.then((o) => start(o || absUrl(url)), () => start(absUrl(url)));
-  else start((br && br.obj) || absUrl(url));
+  start((br && br.obj) || absUrl(url));
   warmVisuals(s);
 }
 setInterval(() => { const pl = $('#player'); if (pl && pl.dataset.built && P.id) renderVisual(); }, NARRA ? 400 : 1000);
@@ -4240,6 +4244,7 @@ function updatePlayerUI(force) {
 
   // generating card / up-next card
   const gen = $('#pl-gen'), sub = $('#pl-sub');
+  if (NARRA) el.classList.toggle('nr-ask', !!P.needChoice);   // choice point: the transport steps aside, the lyric stream (question, A, B, answer box) gets the room
   if (NARRA && !P.upNext) { gen.hidden = true; gen.dataset.k = ''; sub.hidden = true; renderVisual(); renderLyrics(force); }  // narra: writing / loading states are lines of the lyric stream
   else if (P.gen || P.loading || P.upNext) {
     gen.hidden = false; sub.hidden = true;
@@ -4315,7 +4320,7 @@ function lyricState() {
   }
   if (P.needChoice || P.gen) {
     const q = add({ k: 'q', text: ep.prompt || (LANG === 'zh' ? '你怎么做？' : 'What do you do?') });
-    if (P.needChoice) { cur = q; (ep.choices || []).slice(0, 2).forEach((c, i) => add({ k: 'opt', i, text: c })); }
+    if (P.needChoice) { cur = q; (ep.choices || []).slice(0, 2).forEach((c, i) => add({ k: 'opt', i, text: c })); add({ k: 'in', text: '' }); add({ k: 'hint', text: '' }); }
     else {
       const g = P.gen;
       if (g.via === 'auto') add({ k: 'note', text: 'The story carries on by itself…' });
@@ -4335,6 +4340,8 @@ function lyHtml(o, j) {
   if (o.k === 'you') return `<div class="ll you"><span class="ll-who">You</span>${t}</div>`;
   if (o.k === 'q') return `<div class="ll q"><span class="ll-who">Your move</span>${t}</div>`;
   if (o.k === 'opt') return `<button class="ll opt" data-act="choose" data-i="${o.i}"><i>${'AB'[o.i]}</i>${t}</button>`;
+  if (o.k === 'in') return `<div class="ll inp" id="nr-inbox">${VOICE_OK ? `<button class="in-mic" data-act="nr-mic" aria-label="Speak your answer">${ic('mic')}</button>` : `<span class="in-mic">${ic('pen')}</span>`}<div class="in-f"><div class="in-ghost ph" id="nr-ghost"></div><textarea id="nr-in" rows="1" maxlength="200" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" aria-label="Your answer"></textarea></div><span class="in-ring" id="nr-ring" hidden></span><button class="in-send" id="nr-send" data-act="nr-send" aria-label="Send" hidden>${ic('send')}</button></div>`;
+  if (o.k === 'hint') return '<div class="ll hint" id="nr-hint" hidden></div>';
   if (o.k === 'note') return `<div class="ll note"><span class="ll-t">${esc(o.text)}</span></div>`;
   return `<div class="ll sys">${waveBars(7)}<span class="ll-t">${esc(o.text)}</span></div>`;
 }
@@ -4343,18 +4350,19 @@ function renderLyrics(force) {
   const s = byId(P.id);
   const { it, cur } = lyricState();
   const sig = [P.id, P.ep ? P.ep.n : 0, P.needChoice ? 'c' : '', P.gen ? 'g' + P.gen.status : ''].join('|') + '|' + it.map((o) => o.k[0] + (o.pend ? 'p' : '') + o.text.length).join(',');
-  if (force || sig !== LY.sig) {
+  if ((force && !(P.needChoice && sig === LY.sig)) || sig !== LY.sig) {   // at a choice point the answer box holds what she is typing: never rebuilt for a plain refresh
     LY.sig = sig; LY.cur = -2; LY.tok = null;
     box.style.setProperty('--accent-l', s && s.accent ? `color-mix(in srgb, ${s.accent} 58%, #fff)` : 'var(--b)');
     roll.innerHTML = it.map(lyHtml).join('');
     LY.nodes = Array.from(roll.children);
+    bindAsk();
   }
   LY.it = it;
   if (cur !== LY.cur) {
     const old = LY.nodes[LY.cur], oi = old && it[LY.cur];
     if (old && oi && LY.tok) { const t = $('.ll-t', old); if (t) t.textContent = oi.text; }
     LY.tok = null; LY.cur = cur;
-    LY.nodes.forEach((n, j) => { n.classList.toggle('cur', j === cur); n.classList.toggle('past', j < cur); n.classList.toggle('far', j > cur + 2); });
+    LY.nodes.forEach((n, j) => { n.classList.toggle('cur', j === cur); n.classList.toggle('past', j < cur); n.classList.toggle('far', j > cur + 2 && !(it[cur] && it[cur].k === 'q')); });
     const o = it[cur], node = LY.nodes[cur];
     if (o && node && o.k === 'line' && !o.pend && o.i >= 0) {   // split the current line so it can fill in as it is spoken
       const parts = o.text.match(/[㐀-鿿豈-﫿぀-ヿ]|[^\s㐀-鿿豈-﫿぀-ヿ]+\s*|\s+/g) || [o.text];
@@ -4373,7 +4381,8 @@ function placeLyrics() {
   let extra = 0;   // a question keeps its two choices in view
   if (LY.it[LY.cur] && LY.it[LY.cur].k === 'q') for (let j = LY.cur + 1; j < LY.nodes.length; j++) extra += LY.nodes[j].offsetHeight + 8;
   const lastOne = !LY.nodes.slice(LY.cur + 1).some((x) => !x.classList.contains('far'));   // nothing after it (e.g. "Writing your episode…"): sit lower, more of what came before stays in view
-  const top = Math.max(H * 0.06, Math.min(H * (lastOne ? 0.56 : 0.42), room - extra - H * 0.08));   // the current line sits a little below the middle-top: two earlier lines stay readable above it
+  let top = Math.max(H * 0.06, Math.min(H * (lastOne ? 0.56 : 0.42), room - extra - H * 0.08));
+  if (extra && top + n.offsetHeight + extra > H - 6) top = H - 6 - n.offsetHeight - extra;   // a long question on a short screen: the answer box stays in view, the question slides up   // the current line sits a little below the middle-top: two earlier lines stay readable above it
   roll.style.transform = `translateY(${Math.round(top - n.offsetTop)}px)`;
 }
 function lyProgress() {
@@ -4663,9 +4672,10 @@ document.addEventListener('click', (e) => {
     case 'talk': openTalkSheet(); break;
     case 'talk-mic': if (VOICE_OK) { if (talkRec) talkRec.stop(); else talkListen(); } break;
     case 'hf-again': hfListen(); break;
+    case 'nr-mic': { const i = $('#nr-in'); if (i) { i.blur(); i.value = ''; } if (VOICE_OK && P.needChoice) { holdForHer(); hfListen(); } break; }
+    case 'nr-send': askSend(); break;
     case 'hf-stop': if (HF.rec) HF.rec.stop(); break;
     case 'ch-wait': holdForHer(); break;
-    case 'ch-expand': { const t = topSheet(); if (t && t.kind === 'choice') { t.mini = false; t.el.classList.remove('nr-mini'); $('#player').classList.remove('nr-ask'); syncPass(); holdForHer(); const i = $('#ch-text', t.el); if (i) setTimeout(() => { try { i.focus({ preventScroll: true }); } catch (x) { /* ignore */ } }, 80); } break; }
     case 'ly-seek': lySeek(+el.dataset.j); break;
     case 'me-chip': { const t = $('#pf-me'); if (t) { t.value = (t.value ? t.value.trim() + ' ' : '') + el.dataset.t; t.focus(); } break; }
     case 'ul-coins': {

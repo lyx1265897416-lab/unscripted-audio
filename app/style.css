@@ -1028,12 +1028,11 @@ h1, h2, h3, h4, p { margin: 0; }
 .narra .nr-stage .pl-art img, .narra .nr-stage .pl-art video { object-position: center 30%; }
 .narra .nr-stage .pl-art video { transition: opacity 1.4s ease; }   /* live backgrounds change rarely, and softly */
 .narra .nr-stage .pl-art.nr-fast video, .narra .nr-stage .pl-art.nr-fast img.pst { transition-duration: .16s; }   /* right after a drag / jump: the new spot's background at once */
-/* posters: one frame of each scene clip, on screen the moment the line starts (the clip fades in over it once loaded) */
+/* backgrounds are still pictures (11-11): the picture of the scene being told, cross-faded when the scene changes; nothing moves */
 .narra .nr-stage .pl-art img.pst { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .9s ease; }
-.narra .nr-stage .pl-art img.pst.on { opacity: 1; animation: nrKb 16s ease-in-out infinite alternate; }
+.narra .nr-stage .pl-art img.pst.on { opacity: 1; }
 .narra .nr-stage .pl-art img.pst:not([src]) { visibility: hidden; }
-@keyframes nrKb { from { transform: scale(1); } to { transform: scale(1.07); } }
-@media (prefers-reduced-motion: reduce) { .narra .nr-stage .pl-art img.pst.on { animation: none; } }
+.narra .nr-stage .pl-art video { display: none; }
 .narra .nr-shade {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background: linear-gradient(180deg, rgba(8, 8, 12, .6) 0%, rgba(8, 8, 12, .14) 13%, rgba(8, 8, 12, 0) 22%, rgba(8, 8, 12, .12) 30%, rgba(8, 8, 12, .64) 40%, rgba(8, 8, 12, .84) 50%, rgba(8, 8, 12, .94) 66%, #08080C 100%);
@@ -1095,27 +1094,44 @@ h1, h2, h3, h4, p { margin: 0; }
 .narra .ll.sys .wave { margin-top: 0; height: 18px; }
 .narra .ll.note { font-family: var(--fb); font-size: 15px; font-weight: 600; font-style: italic; }
 .narra .pl-prog { margin-top: 8px; }
-/* choice point: the transport steps back and a small voice bubble takes its place */
-.narra .pl-prog, .narra .pl-ctrl, .narra .pl-tools { transition: opacity .3s ease; }
-.narra .player.nr-ask .pl-prog, .narra .player.nr-ask .pl-ctrl, .narra .player.nr-ask .pl-tools { opacity: 0; pointer-events: none; }
-.narra .sheets.nr-pass { pointer-events: none; }
-.narra .sheets.nr-pass .scrim { opacity: 0; }
-.narra .sheets.nr-pass .sheet { pointer-events: auto; }
-.narra .sheet.nr-mini {
-  left: 16px; right: 16px; bottom: calc(var(--sab) + 34px); max-height: none; overflow: visible;
-  border-radius: 28px; padding: 14px 16px;
-  background: rgba(26, 26, 34, .8); -webkit-backdrop-filter: blur(26px) saturate(1.5); backdrop-filter: blur(26px) saturate(1.5);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(255, 255, 255, .13);
-  transform: translateY(46px) scale(.94); opacity: 0; transition: transform .36s var(--ease), opacity .26s ease;
+/* choice point (11-11): the transport steps aside; the question, A, B and the answer box are lines of the lyric stream */
+.narra .player.nr-ask .pl-prog, .narra .player.nr-ask .pl-ctrl, .narra .player.nr-ask .pl-tools { display: none; }
+.narra .player.nr-ask .nr-lyr { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 100%); mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 100%); }
+/* the answer box: the same shape and height as an option; type in it or just talk */
+.narra .ll.inp {
+  display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 11px 14px; border-radius: 16px; cursor: text;
+  font-family: var(--fb); font-size: 16px; font-weight: 600; line-height: 1.35; letter-spacing: 0; color: #fff; text-shadow: none; opacity: 1;
+  background: rgba(255, 255, 255, .09); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: box-shadow .2s ease, background .2s ease;
 }
-.narra .sheet.nr-mini.on { transform: none; opacity: 1; }
-.narra .sheet.nr-mini > :not(.ch-hf):not(.ch-auto):not(.ch-mini-row):not(.ch-err) { display: none; }
-.narra .sheet.nr-mini .ch-hf { margin: 0; padding: 2px; background: none; box-shadow: none; }
-.narra .sheet.nr-mini .ch-hf.ask .hf-t span { display: none; }
-.narra .sheet.nr-mini .ch-auto { margin-top: 10px; background: rgba(255, 255, 255, .07); }
-.narra .sheet.nr-mini .ch-mini-row { display: flex; justify-content: center; gap: 22px; margin-top: 10px; }
-.narra .sheet.nr-mini .ch-mini-row .link-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
-.narra .sheet.nr-mini .ch-mini-row .ic { width: 14px; height: 14px; }
+.narra .ll.inp.focus, .narra .ll.inp.live { box-shadow: inset 0 0 0 1.5px var(--b); background: rgba(255, 255, 255, .12); }
+.narra .ll.inp .in-mic { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .16); color: #fff; transition: background .2s ease, color .2s ease; }
+.narra .ll.inp .in-mic .ic { width: 14px; height: 14px; }
+.narra .ll.inp.live .in-mic { background: var(--grad); color: #1A0B06; }
+.narra .ll.inp .in-f { position: relative; flex: 1; min-width: 0; }
+.narra .ll.inp .in-ghost { min-height: 1.35em; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+.narra .ll.inp .in-ghost.ph { color: rgba(255, 255, 255, .46); font-weight: 500; }
+.narra .ll.inp .caret { display: inline-block; width: 2px; height: 1.12em; margin: 0 1px; vertical-align: -.2em; border-radius: 1px; background: var(--b); animation: nrCaret 1.06s steps(1, end) infinite; }
+@keyframes nrCaret { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+.narra .ll.inp textarea {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden;
+  background: none; font: inherit; line-height: inherit; color: #fff; caret-color: var(--b); opacity: 0; -webkit-appearance: none; appearance: none;
+}
+.narra .ll.inp textarea::placeholder { color: rgba(255, 255, 255, .46); font-weight: 500; }
+.narra .ll.inp.focus textarea { opacity: 1; }
+.narra .ll.inp.focus .in-ghost { visibility: hidden; }
+.narra .ll.inp .in-ring { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .2); border-top-color: var(--b); animation: nrSpin .8s linear infinite; }
+.narra .ll.inp .in-ring.wait { animation-duration: 1.6s; }
+.narra .ll.inp .in-ring[hidden], .narra .ll.inp .in-send[hidden] { display: none; }
+@keyframes nrSpin { to { transform: rotate(360deg); } }
+.narra .ll.inp .in-send { flex: none; width: 28px; height: 28px; margin: -1px -3px -1px 0; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #1A0B06; }
+.narra .ll.inp .in-send .ic { width: 15px; height: 15px; }
+.narra .ll.hint { display: flex; align-items: center; gap: 8px; padding: 9px 4px 0; font-family: var(--fb); font-size: 12.5px; font-weight: 600; letter-spacing: 0; line-height: 1.3; color: rgba(255, 255, 255, .62); text-shadow: none; opacity: 1; }
+.narra .ll.hint[hidden] { display: none; }
+.narra .ll.hint .ic { width: 14px; height: 14px; flex: none; }
+.narra .ll.hint .ca-ring { flex: none; width: 14px; height: 14px; -webkit-mask: radial-gradient(circle, transparent 4px, #000 4.5px); mask: radial-gradient(circle, transparent 4px, #000 4.5px); }
+.narra .ll.hint .link-btn { margin-left: auto; font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { .narra .ll.inp .caret { animation: none; } }
 @media (max-height: 700px) {
   .narra .nr-gap { flex-basis: 22%; }
   .narra .ll { font-size: 18px; padding: 6px 0; }
