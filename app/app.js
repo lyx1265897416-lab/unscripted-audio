@@ -578,14 +578,16 @@ const SHELF_ORDER = ['magnus', 'reborn', 'rian', 'hellqueen', 'island', 'starmat
   'onestat', 'dorian', 'heroacad', 'villa', 'academia', 'rowan', 'mask', 'hear', 'mii', 'milo'];
 const NEW_BATCH = ['reborn', 'hellqueen', 'crackhigh', 'onestat', 'mythborne', 'heroacad', 'starmate', 'academia'];
 /** keep a shelf's order but alternate earlier series and the new batch, so neither clumps (taste-sorted rows stay roughly taste-sorted) */
-const weave = (list) => {
-  if (NARRA) return list.filter((x) => NEW_BATCH.indexOf(x.id) < 0).concat(list.filter((x) => NEW_BATCH.indexOf(x.id) >= 0));
-  const a = list.filter((x) => NEW_BATCH.indexOf(x.id) < 0), b = list.filter((x) => NEW_BATCH.indexOf(x.id) >= 0), out = [];
-  const firstNew = list.length && NEW_BATCH.indexOf(list[0].id) >= 0;
-  while (a.length || b.length) { const p = firstNew ? [b, a] : [a, b]; if (p[0].length) out.push(p[0].shift()); if (p[1].length) out.push(p[1].shift()); }
-  return out;
-};
-const shelfSort = (list) => (NARRA ? weave(list) : list).map((x, i) => [x, NARRA ? i : SHELF_ORDER.indexOf(x.id), i]).sort((a, b) => (a[1] < 0 ? 999 + a[2] : a[1]) - (b[1] < 0 ? 999 + b[2] : b[1])).map((x) => x[0]);
+/* 11-11 (2): she wants the photoreal series in front everywhere, the others after them (replaces the 11-10 interleaving).
+ * &real=1 leaves the anime ones out altogether — for screen recordings. */
+const STYLE_REAL = ['magnus', 'rafael', 'island', 'lena', 'kael', 'villa', 'hear', 'mask', 'milo', 'mii'];
+const STYLE_SEMI = ['dorian', 'rian', 'rowan'];   // painted, semi-real
+const REAL_ONLY = Q.get('real') === '1';
+const styleRank = (id) => (STYLE_REAL.indexOf(id) >= 0 ? 0 : STYLE_SEMI.indexOf(id) >= 0 ? 1 : NEW_BATCH.indexOf(id) >= 0 ? 3 : 2);
+/** keeps a shelf's own order inside each group, with the groups in the order real → painted → anime */
+const weave = (list) => list.map((x, i) => [x, styleRank(x.id), i]).sort((p, q) => p[1] - q[1] || p[2] - q[2]).map((x) => x[0]);
+const shelfSort = (list) => weave((REAL_ONLY ? list.filter((x) => NEW_BATCH.indexOf(x.id) < 0) : list)
+  .map((x, i) => [x, SHELF_ORDER.indexOf(x.id), i]).sort((p, q) => (p[1] < 0 ? 999 + p[2] : p[1]) - (q[1] < 0 ? 999 + q[2] : q[1])).map((x) => x[0]));
 const DETAIL = {};
 const byId = (id) => SERIES.find((s) => s.id === id);
 const GENRES = ['Werewolf', 'Billionaire', 'Romance', 'Fantasy', 'Adventure', 'Academy', 'Mystery', 'Thriller', 'Reality show', 'Cozy'];  // 11-10 Prota Top10 加冒险、学院
@@ -3427,8 +3429,8 @@ function renderHome() {
   const fav = (S.genres && S.genres[0]) || 'Werewolf';
   const becauseLabel = fav === 'Werewolf' ? 'werewolf romance' : fav.toLowerCase();
   const because = SERIES.filter((s) => (S.genres.length ? S.genres.some((g) => matchGenre(s, g)) : matchGenre(s, 'Werewolf') || matchGenre(s, 'Romance')));
-  const becauseList = weave(byPref(because)).concat(weave(SERIES.filter((s) => because.indexOf(s) < 0)));
-  const top = SERIES.slice().sort((a, b) => parseFloat(rankScore(b)) - parseFloat(rankScore(a)));
+  const becauseList = weave(byPref(because).concat(SERIES.filter((s) => because.indexOf(s) < 0)));
+  const top = weave(SERIES.slice().sort((a, b) => parseFloat(rankScore(b)) - parseFloat(rankScore(a))));
   const fresh = weave(byPref(['reborn', 'lena', 'hellqueen', 'rian', 'starmate', 'island', 'crackhigh', 'mii', 'mythborne', 'rowan', 'onestat', 'rafael', 'heroacad', 'magnus', 'academia'].map(byId).filter(Boolean)));
   const binge = weave(SERIES.slice().sort((a, b) => ((b.stats || {}).rating || 0) - ((a.stats || {}).rating || 0)));
   el.innerHTML = `
@@ -3696,8 +3698,8 @@ async function showDetail(id) {
   warmEp1(s); warmResume(id);
   if (s.visuals) [...((s.ep1 && s.ep1.visuals) || []).slice(0, 3).map((x) => x.clip), ...(s.visuals.pool || []).slice(0, 1)].forEach((c) => {
     const u = s.visuals.clips[c]; if (!u) return;
-    if (NARRA) { const im = new Image(); im.src = absUrl(posterOf(u)); }   // the first pictures (posters) are there before Play
-    if (!slowNet()) clipBlob(u);
+    if (NARRA) { hdIndex(id); const im = new Image(); im.src = absUrl(posterOf(u)); }   // the first pictures (posters) are there before Play
+    if (!slowNet() && !(NARRA && HD_IDS.has(id))) clipBlob(u);
   });  // first pictures ready before Play
   if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
   detailId = id;
@@ -3781,7 +3783,7 @@ function renderDetailPane() {
         </div></div>
       <div class="about-block"><h4>Genres</h4><div class="tags" style="justify-content:flex-start">${(s.genres || []).map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div></div>`;
   } else {
-    const others = SERIES.filter((x) => x.id !== s.id).sort((a, b) => sharedGenres(b, s) - sharedGenres(a, s));
+    const others = weave(SERIES.filter((x) => x.id !== s.id).sort((a, b) => sharedGenres(b, s) - sharedGenres(a, s)));
     box.innerHTML = `<div class="mlt-grid">${others.map((x) => card(x)).join('')}</div>`;
   }
 }
@@ -3948,7 +3950,7 @@ function renderPlayer() {
   // 动态封面（Pocket FM 式）：静音循环短片盖在封面上，能播了才淡入；没有短片就只显示封面
   const vid = $('#pl-vid'), mo = motionOf(s);
   if (VS.sid !== s.id) {  // another series: drop the old one's picture at once (its cover shows) instead of leaving it up until the new clip loads
-    VS.sid = s.id; VS.url = null; VS.tok++; PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
+    VS.sid = s.id; VS.url = null; VS.tok++; hdIndex(s.id); PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
     [vid, $('#pl-vid2')].forEach((v) => { v.classList.remove('on'); v.oncanplay = null; v.onplaying = null; try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ } delete v.dataset.src; });
     warmVisuals(s);
   }
@@ -3982,12 +3984,13 @@ function warmVisuals(s) {
   ((ep && ep.visuals) || (s.ep1 && s.ep1.visuals) || []).forEach((x) => ids.add(x.clip));
   ((ep && ep.lines) || []).forEach((l) => l.clip && ids.add(l.clip));
   if (ss && !ep) ((ss.eps[ss.eps.length - 1] || {}).lines || []).forEach((l) => l.clip && ids.add(l.clip));
-  queueClips([...ids].slice(0, 40).map((id) => V.clips[id]).filter(Boolean));
+  queueClips([...ids].slice(0, 40).map((id) => V.clips[id]).filter(Boolean).map((u) => { const hd = NARRA ? hdOf(u) : {}; return hd.video || (hd.poster ? '' : u); }).filter(Boolean));
 }
 /* clips load a few at a time, in the order they will be needed (was: up to 40 at once, which stalled the audio on slow links) */
 const CQ = { list: [], busy: 0 };
 function queueClips(urls) {
   if (NARRA && slowNet() && !PS.fail) return;   // narra on a slow link shows the posters only
+  if (NARRA && P.id && HD_IDS.has(P.id) && !(HDX[P.id] || {}).ready) return;   // wait for the HD list, so the square copies aren't downloaded for nothing
   CQ.list = urls.filter((u) => !VBLOB.has(u)).concat(CQ.list.filter((u) => urls.indexOf(u) < 0 && !VBLOB.has(u))).slice(0, 60);
   const pump = () => {
     while (CQ.busy < (slowNet() ? 1 : 3) && CQ.list.length) {
@@ -4002,20 +4005,41 @@ function queueClips(urls) {
 /* narra: every clip has a poster (same name, .jpg). It is on screen as soon as the line starts; the moving clip fades in over it when it has loaded. */
 const PS = { url: '', tok: 0, seen: new Set(), fail: 0 };
 const posterOf = (clipUrl) => String(clipUrl || '').replace(/\.mp4$/, '.jpg');
-function showPoster(clipUrl) {
+/* 11-11 (2) sharper backgrounds: the 13 realtime series have portrait HD versions of their scenes (build_hd.py →
+ * v/<id>/hd/<clip>.mp4 + .jpg, up to 720×1080 like the covers; the stills are HD pictures only and move by CSS).
+ * hd/index.json says which clips have one; until it has loaded, and for everything else, the square clips are used. */
+const HDX = {};
+const HD_IDS = new Set(STYLE_REAL.concat(STYLE_SEMI));
+function hdIndex(sid) {
+  if (!NARRA || HDX[sid] || !HD_IDS.has(sid)) return;
+  HDX[sid] = { video: new Set(), poster: new Set() };
+  fetch(absUrl(`v/${sid}/hd/index.json`)).then((r) => (r.ok ? r.json() : null)).then((j) => {
+    HDX[sid] = { video: new Set((j && j.video) || []), poster: new Set((j && j.poster) || []), ready: true };
+    VS.url = null; const s = byId(sid); if (s && P.id === sid) warmVisuals(s);
+  }).catch(() => { HDX[sid].ready = true; });
+}
+function hdOf(clipUrl) {
+  const m = /^v\/([\w-]+)\/([\w-]+)\.mp4$/.exec(clipUrl || ''), x = m && HDX[m[1]];
+  if (!x) return {};
+  return { poster: x.poster.has(m[2]) ? `v/${m[1]}/hd/${m[2]}.jpg` : '', video: x.video.has(m[2]) ? `v/${m[1]}/hd/${m[2]}.mp4` : '' };
+}
+/** the picture for this clip: the small poster at once, the HD one over it as soon as it has loaded */
+function showPoster(clipUrl, playUrl) {
   const a = $('#pl-pst'), b = $('#pl-pst2'); if (!a || !b) return;
-  const p = posterOf(clipUrl); if (!p || p === PS.url) return;
-  PS.url = p; const tok = ++PS.tok;
-  const im = new Image();
-  im.onload = () => {
-    PS.seen.add(p);
-    if (PS.tok !== tok) return;
+  const low = posterOf(clipUrl), hi = hdOf(clipUrl).poster || '';
+  const key = hi || low; if (!key || key === PS.url) return;
+  PS.url = key; const tok = ++PS.tok; let gotHi = false;
+  const put = (src, isHi) => {
+    if (PS.tok !== tok || (gotHi && !isHi)) return;
+    if (isHi) gotHi = true;
     const front = a.classList.contains('on') ? a : b, back = front === a ? b : a;
-    back.src = im.src; back.classList.add('on'); front.classList.remove('on');
-    ['#pl-vid', '#pl-vid2'].forEach((q) => { const v = $(q); if (v && v.dataset.clip !== clipUrl) v.classList.remove('on'); });   // the previous clip steps aside for the new picture; its own clip fades in when loaded
+    back.src = src; back.classList.add('on'); front.classList.remove('on');
+    ['#pl-vid', '#pl-vid2'].forEach((q) => { const v = $(q); if (v && v.dataset.clip !== (playUrl || clipUrl)) v.classList.remove('on'); });   // the previous clip steps aside for the new picture; its own clip fades in when loaded
   };
-  im.onerror = () => { PS.fail += 1; };   // no posters on this host (yet): the clips themselves are used instead
-  im.src = absUrl(p);
+  const load = (u, isHi) => { const im = new Image(); im.onload = () => { PS.seen.add(u); put(im.src, isHi); }; im.onerror = () => { if (!isHi) PS.fail += 1; }; im.src = absUrl(u); };
+  if (hi && PS.seen.has(hi)) { load(hi, true); return; }
+  if (low && !(hi && !slowNet())) load(low, false);   // good link + an HD picture: wait for it (the two are framed differently); slow link: small one first
+  if (hi) load(hi, true);
 }
 function warmPosters(s) {   // the next few pictures of this episode
   const V = s && s.visuals, ep = P.ep; if (!V || !ep) return;
@@ -4023,7 +4047,7 @@ function warmPosters(s) {   // the next few pictures of this episode
   const n = slowNet() ? 2 : 4;   // slow link: only the next picture or two, so they don't compete with the audio
   if (ep.kind !== 'live' && ep.visuals) { const t = audio.currentTime || 0; ids = ep.visuals.filter((x) => x.e > t).slice(0, n).map((x) => x.clip); }
   else if (ep.kind === 'live') ids = (ep.lines || []).slice(P.idx, P.idx + n + 1).map((l) => l.clip).filter(Boolean);
-  ids.concat(slowNet() ? [] : (V.pool || []).slice(0, 2)).forEach((id) => { const u = V.clips[id] && posterOf(V.clips[id]); if (u && !PS.seen.has(u)) { PS.seen.add(u); const im = new Image(); im.src = absUrl(u); } });
+  ids.concat(slowNet() ? [] : (V.pool || []).slice(0, 2)).forEach((id) => { const c = V.clips[id]; const u = c && ((!slowNet() && hdOf(c).poster) || posterOf(c)); if (u && !PS.seen.has(u)) { const im = new Image(); im.onload = () => PS.seen.add(u); im.src = absUrl(u); } });
 }
 function visualClipId(s) {
   const V = s.visuals, ep = P.ep;
@@ -4041,8 +4065,15 @@ function renderVisual(force) {
   const s = byId(P.id); if (!s || !s.visuals) return;
   const a = $('#pl-vid'), b = $('#pl-vid2'); if (!a || !b) return;
   const id = visualClipId(s); if (!id) return;
-  const url = s.visuals.clips[id];
-  if (NARRA) { showPoster(url); warmPosters(s); if (slowNet() && !PS.fail) { VS.url = url; [a, b].forEach((v) => v.classList.remove('on')); return; } }
+  let url = s.visuals.clips[id];
+  if (NARRA) {
+    hdIndex(s.id);
+    const hd = hdOf(url);
+    showPoster(url, hd.video || url); warmPosters(s);
+    // posters only: on a slow link, and for stills that have an HD picture (the square moving copy would only blur it)
+    if ((slowNet() && !PS.fail) || (hd.poster && !hd.video)) { VS.url = url; [a, b].forEach((v) => v.classList.remove('on')); return; }
+    if (hd.video) url = hd.video;
+  }
   if (url === VS.url && !force) return;
   if (url === VS.url) { const f = a.classList.contains('on') ? a : b; if (f.paused) f.play().catch(() => {}); return; }
   VS.url = url;
@@ -4620,7 +4651,7 @@ function onEpisodeTap(id, n, kind) {
 
 async function shareSeries(id) {
   const s = byId(id); if (!s) return;
-  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1'); if (NARRA) q.set('ui', 'narra');
+  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1'); if (NARRA) q.set('ui', 'narra'); if (REAL_ONLY) q.set('real', '1');
   const url = `${location.origin}${location.pathname}?${q}#/series/${encodeURIComponent(id)}`;
   let ok = false;
   try {
