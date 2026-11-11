@@ -1697,9 +1697,17 @@ const HF = { phase: '', rec: null, heard: '', key: '', ask: '' };
 let autoT = 0, autoLeft = 0;
 const WAIT = 5;  // every choice point waits 5 s (touching the screen pauses it until she's done)
 
+/* 11-11 a new choice point starts with an empty answer box: the words she said (or typed) at the last one must not carry over */
+function clearAsk() {
+  HF.heard = ''; ASK.live = false; ASK.stable = 0;
+  const inp = $('#nr-in'); if (inp && document.activeElement !== inp) inp.value = '';
+  if ($('#nr-inbox')) paintAsk();
+}
 function endOfEpisodeFlow() {
   const m = modeOf();
+  clearAsk();
   openChoiceSheet();
+  clearAsk();
   if (m === 'voice' && VOICE_OK && !VI.denied) { startHandsFree(); return; }
   keepAlive();
   startAutoCountdown(WAIT, m === 'auto' ? 'Lean back · the story continues in' : 'The story continues in');
