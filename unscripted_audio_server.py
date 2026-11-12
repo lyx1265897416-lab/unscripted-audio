@@ -1088,6 +1088,58 @@ def understand(sess, text, timeout=2.4):
         print('understand failed', repr(e)[:160], flush=True); return None
 
 
+# ---- 11-12 语音输入判停（她说：稍微停一下就被当成说完了，其实还要接着说；停顿时长也不要太久）----
+# 参考的做法：OpenAI Realtime 的 semantic_vad（按“说完了”的概率决定等多久，话没说完就多等）、AssemblyAI（先等一小段安静再看内容，
+# 最长 1.28–2.56 秒强制结束）、LiveKit（最短 0.5 秒、最长 3 秒）。这里：中转在每个中间识别结果上给一个判断 eou，
+# 手机按它决定安静多久算说完——done 0.7 秒（快模型判的 0.9 秒）、unk 1.3 秒（说了 2.5 秒以上 1.6 秒）、open 2.6 秒。
+_EOU_OPEN_ZH = re.compile(r'(然后|但是|可是|不过|因为|所以|而且|并且|还有|或者|以及|如果|要是|虽然|就是|就是说|那个|这个|那么|比如|比如说|另外|同时|接着|之后|我想|我要|想要|我觉得|我希望|希望|'
+                          r'能不能|可不可以|你能不能|我想让他|我想让她|让他|让她|叫他|叫她|告诉他|告诉她|问他|问她|先|再|和|跟|与|把|被|让|给|对着|为了|关于|嗯|呃|额|那)$')
+_EOU_DONE_ZH = re.compile(r'(吧|吗|呢|了|啊|呀|哦|嘛|啦|好|好的|行|可以|对|是的|不要|不行|不用|谢谢|就这样|就这些|好了|说完了|选[一二12ABab]|第[一二12]个|选项[一二12ABab]|^[ABab]$)$')
+_EOU_OPEN_EN = re.compile(r"\b(and|but|or|so|because|then|if|when|while|with|to|of|for|in|on|at|from|about|the|a|an|my|your|his|their|is|are|was|were|be|i|we|he|she|they|"
+                          r"want|wanna|gonna|like|um|uh|er|well|also|plus|maybe|let|let's|lets|tell|ask|make|can|could|would|should|will|i'm|i'd|i'll|just|into|than|as)$", re.I)
+_EOU_DONE_EN = re.compile(r"(^(yes|yeah|yep|no|nope|okay|ok|sure|fine|a|b|one|two|option (a|b|one|two)|the (first|second)( one)?|first( one)?|second( one)?)$|\b(please|thanks|thank you|that's it|that's all|right now|go ahead)$)", re.I)
+
+
+def eou_heur(text, lang, choices=()):
+    """中间识别结果 → 'done'（像是说完了）/ 'open'（明显只说了一半）/ 'unk'。只看文字，零延迟。"""
+    raw = (text or '').strip()
+    if not raw: return 'open'
+    comma = bool(re.search(r'[，、：,:;；]$', raw))
+    t = re.sub(r'[\s。，、！？!?,.:：;；…]+$', '', raw)
+    if len(t) <= 1 and not re.fullmatch(r'[ABab好行对不]', t or ''): return 'open'   # 刚开口
+    zh = bool(re.search(r'[一-鿿]', t))
+    if zh:
+        if _EOU_OPEN_ZH.search(t) or comma: return 'open'
+    elif _EOU_OPEN_EN.search(t) or comma:
+        if not _EOU_DONE_EN.search(t): return 'open'
+    for c in choices or ():   # 把某个选项几乎原样念出来了
+        c2 = re.sub(r'[\s。，、！？!?,.]+', '', c or '').lower(); t2 = re.sub(r'[\s。，、！？!?,.]+', '', t).lower()
+        if c2 and len(t2) >= max(4, len(c2) * 0.8) and (t2 in c2 or c2 in t2): return 'done'
+    if (_EOU_DONE_ZH if zh else _EOU_DONE_EN).search(t): return 'done'
+    return 'unk'
+
+
+def eou_llm(sess, text, lang, timeout=1.6):
+    """规则拿不准时问快模型：这句话说完整了没有。三个同时问，谁先答用谁；失败返回 None。"""
+    ctx = ''
+    if sess:
+        ep = sess['eps'][-1]; ch = (ep.get('choices') or [])[:2]
+        ctx = f'（情境：有声互动剧的选择点，问题是“{ep.get("prompt", "")}”，两个选项：A {ch[0] if ch else ""}；B {ch[1] if len(ch) > 1 else ""}。听众可以选，也可以自由说想让剧情怎么走。）\n'
+    pr = (f'语音输入的中间识别结果（说话人刚停顿了一下，可能有同音错字）：“{text}”\n{ctx}'
+          '判断：这句话是不是已经说完整了（一个完整的回答、选择或指令，可以直接拿去执行）？还是明显只说了一半、后面还要接着说'
+          '（比如停在连接词或“我想让他”上、动词后面缺宾语、列举到一半、句子意思悬着）？拿不准时，短句当作说完，长句里结尾悬着的当作没说完。\n'
+          '只输出 JSON：{"done": true} 或 {"done": false}')
+    box, ev = {}, threading.Event()
+    def ask(m):
+        try:
+            r = fast_chat(pr, 20, timeout, m); j = json.loads(r[r.find('{'):r.rfind('}') + 1])
+            if isinstance(j.get('done'), bool) and not ev.is_set(): box['v'] = j['done']; ev.set()
+        except Exception: pass
+    for m in UNDERSTAND_MODELS: threading.Thread(target=ask, args=(m,), daemon=True).start()
+    ev.wait(timeout + 0.2)
+    return None if 'v' not in box else ('done' if box['v'] else 'open')
+
+
 def her_understood(text, u, via, lang):
     """她自由说的话 + 理解后的意思，给编剧（按她的指令写）"""
     heard = ((u or {}).get('heard') or '').strip() or text
@@ -1748,7 +1800,8 @@ def asr_stream(h, q):
         return head + ('' if re.search(r'[一-鿿，。！？]$', head) or not t else ' ') + t
 
     def worker():
-        last = ''; cut = 0; head = ''   # 11-11 她可以一口气说到 60 秒：说过的前半段按停顿切开、认一次就定下来，每一遍只重认最近十来秒，出字速度不随时长变慢
+        last = ''; cut = 0; head = ''; same = 0; judged = set(); chs = ((sess['eps'][-1].get('choices') or [])[:2]) if sess else []
+        # 她可以一口气说到 60 秒：说过的前半段按停顿切开、认一次就定下来，每一遍只重认最近十来秒，出字速度不随时长变慢
         while not st['closed']:
             n = len(buf) // 2 * 2; final = st['end']
             if not final and (n < 9600 or n - st['done'] < 3200): time.sleep(0.03); continue   # 至少 0.3 秒声音；有 0.1 秒新声音才再认一遍
@@ -1768,7 +1821,19 @@ def asr_stream(h, q):
                     break
                 if lang != 'zh' and n < 2 * 32000 and re.search(r'[\u4e00-\u9fff]', text): continue   # 英文版：开头两秒里冒出来的中文多半是误认（“嗯”“一”），不显示
                 if text and text != last and not re.fullmatch(r'[嗯啊呃哦唔额一。，,.!?！？\s]+', text):   # 刚开口那零点几秒常被认成“嗯”“一”：不推，等下一遍
-                    last = text; ws_send(h.wfile, lock, json.dumps({'t': text, 'at': round(n / 32000, 2)}, ensure_ascii=False))
+                    last = text; same = 0
+                    ws_send(h.wfile, lock, json.dumps({'t': text, 'at': round(n / 32000, 2), 'eou': eou_heur(text, lang, chs)}, ensure_ascii=False))   # eou：这句话像不像说完了（手机据此决定安静多久算说完）
+                elif text and text == last:
+                    same += 1
+                    if same == 1 and text not in judged and eou_heur(text, lang, chs) == 'unk':   # 文字停住了（她停顿了）而规则拿不准：问一次快模型
+                        judged.add(text)
+                        def judge(tx=text):
+                            tj = time.time(); v = eou_llm(sess, tx, lang)
+                            print('eou', v, round(time.time() - tj, 2), repr(tx[-24:]), flush=True)
+                            if v and not st['closed'] and not st['end']:
+                                try: ws_send(h.wfile, lock, json.dumps({'eou': v, 'for': tx}, ensure_ascii=False))
+                                except Exception: pass
+                        threading.Thread(target=judge, daemon=True).start()
             except Exception: break
         st['closed'] = True
     th = threading.Thread(target=worker, daemon=True); th.start()

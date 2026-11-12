@@ -797,7 +797,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), get PS() { return PS; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), get PS() { return PS; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -1543,6 +1543,13 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
    * words appear while she is still talking. When she stops, "end" asks for the final pass on the same socket (no upload, no
    * extra round trip). Without WebAudio / WebSocket it falls back to the recorder below (text every ~0.7 s, final by upload). */
   const LS = { ws: null, open: false, sent: 0, got: 0, q: [], proc: null, src: null, sink: null, fin: null, asked: false };
+  /* 11-12 "a short pause is taken for the end, but she was going to go on — and don't make the wait long either". How long a quiet
+   * counts as finished now depends on what she has said so far (like semantic VAD in voice agents): the relay tags every partial
+   * with eou — 'done' (reads as a finished answer / instruction), 'open' (clearly mid-sentence: ends on "and then", "I want him to",
+   * a comma), 'unk' — by rules at once, and by a fast model when the rules can't tell and her words have stopped.
+   * done → 0.7 s of quiet (0.9 s when it was the model that said so), unk → 1.3 s (1.6 s once she has talked for 2.5 s), open → 2.6 s.
+   * Without the live socket (calls, old browsers) the old 0.9 / 1.6 s rule stays. */
+  const EOU = { v: 'unk', text: '', at: 0, llm: false };
   const lsClose = () => {
     try { if (LS.proc) { LS.proc.onaudioprocess = null; LS.proc.disconnect(); } if (LS.src) LS.src.disconnect(); if (LS.sink) LS.sink.disconnect(); } catch (e) { /* ignore */ }
     LS.proc = LS.src = LS.sink = null;
@@ -1563,7 +1570,8 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
         let d = null; try { d = JSON.parse(e.data); } catch (x) { return; }
         LS.got += 1;
         if (d.final != null) { if (LS.fin) { const f = LS.fin; LS.fin = null; f(d); } return; }
-        if (d.t && !finished) { try { onPartial(d.t); } catch (x) { /* ignore */ } }
+        if (d.t && !finished) { EOU.text = d.t; EOU.at = Date.now(); EOU.v = d.eou || 'unk'; EOU.llm = false; try { onPartial(d.t); } catch (x) { /* ignore */ } }
+        else if (d.eou && d.for === EOU.text) { EOU.v = d.eou; EOU.llm = true; }   // the fast model's verdict on the words that are still the latest
       };
       w.onclose = w.onerror = () => { LS.open = false; if (LS.fin) { const f = LS.fin; LS.fin = null; f(null); } };
       LS.src = actx.createMediaStreamSource(VI.stream); LS.proc = actx.createScriptProcessor(4096, 1, 1); LS.sink = actx.createGain(); LS.sink.gain.value = 0;
@@ -1621,7 +1629,7 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
       const now = Date.now(), lv = micLevel();
       if (lv < 0) blind = true;
       else {
-        n += 1; if (n <= 4) floor = Math.max(floor, lv);
+        n += 1; if (n <= 4) floor = Math.min(0.02, Math.max(floor, lv));   // room noise from the first 0.4 s — capped, so a voice that starts at once is not taken for the room
         if (n > 2 && lv > Math.max(0.02, floor * 2.4)) { if (!speechAt) { speechAt = now; st('speaking'); } lastVoice = now; }
       }
       partial();
@@ -1630,7 +1638,13 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
       if (!speechAt && now - t0 > wait) { finish(false); return; }
       // she stopped → recognise and go. A short answer ends after 0.9 s of quiet; once she has been talking for 3 s she may pause
       // to think (1.6 s). No other limit while she is speaking, up to `max` (60 s at a choice point).
-      if (speechAt && (now - lastVoice > (now - speechAt > 3000 ? 1600 : 900) || now - speechAt > max)) finish(true);
+      if (!speechAt) return;
+      if (now - speechAt > max) { finish(true); return; }
+      const quiet = now - lastVoice;
+      if (LS.got && EOU.text) {   // the live socket is telling us what she has said: wait by how finished it reads, and never while new words are still arriving
+        const need = EOU.v === 'done' ? (EOU.llm ? 900 : 700) : EOU.v === 'open' ? 2600 : (now - speechAt > 2500 ? 1600 : 1300);   // unk: a long instruction gets a little more room than a short answer
+        if (quiet > need && now - EOU.at > (EOU.v === 'done' ? 200 : 450)) finish(true);
+      } else if (quiet > (now - speechAt > 3000 ? 1600 : (LS.open ? 1300 : 900))) finish(true);   // no words back yet (or no socket): the level alone decides
     }, 100);
   })();
   return { done, stop: () => finish(true), cancel: () => { canceled = true; finish(false); } };
