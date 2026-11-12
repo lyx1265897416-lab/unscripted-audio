@@ -398,3 +398,11 @@ id：reborn（带着超强技能重生）、hellqueen（和地狱女王一起养
 - **About 的 Cast 一直是灰条**：原来简介和演员表只在进详情页时单独请求一次（`/api/series/<id>`），那一次失败（中转重启、隧道刚换地址）就再也不出，切标签也不会重新要。
   现在随剧集列表 `/api/series` 一起带回（`series_about` / `cast_of`，手机还会缓存这份列表，下次秒开），详情接口只给旧缓存兜底：连试三次；还不行就在原位显示“演员表没加载出来 · 点这里重试”，重新进详情页也会再试。
 - 验证：本地无头浏览器跑 narra 英文 + 原版中文，跳详情后四种返回方式都回到播放页、播放没停、历史长度不变；把详情接口掐断后出现重试行，恢复后点一下演员表出来。真机没测。
+
+## About 只用单人角色头像、她的剧本用角色包主图（2026-11-11，v67）
+
+- **About 的演员表只放单人 / 角色头像**：原来主角那一行回退用剧的头像，Rafael 的剧头像是双人合照。现在每个主角都有自己的一张 `app/avatars/cast/<剧>.<主角>.jpg`，页面不再回退到剧头像。
+- **她自己的剧本用她设定好的角色头像**：飞书「realtime 视频互动内容包」每个包「完整角色地图」表里的「角色主图」，下载到 `data/cast_pack/`（只留本机），`python3 build_cast_avatars.py pack` 按脸裁成头像并覆盖：
+  Magnus（Magnus / Luca / Selene / Harland）、Rafael（Rafael / Maya / Cole / Ryan / Evan）、Rowan（Rowan / Nora）、Rian（Rian 宫廷 / Vessa / Mila / Sera）、Lena、咪（咪 / 超市店员）、三真四假（Wes / Jasper / Mei / Sloane / Kian），共 23 张。Rian 的 Sera 原来是生成的，角色包里有她的定装，已换掉。
+- 角色包里没有的剧（Kael、Dorian、Ray、Milo）主角从剧头像出（本来就是单人像）；这几部里生成的配角（Dorian 的 Father / Mom / Sebastian / Guard、Ray 的助理、Milo 的三个朋友）没有既定形象，保持不变。
+- 同名文件换了图：接口返回的头像地址带 `?v=<文件时间>`，手机不拿旧缓存。旧头像备份在 `cache/cast_bak_v66/`。

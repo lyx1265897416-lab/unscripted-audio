@@ -1656,7 +1656,8 @@ def cast_of(sid, lang):
         key = ch['name'].split()[0] if ch['name'].split()[0] in VOICES[sid] else ch['name']
         av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'   # 11-11 介绍页演员表每人一张头像
         cast.append({'name': ch['name'] if lang == 'en' else (ch.get('name_zh') or ch['name']), 'role': ch.get(f'role_{lang}') or ch.get('role_zh', ''),
-                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en'), 'avatar': av if (APP / av).exists() else None})
+                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en'),
+                     'avatar': f'{av}?v={int((APP / av).stat().st_mtime) % 1000000}' if (APP / av).exists() else None})   # ?v=：同名文件换了图（11-11 换成角色包主图），手机不拿旧缓存
     cast.append({'name': 'Narrator' if lang == 'en' else '旁白', 'role': 'Narrator' if lang == 'en' else '旁白', 'voice': VOICES['NARR']['zh_name'] if lang == 'zh' else VOICES['NARR']['en'], 'narr': True})
     return cast
 

@@ -53,3 +53,5 @@ data/sfx/
 data/stills/
 # 生成的配角半身像原图（只留本机；公开的只有裁好的头像）
 data/cast_gen/
+# 飞书角色包里的角色主图原图（只留本机；公开的只有裁好的头像）
+data/cast_pack/

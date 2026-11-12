@@ -6,6 +6,7 @@
 旁白不出人像，介绍页用一个话筒徽标（app.js）。
 用法：python3 build_cast_avatars.py copy       现成图 → 头像（要 OPENROUTER_API_KEY 找脸；结果缓存在 data/faces.json）
      python3 build_cast_avatars.py gen [--only=剧.角色,…]   生成缺的
+     python3 build_cast_avatars.py pack       她的剧本：飞书角色包的「角色主图」→ 头像（覆盖），其余主角从剧头像出
      加 --force 重做。"""
 import json, os, re, subprocess, sys, concurrent.futures as cf
 from pathlib import Path
@@ -109,6 +110,27 @@ def copy():
     print('copy done', len(jobs))
 
 
+# 11-11 她看了介绍页：About 只能用单人 / 角色头像（Rafael 的主角头像是剧的双人头像）；她自己的剧本用她设定好的角色头像——
+# 飞书「realtime 视频互动内容包」每个包「完整角色地图」表里的「角色主图」。data/cast_pack/<剧>.<角色键>（只留本机）是从飞书下载的主图，
+# 这里按脸裁成头像，覆盖原来从别处裁的 / 生成的（rian 的 Sera 原来是生成的，角色包里有她的定装）。
+# 其余剧的主角（剧头像本来就是单人）也各出一张，介绍页不再回退到剧头像。
+PACK = ROOT / 'data' / 'cast_pack'
+PACK_KEYS = {'magnus': ['Magnus', 'Luca', 'Selene', 'Harland'], 'rafael': ['Rafael', 'Maya', 'Cole', 'Ryan', 'Evan'], 'rowan': ['Rowan', 'Nora'],
+             'rian': ['Rian', 'Vessa', 'Mila', 'Sera'], 'lena': ['Lena'], 'mii': ['Mii', 'StoreClerk'], 'island': ['Wes', 'Jasper', 'Mei', 'Sloane', 'Kian']}
+LEAD_FROM_SERIES = {'kael': 'Kael', 'dorian': 'Dorian', 'hear': 'Ray', 'milo': 'Milo'}   # 剧头像是主角单人像
+
+
+def pack():
+    for sid, keys in PACK_KEYS.items():
+        for k in keys:
+            src = PACK / f'{sid}.{k}'
+            if not src.exists(): print(sid, k, 'MISSING', src); continue
+            print(sid, k, 'ok' if face_square(src, keyfile(sid, k)) else 'ok (no face found: centered)', flush=True)
+    for sid, k in LEAD_FROM_SERIES.items():
+        Image.open(ROOT / 'app' / 'avatars' / f'{sid}.jpg').convert('RGB').resize((320, 320), Image.LANCZOS).save(keyfile(sid, k), quality=88)
+        print(sid, k, 'from series avatar')
+
+
 def _json(s):
     m = re.search(r'\{.*\}', s or '', re.S)
     return json.loads(m.group(0)) if m else {}
@@ -152,7 +174,7 @@ def gen():
 
 
 if __name__ == '__main__':
-    {'copy': copy, 'gen': gen}[sys.argv[1]]()
+    {'copy': copy, 'gen': gen, 'pack': pack}[sys.argv[1]]()
     have = {f.stem for f in OUT.glob('*.jpg')}
     miss = [f'{sid}.{k}' for sid in V if isinstance(V[sid], dict) for k in V[sid] if not k.startswith('_') and isinstance(V[sid][k], dict) and not V[sid][k].get('lead') and f'{sid}.{k.replace(" ", "")}' not in have]
     print('still without an avatar:', miss)

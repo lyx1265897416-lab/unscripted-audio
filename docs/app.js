@@ -3960,12 +3960,12 @@ function renderDetailPane() {
   if (detailTab === 'episodes') {
     box.innerHTML = `<div class="ep-head"><span>Ep 1–${FREE_EPS} free · then ${PRICE} coins each</span><span>${S.vip ? 'VIP · all free' : ''}</span></div><div class="ep-list" id="dt-eps">${episodeRows(s)}</div>`;
   } else if (detailTab === 'about') {
-    const cast = aboutOf(s).cast;
+    const cast = aboutOf(s).cast;   // 11-11 she asked: About shows single-person character avatars only, never the series picture (Rafael's is a couple)
     if (!cast.length && DETAIL_ST[s.id] !== 'fail') loadDetail(s.id);   // after three failed tries the row below asks; reopening the page asks again
     box.innerHTML = `
       <div class="about-block"><h4>Cast</h4>
         <div class="cast">${cast.length ? cast.map((c, i) => `
-          <div class="cast-row">${c.avatar ? `<img src="${esc(c.avatar)}" alt="" loading="lazy">` : i === 0 ? `<img src="${esc(avatarOf(s))}" alt="">` : (c.narr || /^(Narrator|旁白)$/.test(c.name || '')) ? `<span class="ph narr">${ic('wave')}</span>` : `<span class="ph">${esc((c.name || '?').slice(0, 1))}</span>`}
+          <div class="cast-row">${c.avatar ? `<img src="${esc(c.avatar)}" alt="" loading="lazy">` : (c.narr || /^(Narrator|旁白)$/.test(c.name || '')) ? `<span class="ph narr">${ic('wave')}</span>` : `<span class="ph">${esc((c.name || '?').slice(0, 1))}</span>`}
             <div><b>${esc(c.name)}</b><span>${esc(c.role)}</span><em>${ic('mic')} Voice: ${esc(c.voice || '—')}</em></div></div>`).join('') : DETAIL_ST[s.id] === 'fail' ? `<button class="cast-retry" data-act="dt-retry">${ic('restart', 'sm')}<span>${tz('Couldn’t load the cast · Tap to try again', '演员表没加载出来 · 点这里重试')}</span></button>` : '<div class="skel" style="height:52px"></div>'}
         </div></div>
       <div class="about-block"><h4>How it works</h4>
