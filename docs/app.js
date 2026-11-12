@@ -2795,6 +2795,7 @@ function callAdvance() {
   const call = C;
   if (!call || !call.accepted || call.phase === 'ended' || call.phase === 'incoming' || call.phase === 'hanging') return;
   if (call.playing || call.fillerPlaying || call.held) return;
+  if (EAR.utt && call.pickedUp) { call.held = true; renderCallUI(); return; }   // 11-12 she started talking as his line ended: don't start his next line over her; earResume picks it up if it was only noise
   if (!maybePickUp(call)) { renderCallUI(); return; }
   earStart(call);
   const L = call.lines;
@@ -3214,7 +3215,7 @@ function renderCallUI(force) {
       html = call.greeting ? `<span class="who">${esc(name)}</span><p class="txt fade">${esc(tz('Hey.', '喂？'))}</p>`
         : `<div class="cl-think">${!call.t0 ? tz('Connecting', '正在接通') : call.direction === 'outgoing' && call.turn === 0 ? tz(`${esc(name)} picked up`, `${esc(name)} 接起来了`) : tz(`${esc(name)} is thinking`, `${esc(name)} 在想`)}<span class="dots-pulse"><i></i><i></i><i></i></span></div>`;
     } else if (call.phase === 'your-turn' && EAR.on) {
-      key = 'live' + call.turn + ':' + call.idx;
+      key = 'live' + call.turn + ':' + call.idx + ':' + (call.caption ? call.caption.text : '') + (call.said || '');
       html = `${call.said ? `<p class="cl-you">${tz('You: ', '你：')}${esc(call.said)}</p>` : ''}${call.caption ? `<span class="who">${esc(name)}</span><p class="txt dim">${esc(call.caption.text)}</p>` : ''}<p class="cl-hint2">${call.muted ? tz('Mic muted', '麦克风已静音') : tz('On the call — talk any time', '通话中 · 随时可以说话')}</p>`;
     } else if (call.phase === 'your-turn') {
       const ls = call.listen || 'listening';
@@ -3226,7 +3227,7 @@ function renderCallUI(force) {
       key = 'ear' + call.listen + call.turn;
       html = `<div class="cl-listen ${call.listen}"><i class="cl-wave"><b></b><b></b><b></b><b></b><b></b></i><span>${call.listen === 'speaking' ? tz('Listening…', '在听你说…') : tz('Got it…', '听到了…')}</span></div>`;
     } else if (call.caption) {
-      key = 'cap' + call.turn + ':' + call.idx;
+      key = 'cap' + call.turn + ':' + call.idx + ':' + call.caption.text;   // 11-12 the key carries the line's text: when a line ends idx moves on before the next caption is set, and a key of idx alone left the old line on screen for the whole next line
       html = `${call.said ? `<p class="cl-you">${tz('You: ', '你：')}${esc(call.said)}</p>` : ''}<span class="who">${esc(name)}</span><p class="txt fade ${call.phase === 'your-turn' ? 'dim' : ''}">${esc(call.caption.text)}</p>${EAR.on && !call.muted ? `<p class="cl-hint2">${tz('Talk any time — he’ll stop and listen', '随时可以插话，他会停下来听你说')}</p>` : ''}`;
     } else { key = 'empty'; html = ''; }
     if (cap.dataset.k !== key || force) { cap.dataset.k = key; cap.innerHTML = html; }
