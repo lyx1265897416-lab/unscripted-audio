@@ -3882,15 +3882,32 @@ async function showDetail(id) {
   renderDetail();
   const page = $('#detail');
   page.classList.add('on');
-  if (!DETAIL[id]) {
-    try { DETAIL[id] = await API.seriesDetail(id); if (detailId === id) renderDetail(); } catch (e) { console.warn('detail', e); }
+  if (DETAIL_ST[id] === 'fail') DETAIL_ST[id] = '';
+  loadDetail(id);
+}
+/* About (synopsis + cast). 11-11 her screenshot: the Cast block stayed a grey bar forever — it came from one request made when
+ * the page opened, and when that one failed (relay restarting, tunnel address just changed) nothing asked again.
+ * Now the series list carries it (and the list is cached on the phone); this request is only the fallback for an old cached
+ * list, tried three times, and when it still fails the block says so and a tap asks again. */
+const DETAIL_ST = {};   // id -> 'load' | 'fail'
+const aboutOf = (s) => { const d = DETAIL[s.id] || {}; return { synopsis: d.synopsis || s.synopsis, cast: (d.cast && d.cast.length ? d.cast : s.cast) || [] }; };
+async function loadDetail(id, force) {
+  const s = byId(id); if (!s || DETAIL[id] || DETAIL_ST[id] === 'load') return;
+  if (!force && aboutOf(s).cast.length) return;
+  DETAIL_ST[id] = 'load';
+  if (detailId === id && detailTab === 'about' && isDetailOpen()) renderDetailPane();
+  for (let i = 0; i < 3 && !DETAIL[id]; i++) {
+    try { const d = await API.seriesDetail(id); if (d && d.cast && d.cast.length) DETAIL[id] = d; else throw new Error('empty'); }
+    catch (e) { console.warn('detail', i, e); await sleep(900 + i * 1500); }
   }
+  DETAIL_ST[id] = DETAIL[id] ? '' : 'fail';
+  if (detailId === id && isDetailOpen()) { if (DETAIL[id]) renderDetail(); else renderDetailPane(); }
 }
 function hideDetail() { $('#detail').classList.remove('on'); }
 function renderDetail() {
   const s = byId(detailId); if (!s) return;
   setTimeout(() => { if (detailId === s.id && isDetailOpen()) { warmRings(); prepareCall(s.id); } }, 1200);
-  const d = DETAIL[s.id] || {};
+  const d = aboutOf(s);
   const ss = getSess(s.id);
   const pr = S.progress[skey(s.id)];
   const saved = S.saved.indexOf(s.id) >= 0;
@@ -3940,16 +3957,16 @@ function renderDetail() {
 }
 function renderDetailPane() {
   const s = byId(detailId); const box = $('#dt-pane'); if (!s || !box) return;
-  const d = DETAIL[s.id] || {};
   if (detailTab === 'episodes') {
     box.innerHTML = `<div class="ep-head"><span>Ep 1–${FREE_EPS} free · then ${PRICE} coins each</span><span>${S.vip ? 'VIP · all free' : ''}</span></div><div class="ep-list" id="dt-eps">${episodeRows(s)}</div>`;
   } else if (detailTab === 'about') {
-    const cast = d.cast || [];
+    const cast = aboutOf(s).cast;
+    if (!cast.length && DETAIL_ST[s.id] !== 'fail') loadDetail(s.id);   // after three failed tries the row below asks; reopening the page asks again
     box.innerHTML = `
       <div class="about-block"><h4>Cast</h4>
         <div class="cast">${cast.length ? cast.map((c, i) => `
           <div class="cast-row">${c.avatar ? `<img src="${esc(c.avatar)}" alt="" loading="lazy">` : i === 0 ? `<img src="${esc(avatarOf(s))}" alt="">` : (c.narr || /^(Narrator|旁白)$/.test(c.name || '')) ? `<span class="ph narr">${ic('wave')}</span>` : `<span class="ph">${esc((c.name || '?').slice(0, 1))}</span>`}
-            <div><b>${esc(c.name)}</b><span>${esc(c.role)}</span><em>${ic('mic')} Voice: ${esc(c.voice || '—')}</em></div></div>`).join('') : '<div class="skel" style="height:52px"></div>'}
+            <div><b>${esc(c.name)}</b><span>${esc(c.role)}</span><em>${ic('mic')} Voice: ${esc(c.voice || '—')}</em></div></div>`).join('') : DETAIL_ST[s.id] === 'fail' ? `<button class="cast-retry" data-act="dt-retry">${ic('restart', 'sm')}<span>${tz('Couldn’t load the cast · Tap to try again', '演员表没加载出来 · 点这里重试')}</span></button>` : '<div class="skel" style="height:52px"></div>'}
         </div></div>
       <div class="about-block"><h4>How it works</h4>
         <div class="how">
@@ -4065,7 +4082,7 @@ function renderPlayer() {
       <div class="nr-shade"></div>
       <header class="pl-top">
         <button class="icon-btn" data-act="close-player" aria-label="Close player">${ic('down')}</button>
-        <div class="pl-top-t"><b id="pl-series" translate="no"></b><small id="pl-ep"></small></div>
+        <div class="pl-top-t tap" data-act="pl-detail" role="button" tabindex="0" aria-label="${tz('Series details', '查看剧集详情')}"><b id="pl-series" translate="no"></b><small><span id="pl-ep"></span>${ic('chevR', 'xs')}</small></div>
         <button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>
         <button class="icon-btn" data-act="share" id="pl-share" aria-label="Share">${ic('share')}</button>
       </header>
@@ -4086,12 +4103,12 @@ function renderPlayer() {
       <div class="pl-bg"><div class="pl-bg-img" id="pl-bgimg"></div></div>
       <header class="pl-top">
         <button class="icon-btn" data-act="close-player" aria-label="Close player">${ic('down')}</button>
-        <div class="pl-top-t"><small>NOW PLAYING</small><b id="pl-series"></b></div>
+        <div class="pl-top-t tap" data-act="pl-detail" role="button" tabindex="0" aria-label="${tz('Series details', '查看剧集详情')}"><small>NOW PLAYING</small><b id="pl-series"></b></div>
         <button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>
       </header>
       <div class="pl-body">
         <div class="pl-art-wrap"><div class="pl-art"><img id="pl-art" alt=""><video id="pl-vid" muted loop playsinline autoplay preload="auto" aria-hidden="true"></video><video id="pl-vid2" muted loop playsinline preload="auto" aria-hidden="true"></video><span class="pl-badge" id="pl-badge" hidden></span></div></div>
-        <div class="pl-titles"><div class="tt"><h2 id="pl-title"></h2><p id="pl-ep"></p></div>
+        <div class="pl-titles"><div class="tt tap" data-act="pl-detail" role="button" tabindex="0" aria-label="${tz('Series details', '查看剧集详情')}"><h2 id="pl-title"></h2><p><span id="pl-ep"></span>${ic('chevR', 'xs')}</p></div>
           <button class="icon-btn" data-act="pl-save" id="pl-save" aria-label="Add to Library">${ic('plus')}</button></div>
         <button class="pl-mode" id="pl-mode" data-act="mode-sheet" aria-label="Listening mode"></button>
         <button class="pl-note" id="pl-note" data-act="open-safari" hidden>${ic('lock', 'xs')}<span>${tz('Answering with the screen locked needs Safari — tap to copy the link', '锁屏也能语音回答需要用 Safari 打开 · 点这里复制链接')}</span></button>
@@ -4709,8 +4726,20 @@ function warmLines(ep) {  // every line of a live episode is its own small file:
   while (LINE_WARM.size > 40) { const k = LINE_WARM.keys().next().value; LINE_WARM.delete(k); }
 }
 
+/* 11-11 she asked: tapping the title at the top of the player opens the series page, and from there she can come back to
+ * what is playing. The series page is pushed on top of the player's history entry, so everything that means "back" returns
+ * to the player exactly as she left it: the page's back button, the phone's back swipe, the mini bar, Continue and any
+ * episode row. Playback goes on underneath the whole time. */
+let plBack = null;   // {id, base, pushed}: the series page was opened from the player
+function openDetailFromPlayer() {
+  if (!P.id || !playerOpen) return;
+  plBack = { id: P.id, base: baseHash, pushed: playerPushed };
+  location.hash = '#/series/' + encodeURIComponent(P.id);
+}
+const onPlBackPage = () => !!plBack && location.hash === '#/series/' + encodeURIComponent(plBack.id);
 function openPlayer() {
   if (playerOpen) return;
+  if (onPlBackPage()) { history.back(); return; }   // the player is the entry right under this page
   if (location.hash !== '#/player') { playerPushed = true; location.hash = '#/player'; }
   else showPlayerUI();
 }
@@ -4744,7 +4773,11 @@ let baseHash = '#/home';
 function route() {
   const h = location.hash.replace(/^#\/?/, '') || 'home';
   const [a, b] = h.split('/');
-  if (a === 'player') { showPlayerUI(); return; }
+  if (a === 'player') {
+    if (plBack) { playerPushed = plBack.pushed; baseHash = plBack.base; plBack = null; }   // back from the series page: closing the player leads where it did before
+    showPlayerUI(); return;
+  }
+  if (plBack && !onPlBackPage()) plBack = null;   // she went somewhere else from the series page
   if (playerOpen) { hidePlayerUI(); playerPushed = false; }
   if (sheetStack.length) closeAllSheets();
   baseHash = location.hash || '#/home';
@@ -4790,6 +4823,8 @@ document.addEventListener('click', (e) => {
     }
     case 'share': shareSeries(id || P.id); break;
     case 'syn': synOpen = !synOpen; renderDetail(); break;
+    case 'dt-retry': DETAIL_ST[detailId] = ''; loadDetail(detailId, true); break;
+    case 'pl-detail': openDetailFromPlayer(); break;
     case 'dt-tab': detailTab = el.dataset.t; $$('.tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === detailTab); b.setAttribute('aria-selected', b.dataset.t === detailTab); }); renderDetailPane(); break;
     case 'ep': onEpisodeTap(id, +el.dataset.n, el.dataset.k); break;
     case 'genre': exGenre = el.dataset.g; exQuery = ''; go('explore'); break;

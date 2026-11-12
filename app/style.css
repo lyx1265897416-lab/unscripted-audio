@@ -1141,3 +1141,12 @@ h1, h2, h3, h4, p { margin: 0; }
   .narra .ll { font-size: 18px; padding: 6px 0; }
   .narra .ll.q { font-size: 19.5px; }
 }
+
+/* v66 播放页标题可点进剧集详情；演员表加载失败的重试行 */
+.pl-top-t.tap, .pl-titles .tt.tap { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pl-top-t.tap:active, .pl-titles .tt.tap:active { opacity: .6; }
+.pl-top-t.tap small .ic, .pl-titles .tt.tap p .ic { width: 11px; height: 11px; margin-left: 3px; vertical-align: -1px; opacity: .75; flex: none; }
+.narra .pl-top-t.tap small, .pl-titles .tt.tap p { display: flex; align-items: center; }
+.pl-top-t.tap small #pl-ep, .pl-titles .tt.tap p #pl-ep { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cast-retry { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 0 14px; border-radius: 14px; background: rgba(255, 255, 255, .06); color: rgba(255, 255, 255, .78); font-size: 13.5px; text-align: left; }
+.cast-retry .ic { width: 16px; height: 16px; flex: none; }

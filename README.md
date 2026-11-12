@@ -390,3 +390,11 @@ id：reborn（带着超强技能重生）、hellqueen（和地狱女王一起养
   - 19 张没有任何形象，用主角的图做画风参考、按世界卡的身份设定生成（Waku google/nano-banana-2.1/edit，约 4 credits/张）：dorian 的 Father / Mom / Sebastian / Guard、hear 的 His Assistant、milo 的 Sacha / Evren / Sienna、rian 的 Sera、reborn 的 Thalrex、hellqueen 的 Malachar / Seraphiel / Holloway、heroacad 的 Liora、starmate 的 Marisol / Theo / Rex / Julian、onestat 的 System（发光面板，不是人）。原图在 `data/cast_gen/`（只留本机）。
   - dorian 的 Father / Mom 原有参考图是侧脸背光；让模型“照同一个人转正脸”出来的脸太像现实里的演员，弃用，改成按身份重新设计的原创脸（提示词写明不像任何真人）。
 - 中转 `series_detail()` 给演员表每一项带 `avatar`；旁白带 `narr`，介绍页显示声波徽标而不是人像。主角仍用剧的头像。
+
+## 播放页标题进详情页、About 演员表不再卡灰条（2026-11-11，v66）
+
+- **播放页左上角的剧名 / 集名可以点**：点了进这部剧的详情页，声音不停。回到播放页有四种方式，都回到原来那一刻：详情页左上角返回、手机的返回手势、底部迷你播放条、详情页的 Continue（或任意一集）。
+  详情页是压在播放页那条历史记录上面的，回去就是 `history.back()`，不会越点历史越长；关掉播放页还是回到打开它之前的那一页（`plBack` / `openDetailFromPlayer` / `openPlayer`）。原版界面的顶部标题和封面下的标题同样可点。
+- **About 的 Cast 一直是灰条**：原来简介和演员表只在进详情页时单独请求一次（`/api/series/<id>`），那一次失败（中转重启、隧道刚换地址）就再也不出，切标签也不会重新要。
+  现在随剧集列表 `/api/series` 一起带回（`series_about` / `cast_of`，手机还会缓存这份列表，下次秒开），详情接口只给旧缓存兜底：连试三次；还不行就在原位显示“演员表没加载出来 · 点这里重试”，重新进详情页也会再试。
+- 验证：本地无头浏览器跑 narra 英文 + 原版中文，跳详情后四种返回方式都回到播放页、播放没停、历史长度不变；把详情接口掐断后出现重试行，恢复后点一下演员表出来。真机没测。

@@ -1643,23 +1643,33 @@ def series_card(sid, lang):
             'tags': [t[lang] for t in b.get('tags', [])], 'genres': b['genres'], 'accent': b['accent'], 'cover': b['cover'], 'avatar': b['avatar'], 'motion': MOTION.get(sid), 'visuals': vis_card(sid),
             'callers': [{'key': x['key'], 'name': x['name'] if lang == 'en' else x['name_zh'], 'role': x['role_en'] if lang == 'en' else x['role_zh'], 'avatar': x.get('avatar'), 'gender': x.get('gender')} for x in callers(sid)],
             'stats': {'plays': pl, 'rating': ra}, 'ep1': {'title': w[f'ep1_title_{lang}'], 'dur': c['dur'] if c else None, 'ready': bool(c), 'audio': c.get('audio') if c else None,
-                    'visuals': (ep1_with_visuals(c, sid, lang) or {}).get('visuals') if c else None}}  # audio：前端点播放先直接放，不等 /api/play 走隧道
+                    'visuals': (ep1_with_visuals(c, sid, lang) or {}).get('visuals') if c else None},  # audio：前端点播放先直接放，不等 /api/play 走隧道
+            **series_about(sid, lang)}
 
 
-def series_detail(sid, lang):
-    d = series_card(sid, lang); w = WORLD[sid]
-    d['synopsis'] = w.get(f'synopsis_{lang}') or w.get(f'premise_{lang}')
-    cast = []
+def cast_of(sid, lang):
+    """介绍页演员表：有配音的角色 + 旁白，每人带头像（build_cast_avatars.py）"""
+    w = WORLD[sid]; cast = []
     for ch in w['characters']:
         v = VOICES[sid].get(ch['name'].split()[0]) or VOICES[sid].get(ch['name'])
         if not v: continue
         key = ch['name'].split()[0] if ch['name'].split()[0] in VOICES[sid] else ch['name']
-        av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'   # 11-11 介绍页演员表每人一张头像（build_cast_avatars.py）
+        av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'   # 11-11 介绍页演员表每人一张头像
         cast.append({'name': ch['name'] if lang == 'en' else (ch.get('name_zh') or ch['name']), 'role': ch.get(f'role_{lang}') or ch.get('role_zh', ''),
                      'voice': v.get('zh_name') if lang == 'zh' else v.get('en'), 'avatar': av if (APP / av).exists() else None})
     cast.append({'name': 'Narrator' if lang == 'en' else '旁白', 'role': 'Narrator' if lang == 'en' else '旁白', 'voice': VOICES['NARR']['zh_name'] if lang == 'zh' else VOICES['NARR']['en'], 'narr': True})
-    d['cast'] = cast
-    return d
+    return cast
+
+
+def series_about(sid, lang):
+    """简介 + 演员表。11-11 她截图：介绍页 About 一直是灰条——原来只在进详情页时单独请求一次，那一次失败（中转重启 / 换隧道）就再也不出。
+    现在随剧集列表一起带回（手机还会缓存），详情接口只是兜底。"""
+    w = WORLD[sid]
+    return {'synopsis': w.get(f'synopsis_{lang}') or w.get(f'premise_{lang}'), 'cast': cast_of(sid, lang)}
+
+
+def series_detail(sid, lang):
+    return series_card(sid, lang)
 
 
 # ---------------- 实时语音输入（11-11 她要求：输入框里边说边出字，像豆包输入法） ----------------
