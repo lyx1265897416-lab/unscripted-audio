@@ -4207,14 +4207,19 @@ const STX = {};
 function stillIndex(sid) {
   if (!NARRA || STX[sid]) return;
   STX[sid] = { set: new Set(), ready: false };
-  const done = (j) => { STX[sid] = { set: new Set((j && j.still) || []), q: (j && j.q) || {}, ready: true }; const s0 = byId(sid); if (s0 && s0.visuals) s0.visuals._planKey = ''; PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true); };
-  fetch(absUrl(`v/${sid}/still/index.json`)).then((r) => (r.ok ? r.json() : null)).then(done).catch(() => done(null));
+  const done = (j) => { STX[sid] = { set: new Set((j && j.still) || []), q: (j && j.q) || {}, w: new Set((j && j.w) || []), lo: !!(j && j.lo), v: (j && j.v) || 0, ready: true }; const s0 = byId(sid); if (s0 && s0.visuals) s0.visuals._planKey = ''; PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true); };
+  fetch(absUrl(`v/${sid}/still/index.json`), { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then(done).catch(() => done(null));
 }
 /** the pictures of one scene clip: hi = the sharpest there is, low = a small one to put up first on a slow link */
 function stillOf(s, id) {
   const V = s.visuals, c = V && V.clips[id]; if (!c) return { low: '', hi: '' };
-  const st = STX[s.id] && STX[s.id].set.has(id) ? `v/${s.id}/still/${id}.jpg` : '', hd = hdOf(c).poster || '', sq = posterOf(c);
-  if (slowNet()) return { low: hd || sq, hi: st || hd || sq };   // slow link: the small picture first (≈50 KB), the sharp one over it once it has loaded
+  /* 11-11 (10) she still saw soft backgrounds: the stills cut from video were 1080 wide and a big phone stretches them 1.7×, and
+   * on a slow link the small picture put up first was a different, older frame. Now the frames are redrawn in 2k
+   * (build_stills_hd.py → <clip>.webp, listed in index.json "w"), and the small picture is the same image at 360×540 (lo/). */
+  const X = STX[s.id], has = !!(X && X.set.has(id)), ver = has && X.v ? '?v=' + X.v : '';
+  const st = has ? `v/${s.id}/still/${id}.${X.w && X.w.has(id) ? 'webp' : 'jpg'}${ver}` : '', lo = has && X.lo ? `v/${s.id}/still/lo/${id}.jpg${ver}` : '';
+  const hd = hdOf(c).poster || '', sq = posterOf(c);
+  if (slowNet()) return { low: lo || hd || sq, hi: st || hd || sq };   // slow link: the small picture first (≈15 KB), the sharp one over it once it has loaded
   return { low: '', hi: st || hd || sq };
 }
 /** Which picture belongs to which part of the episode — a pure function of the position, so dragging the bar, tapping a line
@@ -4228,19 +4233,25 @@ function stillPlan(s, ep) {
   const V = s.visuals, produced = ep.kind !== 'live';
   /* 11-11 (9) picture quality (still/index.json "q", from build_stills_v2.py): "bad" (closed eyes, ghosting — a frame that says
    * nothing clear) is never shown; "part" (a hand, a torso, a turned-away head) only where the words being spoken are about
-   * that — a touch, a wrist, a hand; stand-ins are whole faces first, then empty shots and props. */
+   * that — a touch, a wrist, a hand; stand-ins are whole faces first, then empty shots and props.
+   * 11-11 (11) "no big face close-ups as the background — medium, full and wide shots and the setting, unless the story speaks
+   * of it": the close-ups were redrawn as medium shots of the same moment (build_stills_hd.py); a picture that is still a
+   * close-up is tagged "close" and, like "part", is shown only where the words are about a face — eyes, a look, a smile, a kiss. */
   const QL = (STX[s.id] && STX[s.id].q) || {}, ql = (id) => QL[id] || 'face';
   const ok = (id) => !!(id && V.clips[id] && ql(id) !== 'bad' && !(V.prefer && id !== 'idle' && !id.startsWith(V.prefer)));
   const BODY = /\b(hands?|wrists?|fingers?|fingertips?|palms?|knuckles?|neck|throat|lips|mouth|jaw|chin|shoulders?|chest|arms?|knees?|foot|feet|ears?|collar|pulse|grip|grips|touch|touches)\b|手|腕|指|掌|颈|脖|唇|嘴|下巴|肩|胸|臂|膝|脚|耳|领口|脉搏|握|碰|摸/i;
+  const FACE = /\b(eyes?|gaze|glance|stares?|staring|face|lips|mouth|smiles?|smirks?|grins?|jaw|brows?|eyebrows?|lashes|tears?|kiss(es|ed)?|whispers?|breath|blush(es)?|close-up|inches)\b|眼|目光|凝视|盯|脸|唇|嘴角|笑|下巴|眉|睫|泪|吻|耳边|呼吸|贴近|凑近|特写/i;
   const said = produced ? (a, b) => (ep.cues || []).filter((c) => c.e > a && c.s < b).map((c) => c.text).join(' ') : (a, b) => (ep.lines || []).slice(a, b).map((l) => l.text || '').join(' ');
   const units = (produced ? (ep.visuals || []).map((x) => [x.s, x.clip, x.e]) : (ep.lines || []).map((l, i) => [i, l.clip, i + 1]))
-    .filter((u) => ok(u[1]) && (ql(u[1]) !== 'part' || BODY.test(said(u[0], u[2]))));
+    .filter((u) => ok(u[1]) && (ql(u[1]) !== 'part' || BODY.test(said(u[0], u[2]))) && (ql(u[1]) !== 'close' || FACE.test(said(u[0], u[2]))));
   let total = produced ? ((P.ep === ep && audio.duration) || ep.dur || 0) : (ep.lines || []).length;
   if (produced && !total && units.length) total = units[units.length - 1][0] + 12;   // length not known yet
   const open = !produced && P.ep === ep && !P.jobDone;   // still being written: more lines will come
   const key = [s.id, ep.n, ep.kind, units.length, Math.round(total), open ? 'o' : ''].join(':');
   if (V._planKey === key && V._plan) return V._plan;
-  const rest0 = (V.pool || []).concat(Object.keys(V.clips)).filter((id) => ok(id) && ql(id) !== 'part');
+  const wide = (id) => ql(id) !== 'part' && ql(id) !== 'close';
+  let rest0 = (V.pool || []).concat(Object.keys(V.clips)).filter((id) => ok(id) && wide(id));
+  if (!rest0.length) rest0 = (V.pool || []).concat(Object.keys(V.clips)).filter((id) => ok(id) && ql(id) !== 'part');   // a series with nothing but close-ups: better than no picture
   const rest = rest0.filter((id) => ql(id) === 'face').concat(rest0.filter((id) => ql(id) !== 'face'));   // stand-ins, always in the same order: faces first, then empty shots / props
   const used = {}, out = [];
   const put = (at, id) => { if (!id) return; out.push([at, id]); used[id] = (used[id] || 0) + 1; };
@@ -4250,7 +4261,7 @@ function stillPlan(s, ep) {
     const prev = out.length ? out[out.length - 1][1] : null, seen = Object.keys(used).length;
     for (const u of units) if (u[0] >= a && u[0] < b && u[1] !== prev && (!used[u[1]] || seen >= 5)) return u[1];   // back to a picture already shown only once five different ones have been up
     let best = null;
-    for (const id of units.filter((u) => u[0] < b && ql(u[1]) !== 'part').map((u) => u[1]).concat(rest)) {
+    for (const id of units.filter((u) => u[0] < b && wide(u[1])).map((u) => u[1]).concat(rest)) {
       if (id === prev || id === nextId) continue;
       if (best == null || (used[id] || 0) < (used[best] || 0)) best = id;
     }

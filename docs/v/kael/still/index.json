@@ -1,1 +1,1 @@
-{"still":["c00","c01","idle","o00","s00","s01","s02","s03","s04","s05"],"q":{"c00":"face","c01":"face","idle":"face","o00":"face","s00":"face","s01":"face","s02":"scene","s03":"scene","s04":"scene","s05":"face"}}
+{"still": ["c00", "c01", "idle", "o00", "s00", "s01", "s02", "s03", "s04", "s05"], "q": {"c00": "face", "c01": "face", "idle": "face", "o00": "face", "s00": "face", "s01": "face", "s02": "scene", "s03": "scene", "s04": "scene", "s05": "face"}, "w": ["c00", "c01", "idle", "o00", "s00", "s01", "s05"], "lo": 1, "v": 4463886}

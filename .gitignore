@@ -55,3 +55,7 @@ data/stills/
 data/cast_gen/
 # 飞书角色包里的角色主图原图（只留本机；公开的只有裁好的头像）
 data/cast_pack/
+# 背景图重绘的前后对比图（给她看的，只留本机）
+qa/still-compare/
+# 重绘的 2k 原图（只留本机）
+data/stills_hd/

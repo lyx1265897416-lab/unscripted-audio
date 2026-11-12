@@ -406,3 +406,18 @@ id：reborn（带着超强技能重生）、hellqueen（和地狱女王一起养
   Magnus（Magnus / Luca / Selene / Harland）、Rafael（Rafael / Maya / Cole / Ryan / Evan）、Rowan（Rowan / Nora）、Rian（Rian 宫廷 / Vessa / Mila / Sera）、Lena、咪（咪 / 超市店员）、三真四假（Wes / Jasper / Mei / Sloane / Kian），共 23 张。Rian 的 Sera 原来是生成的，角色包里有她的定装，已换掉。
 - 角色包里没有的剧（Kael、Dorian、Ray、Milo）主角从剧头像出（本来就是单人像）；这几部里生成的配角（Dorian 的 Father / Mom / Sebastian / Guard、Ray 的助理、Milo 的三个朋友）没有既定形象，保持不变。
 - 同名文件换了图：接口返回的头像地址带 `?v=<文件时间>`，手机不拿旧缓存。旧头像备份在 `cache/cast_bak_v66/`。
+
+## v68：播放背景高清重画，大脸特写改中景（11-11）
+
+她的两条反馈：背景还是不清晰，要重新生成高清图替换、不要直接截帧，每部剧画质画风统一；背景尽量不要大人脸特写，多用中景、全景、远景、场景，除非剧情提到。
+
+- `build_stills_hd.py`：21 部剧 348 张背景用 Waku `google/nano-banana-2.1/edit` 重画成 2k（1696×2528，每张 4 credits）。
+  - `same`：视频截帧（o / c / p / i 开头）照原构图重画。
+  - `wide`：头高占画面 ≥ 30% 的大脸特写（176 张，二次元 8 部也算）改成同一时刻的中景。
+  - 每张图只给原图里实际出现的角色的定装图（视觉模型先认人，`data/stills_hd/present.json`）；给多了模型会照搬定装图。
+  - `wide` 另给一张同场景原图，并把视觉模型从原图读出的地点、每个人的上身衣服和动作写进提示词（`facts.json`）。光靠图，模型会按定装图换衣服、换地点；加了这段文字后一次通过。
+  - 生成后自动校验（`qc`）：`same` 看缩略图和原图的相关度，`wide` 让视觉模型比对是不是同一批人、同一地点、同一身衣服、不是白底定装照；不合格最多重试 3 次，留最好的一张。`python3 build_stills_hd.py check` 把现有的全部复检一遍。
+  - 原图备份在 `cache/still_frames/`，2k 原图在 `data/stills_hd/`（都只留本机）。
+- 产物：`still/<片段>.jpg`（1080×1620，旧页面用）+ `still/<片段>.webp`（2k，新页面用，约 240 KB）+ `still/lo/<片段>.jpg`（360×540，慢网先垫的同一张图）。`index.json` 多了 `w`（有 WebP 的片段）、`lo`、`v`（换图后的版本号）。
+- 播放器：`stillOf` 优先用 2k WebP，慢网先垫同一张图的小图；`stillPlan` 新增 `close` 标签（重画后仍是大脸特写的），只在台词提到脸、眼神、笑、吻时才用。
+- 前后对比页：https://claude.ai/artifact/GJjmgAo2duCQBdvirrMFCf
