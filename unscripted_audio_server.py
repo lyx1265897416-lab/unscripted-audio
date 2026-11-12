@@ -751,12 +751,13 @@ def race_write(job, sess, user_msg, her, on_line):
     job['writer'] = wctx.get('writer'); return out
 
 
-def run_episode(job, sess, user_msg, spec=None, her=None):
+def run_episode(job, sess, user_msg, spec=None, her=None, gate=None):
     """写一集并逐句配音。spec={'base': 集数}：预先生成（她还没选）——Opus 慢慢写，只先配前两句，不记进剧情；她点了这个选项（commit_ep_spec）才配完其余句、记进剧情。
     不是预先生成（她自由输入）时用快模型 EP_FAST 写，第一句约 3 秒。"""
     t0 = time.time(); n = len(sess['eps']) + 1; lang = sess['lang']; series = sess['series']
     job['_bridge'] = ((sess.get('_brsel') or {}).get(n - 1) or {}).get('text') if not spec else None
     job['_her'] = her; job['_n'] = n; job['_started'] = set(); job['_raw'] = {}
+    job['_gate'] = gate   # 11-12 边说边预写：{'tts': Event, 'ok': Event}——配音等 tts，记进剧情等 ok（她说完、识别结果就是这句）；没等到就作废
     cast = set(k for k in VOICES[series] if not k.startswith('_'))
     ep = {'n': n, 'title': '', 'kind': 'live', 'lines': [], 'prompt': '', 'choices': [], 'ending': False}
     job['ep'] = ep; job['t'] = {}; ths = []
@@ -784,6 +785,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
     def synth(i, who, text):
         first = i == 0
         try:
+            if gate and not gate['tts'].is_set() and not gate['tts'].wait(26): ep['lines'][i]['url'] = ''; return   # 预写的：文字还可能变，先不花配音；一直没放行就不配
             eng = 'flash' if not spec else sess.get('tts', 'v4')
             if not spec and i >= 3: first_ev.wait(4)  # 11-10：二十多句同时提交会在 Waku 排队、把第一句也拖到 10 秒；第 4 句起等第一句配好（最多 4 秒）再提交  # 11-09 她说完现写的那集：整集用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒），句句赶在播放前配好
             if job.get('_cancel'): ep['lines'][i]['url'] = ''; return
@@ -840,6 +842,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None):
         if not ep['choices']: ep['choices'] = ['……', '……'] if lang == 'zh' else ['…', '…']
         if not ep['title']: ep['title'] = (f'第 {n} 集' if lang == 'zh' else f'Episode {n}')
         if n >= MAX_EPS: ep['ending'] = True
+        if gate and not job.get('_cancel') and not gate['ok'].wait(25): job['_cancel'] = True   # 预写的这集没被认领（她接着说了别的）：不记进剧情
         if job.get('_cancel'): job['status'] = 'cancelled'; return  # 她说的其实是某个选项：用了预先写好的那集，这条现写的作废
         if spec:
             with sess.setdefault('_lock', threading.Lock()):
@@ -1159,7 +1162,7 @@ def same_words(a, b):
     return x == y or difflib.SequenceMatcher(None, x, y).ratio() >= 0.82
 
 
-def prepare_next(sess, text, via):
+def prepare_next(sess, text, via, gate=None):
     """她用语音/打字回了一句：先理解（改同音错字、判断是不是选项、概括她的意图，最多 2.6 秒），再按理解后的版本开写下一集。
     11-10：先按原话写时，编剧把“她问 Sienna 刚才那通电话是谁”写反成了“你的电话”——意图必须一起给编剧。返回 {'n','text','matched','free','her'}。"""
     n = len(sess['eps']) + 1; ch = (sess['eps'][-1].get('choices') or [])[:2]
@@ -1178,7 +1181,7 @@ def prepare_next(sess, text, via):
     if k is not None: out['matched'] = ch[k]; return out
     br = sel_bridge(sess, n - 1)
     her = her_understood(text, u, via, sess['lang']) if u else her_said(text, via, sess['lang'])
-    out['free'] = start_job(run_episode, sess, next_msg(sess, her, br and br['text']), None, her); out['her'] = her
+    out['free'] = start_job(run_episode, sess, next_msg(sess, her, br and br['text']), None, her, gate); out['her'] = her
     return out
 
 
@@ -1190,6 +1193,33 @@ def pre_next(sess, text):
     try: pre['res'] = prepare_next(sess, text, 'voice')
     except Exception: traceback.print_exc()
     finally: pre['ev'].set()
+
+
+def _norm_said(t): return re.sub(r'[\s。，、！？!?,.:：;；…"“”\'‘’]+', '', (t or '')).lower()
+
+
+def spec_pre(sess, text, live=False):
+    """她还在说（或刚说完）就开始准备下一集：理解 + 开写。返回 pre 对象（/api/next 认领它）。
+    live=False：边说边预写——配音和“记进剧情”都先拦着（gate），等 asr_stream 确认；live=True：她已经说完，照常全速。"""
+    pre = {'n': len(sess['eps']) + 1, 'text': text, 'ev': threading.Event(), 'res': None, 'dead': False, 't0': time.time(),
+           'gate': {'tts': threading.Event(), 'ok': threading.Event()}}
+    if live: pre['gate']['tts'].set(); pre['gate']['ok'].set()
+    def go():
+        try: pre['res'] = prepare_next(sess, text, 'voice', pre['gate'])
+        except Exception: traceback.print_exc()
+        finally:
+            pre['ev'].set()
+            if pre['dead']: spec_kill(pre)
+    threading.Thread(target=go, daemon=True).start()
+    return pre
+
+
+def spec_kill(pre):
+    """预写作废（她接着说了别的）：取消那一集，放开等待（不会再配音、不会记进剧情）"""
+    pre['dead'] = True
+    jid = (pre.get('res') or {}).get('free')
+    if jid: cancel_job(jid)
+    pre['gate']['tts'].set(); pre['gate']['ok'].set()   # 取消标记已打：放开后各线程自己退出
 
 
 def cancel_job(jid):
@@ -1795,12 +1825,30 @@ def asr_stream(h, q):
                 run = 0
         return (6 * 32000 + at * hop * 2) if best >= 10 and at is not None else 12 * 32000
 
+    def tail_quiet(n):
+        """到第 n 字节为止，结尾已经安静了多少秒（和这段话里最响的 0.1 秒比，低 20 dB 以上算安静；最多回看 2 秒）"""
+        import array
+        a = array.array('h'); a.frombytes(bytes(buf[max(0, n - 2 * 32000):n])); hop = 1600
+        if len(a) < hop: return 0.0
+        e = [sum(x * x for x in a[i:i + hop]) / hop for i in range(0, len(a) - hop + 1, hop)]
+        st['peak'] = max(st.get('peak', 0), max(e))
+        thr = max(st['peak'] * 0.01, 40000.0)   # -20 dB（至少约 -44 dBFS）
+        k = 0
+        for v in reversed(e):
+            if v < thr: k += 1
+            else: break
+        return k * 0.1
+
     def join(head, t):
         if not head: return t
         return head + ('' if re.search(r'[一-鿿，。！？]$', head) or not t else ' ') + t
 
     def worker():
         last = ''; cut = 0; head = ''; same = 0; judged = set(); chs = ((sess['eps'][-1].get('choices') or [])[:2]) if sess else []
+        # 11-12 提速（她说：语音输入完往下生成还是慢，要接近流式）：文字停住、读着不像半句话时就先按它理解 + 开写（spec_pre，配音先拦着）；
+        # 她说完、最终识别就是这句 → 直接认领，已经写好的句子马上从这条连接推给手机（不等 /api/next 和 /api/job 的往返）。
+        can_spec = bool(sess) and g('go') == '1' and not sess['eps'][-1].get('ending') and (sess.get('_pre') or {}).get('n') != len(sess['eps']) + 1
+        sp = {'pre': None, 'n': 0}
         # 她可以一口气说到 60 秒：说过的前半段按停顿切开、认一次就定下来，每一遍只重认最近十来秒，出字速度不随时长变慢
         while not st['closed']:
             n = len(buf) // 2 * 2; final = st['end']
@@ -1810,22 +1858,53 @@ def asr_stream(h, q):
                 while n - cut > 14 * 32000:
                     k = quiet_cut(bytes(buf[cut:cut + 12 * 32000 + 640]))
                     head = join(head, (recog(bytes(buf[cut:cut + k]), False).get('text') or '').strip()); cut += k
-                r = recog(bytes(buf[cut:n]), final and not head) if n - cut >= 3200 else {'text': ''}
+                if final and last and len(_norm_said(last)) >= 6 and st.get('last_n', 0) and tail_quiet(n) >= (n - st['last_n']) / 32000 - 0.1:
+                    r = {'text': None, 'reuse': True}   # 上一遍之后只有安静：那一遍的文字就是最终结果（短回答 / 字母仍然重认，带选项提示）
+                else:
+                    r = recog(bytes(buf[cut:n]), final and not head) if n - cut >= 3200 else {'text': ''}
             except Exception as e: r = {'text': '', 'error': repr(e)[:80]}
-            text = join(head, (r.get('text') or '').strip())
+            text = last if r.get('reuse') else join(head, (r.get('text') or '').strip())
             try:
                 if final:
-                    ws_send(h.wfile, lock, json.dumps({'final': text, 'lang': r.get('lang'), 'ms': r.get('ms')}, ensure_ascii=False))
-                    if sess and g('go') == '1' and text: threading.Thread(target=pre_next, args=(sess, text[:400]), daemon=True).start()  # 选择点上的回答：马上开写下一集
-                    log('asr-stream', {'sid': g('sid'), 'final': text, 'sec': round(n / 32000, 1), 'asr_ms': r.get('ms'), 'at': time.strftime('%F %T')})
+                    pre = None; hit = False
+                    if can_spec and text:   # 选择点上的回答：马上开写下一集（预写的那集正好是这句话就直接认领）
+                        if sp['pre'] and _norm_said(sp['pre']['text']) == _norm_said(text): pre = sp['pre']; pre['text'] = text[:400]; hit = True
+                        else:
+                            if sp['pre']: spec_kill(sp['pre'])
+                            pre = spec_pre(sess, text[:400], live=True)
+                        sp['pre'] = None
+                        pre['gate']['tts'].set(); pre['gate']['ok'].set(); sess['_pre'] = pre
+                    elif sp['pre']: spec_kill(sp['pre']); sp['pre'] = None
+                    ws_send(h.wfile, lock, json.dumps({'final': text, 'lang': r.get('lang'), 'ms': r.get('ms'), 'keep': bool(pre)}, ensure_ascii=False))
+                    log('asr-stream', {'sid': g('sid'), 'final': text, 'sec': round(n / 32000, 1), 'asr_ms': r.get('ms'), 'spec': hit, 'head': round(time.time() - pre['t0'], 2) if hit else 0, 'at': time.strftime('%F %T')})
+                    if pre:   # 写出一句推一句（最多 10 秒，或手机那边关了连接）：手机上文字跟着出来，不用等配音
+                        t_end = time.time() + 10; sent = -1
+                        try:
+                            pre['ev'].wait(4); res = pre.get('res') or {}
+                            if res.get('matched') is not None: ws_send(h.wfile, lock, json.dumps({'pre': {'n': pre['n'], 'matched': res['matched']}}, ensure_ascii=False))
+                            job = JOBS.get(res.get('free') or '')
+                            while job and time.time() < t_end and not st['closed']:
+                                ls = ((job.get('ep') or {}).get('lines') or [])
+                                if len(ls) > sent:
+                                    sent = len(ls)
+                                    ws_send(h.wfile, lock, json.dumps({'pre': {'n': pre['n'], 'job': job['id'], 'lines': [{'who': l['who'], 'text': l['text']} for l in ls]}}, ensure_ascii=False))
+                                if job.get('status') in ('done', 'error', 'cancelled') or any(l.get('url') for l in ls): break   # 第一句配好了：之后走 /api/job
+                                time.sleep(0.1)
+                        except Exception: pass
                     break
                 told = False
                 if lang != 'zh' and n < 2 * 32000 and re.search(r'[\u4e00-\u9fff]', text): pass   # 英文版：开头两秒里冒出来的中文多半是误认（“嗯”“一”），不显示
                 elif text and text != last and not re.fullmatch(r'[嗯啊呃哦唔额一。，,.!?！？\s]+', text):   # 刚开口那零点几秒常被认成“嗯”“一”：不推，等下一遍
                     last = text; same = 0; told = True
+                    if sp['pre'] and _norm_said(sp['pre']['text']) != _norm_said(text): spec_kill(sp['pre']); sp['pre'] = None   # 她接着说了：预写的作废
                     ws_send(h.wfile, lock, json.dumps({'t': text, 'at': round(n / 32000, 2), 'eou': eou_heur(text, lang, chs)}, ensure_ascii=False))   # eou：这句话像不像说完了（手机据此决定安静多久算说完）
                 elif text and text == last:
                     same += 1
+                    e_now = eou_heur(text, lang, chs); q_now = tail_quiet(n)
+                    if can_spec and e_now != 'open' and len(_norm_said(text)) >= 2:
+                        # 文字没再变、声音也停了 0.3 秒：先按这句理解 + 开写（只花快模型，不配音）
+                        if not sp['pre'] and sp['n'] < 4 and q_now >= 0.3: sp['pre'] = spec_pre(sess, text); sp['n'] += 1; print('spec start', repr(text[-20:]), 'quiet', q_now, flush=True)
+                        if sp['pre'] and q_now >= (0.6 if e_now == 'done' else 0.9): sp['pre']['gate']['tts'].set()   # 安静够久，她多半说完了：放行配音
                     if same == 1 and text not in judged and eou_heur(text, lang, chs) == 'unk':   # 文字停住了（她停顿了）而规则拿不准：问一次快模型
                         judged.add(text)
                         def judge(tx=text):
@@ -1835,9 +1914,11 @@ def asr_stream(h, q):
                                 try: ws_send(h.wfile, lock, json.dumps({'eou': v, 'for': tx}, ensure_ascii=False))
                                 except Exception: pass
                         threading.Thread(target=judge, daemon=True).start()
+                if text and text == last: st['last_n'] = n   # 这一遍认到第 n 字节，文字就是 last
                 if not told: ws_send(h.wfile, lock, json.dumps({'at': round(n / 32000, 2)}))   # 没有新字也报一声“听到第几秒了”：手机知道这边已经跟上她最后说的话（过隧道时中间结果会晚 1–2 秒，没跟上就判停会把半句话截断）
             except Exception: break
         st['closed'] = True
+        if sp['pre']: spec_kill(sp['pre']); sp['pre'] = None   # 没等到她说完就断了：预写的作废
     th = threading.Thread(target=worker, daemon=True); th.start()
     try:
         while not st['closed'] and time.time() - t0 < 120:
@@ -1849,7 +1930,7 @@ def asr_stream(h, q):
             if op_ in (2, 0): buf.extend(data)
             elif op_ == 1 and data[:3] == b'end': st['end'] = True
     except Exception: pass
-    if st['end']: th.join(8)   # 最后一遍还在认：等它把结果发出去
+    if st['end']: th.join(16)   # 最后一遍还在认 / 还在推写好的句子：等它发完
     st['closed'] = True
     try: ws_send(h.wfile, lock, b'', 8)
     except Exception: pass
@@ -1925,7 +2006,8 @@ class H(BaseHTTPRequestHandler):
                 if j and g('wait') and g('have'):  # 长轮询：等到多一句有了配音、或写完/出错（最多 8 秒），省掉公网反复问
                     have = int(g('have') or 0); dl = time.time() + min(8, float(g('wait') or 8))
                     voiced = lambda: sum(1 for l in ((j.get('call') or j.get('ep') or {}).get('lines') or []) if l.get('url') is not None)
-                    while time.time() < dl and j.get('status') not in ('done', 'error', 'ready') and voiced() <= have: time.sleep(0.15)
+                    nl = int(g('nl')) if g('nl') else None; wrote = lambda: len(((j.get('call') or j.get('ep') or {}).get('lines') or []))
+                    while time.time() < dl and j.get('status') not in ('done', 'error', 'ready') and voiced() <= have and (nl is None or wrote() <= nl): time.sleep(0.15)   # nl：手机已有几句文字——多写出一句也马上回（文字先显示）
                 if j and j.get('status') == 'ready': j = dict(j, status='voicing')  # 预先生成好了但还没被选：对外当作还在合成
                 return self._send(200 if j else 404, {k: v for k, v in j.items() if not k.startswith('_')} if j else {'error': 'no job'})
             return self._send(404, {'error': 'not found'})

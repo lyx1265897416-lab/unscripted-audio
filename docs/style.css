@@ -1150,3 +1150,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .pl-top-t.tap small #pl-ep, .pl-titles .tt.tap p #pl-ep { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cast-retry { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 0 14px; border-radius: 14px; background: rgba(255, 255, 255, .06); color: rgba(255, 255, 255, .78); font-size: 13.5px; text-align: left; }
 .cast-retry .ic { width: 16px; height: 16px; flex: none; }
+
+/* 11-12 the next episode's lines appear as they are written (before their voices): the newest one eases in */
+.ll.ll-new { animation: llnew .45s ease both; }
+@keyframes llnew { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .ll.ll-new { animation: none; } }

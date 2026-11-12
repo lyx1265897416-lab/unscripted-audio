@@ -342,7 +342,7 @@ const RealAPI = {
   seriesDetail(id) { return this.get('api/series/' + encodeURIComponent(id), null, true); },
   play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, me: S.me || '', tts: TTS }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
-  job(id, have) { return this.get('api/job', have == null ? { id } : { id, wait: 8, have }, false); },  // have: long-poll until a new line is voiced
+  job(id, have, nl) { return this.get('api/job', have == null ? { id } : (nl == null ? { id, wait: 8, have } : { id, wait: 8, have, nl }), false); },  // have: long-poll until a new line is voiced; nl: …or one more line is written (11-12: the text shows first)
   async callChunk(cid, blob, q) { return this.callSay(cid, blob, q, 'api/call/chunk'); },
   async callSay(cid, blob, q, path) {
     const r = await apiFetch(() => { const u = new URL(apiUrl(path || 'api/call/say')); u.searchParams.set('k', TOKEN); u.searchParams.set('cid', cid); Object.entries(q || {}).forEach(([k, v]) => u.searchParams.set(k, v)); return u.toString(); },
@@ -1573,6 +1573,7 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
       w.onmessage = (e) => {
         let d = null; try { d = JSON.parse(e.data); } catch (x) { return; }
         LS.got += 1;
+        if (d.pre) { preFeed(d.pre); return; }   // the next episode's lines, pushed the moment they are written
         if (d.final != null) { if (LS.fin) { const f = LS.fin; LS.fin = null; f(d); } return; }
         if (d.at != null) EOU.cover = Math.max(EOU.cover, +d.at || 0);
         if (d.t && !finished) { EOU.text = d.t; EOU.at = Date.now(); EOU.v = d.eou || 'unk'; EOU.llm = false; try { onPartial(d.t); } catch (x) { /* ignore */ } }
@@ -1613,7 +1614,9 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
     if (!spoke || !chunks.length) { lsClose(); resolve({ text: '', spoke: false }); return; }
     st('thinking', { spoke: speechAt ? lastVoice - speechAt : 0 });
     if (finP) {
-      const d = await finP; lsClose();
+      const d = await finP;
+      if (d && d.keep && LS.ws) { const w = LS.ws; LS.ws = null; setTimeout(() => { try { w.onmessage = null; w.close(); } catch (e) { /* ignore */ } }, 12000); }   // the relay goes on pushing the lines it writes over this socket
+      lsClose();
       if (d && d.final != null) { resolve({ text: String(d.final).trim(), lang: d.lang, spoke: true }); return; }
     }
     try {
@@ -2123,6 +2126,9 @@ async function sendNext(id, text, via) {
   }
   P.gen = { n: nextN, text, via, status: 'writing', err: null, t0: Date.now() };
   save();
+  // the relay already has this answer's episode under way (it told us over the voice socket): follow that job now, /api/next confirms it
+  const pj = (via === 'voice' || via === 'free') && PRE && PRE.id === id && PRE.n === nextN && PRE.job && Date.now() - PRE.at < 20000 ? PRE.job : null;
+  if (pj) { ss.job = { id: pj, n: nextN, text, via }; preApply(); startGeneration(pj, nextN, text, false); }
   const pre = via !== 'auto' && via !== 'silence' ? BRIDGES[ss.sid + ':' + (nextN - 1)] : null;
   const early = EARLY.n === nextN && EARLY.url; EARLY = { n: 0, url: '' };
   Object.assign(BR, { n: nextN, url: early || (pre && pre.url) || '', played: !!early, ackDone: true, t0: Date.now() });
@@ -2137,9 +2143,13 @@ async function sendNext(id, text, via) {
     if (!res || !res.job) throw new Error('No job returned');
     if (res.bridge && res.bridge.url && BR.n === nextN && !BR.played && res.bridge.url !== BR.url) { BR.url = res.bridge.url; if (BR.ackDone) maybeBridge(); }   // the relay picked a different line (the bespoke one became ready)
     ss.job = { id: res.job, n: nextN, text, via }; save();
-    startGeneration(res.job, nextN, text, false);
+    if (res.job !== pj) {
+      if (pj) { ss.eps = ss.eps.filter((e) => e.n !== nextN || e === P.ep); PRE = null; }   // the relay went another way (she named an option): drop the lines shown early
+      startGeneration(res.job, nextN, text, false);
+    }
   } catch (e) {
     console.warn(e);
+    if (pj) return;   // the episode itself is already being followed; its own polling reports a real failure
     P.gen = null; P.needChoice = true; bedStop();
     updatePlayerUI(); renderMini();
     openChoiceSheet();
@@ -2147,6 +2157,27 @@ async function sendNext(id, text, via) {
   }
 }
 
+/* 11-12 "after I finish speaking the next part is still slow — make it feel streamed": the relay starts understanding and
+ * writing while she is still talking (on the words that have settled), and the moment her final words are in it pushes the
+ * lines it has written over the voice socket. They show in the lyrics at once (under "You: …"), the voices follow.
+ * PRE = what the relay has pushed for the episode about to start: { id, n, job, lines:[{who,text}], matched } */
+let PRE = null;
+function preFeed(pre) {
+  if (!pre || !pre.n || !P.id) return;
+  PRE = Object.assign(PRE && PRE.n === pre.n && PRE.id === P.id ? PRE : {}, pre, { id: P.id, at: Date.now() });
+  preApply();
+}
+function preApply() {
+  const g = P.gen, ss = P.id && getSess(P.id);
+  if (!PRE || !g || !ss || PRE.id !== P.id || g.n !== PRE.n || !PRE.lines || !PRE.lines.length) return;
+  let ep = ss.eps.find((e) => e.n === PRE.n);
+  if (ep && (ep.lines || []).length >= PRE.lines.length) return;   // the job poll already knows as much
+  if (!ep) { ep = { n: PRE.n, kind: 'live', durs: {}, lines: [], _done: false }; ss.eps.push(ep); ss.eps.sort((a, b) => a.n - b.n); }
+  const old = ep.lines || [];
+  ep.lines = PRE.lines.map((l, i) => old[i] || { who: l.who, text: l.text, url: null });
+  if (g.status === 'writing') g.status = 'voicing';
+  updatePlayerUI();
+}
 let genToken = 0;
 function cancelGen() { genToken++; P.gen = null; bedStop(); }
 function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
@@ -2163,7 +2194,8 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
   let have = null;   // long-poll: the relay answers as soon as one more line is voiced (no 600 ms polling over the tunnel)
   const getJob = async () => {
     try {
-      const j = await API.job(jobId, started ? null : have); fails = 0;
+      const e0 = ss && ss.eps.find((e) => e.n === n);
+      const j = await API.job(jobId, started ? null : have, have == null ? null : ((e0 && e0.lines) || []).length); fails = 0;
       if (j && j.ep && j.ep.lines) have = j.ep.lines.filter((l) => l.url != null).length; else if (j) have = 0;
       return j;
     } catch (e) {
@@ -4583,7 +4615,12 @@ function lyricState() {
       if (g.via === 'auto') add({ k: 'note', text: 'The story carries on by itself…' });
       else if (g.via === 'silence' || !g.text) add({ k: 'you', text: '(stayed silent)', ui: true });
       else add({ k: 'you', text: g.text });
-      cur = add({ k: 'sys', text: { writing: 'Writing your episode…', voicing: 'Voicing the first lines…', done: 'Starting…' }[g.status] || 'Writing your episode…' });
+      const nx = ss && ss.eps.find((e) => e.n === g.n), nl = nx && nx !== ep ? (nx.lines || []) : [];
+      if (nl.length) {   // 11-12 the next episode is already being written: its lines appear here as they come, before their voices are ready
+        const first = add({ k: 'line', who: nl[0].who, text: cleanText(nl[0].text), i: -1, pend: true, pre: true });
+        nl.slice(1).forEach((l, x) => add({ k: 'line', who: l.who, text: cleanText(l.text), i: -1, pend: true, pre: true, fresh: x === nl.length - 2 }));
+        cur = first;
+      } else cur = add({ k: 'sys', text: { writing: 'Writing your episode…', voicing: 'Voicing the first lines…', done: 'Starting…' }[g.status] || 'Writing your episode…' });
     }
   }
   return { it, cur };
@@ -4592,7 +4629,7 @@ function lyHtml(o, j) {
   const t = `<span class="ll-t" ${o.ui ? '' : 'translate="no"'}>${esc(o.text)}</span>`;
   if (o.k === 'line') {
     const nr = !o.who || o.who === 'NARR';
-    return `<div class="ll ${nr ? 'narr' : 'say'}${o.pend ? ' pend' : ''}" ${o.i >= 0 ? `data-act="ly-seek" data-j="${j}"` : ''}>${nr ? '' : `<span class="ll-who" translate="no">${esc(o.who)}</span>`}${t}</div>`;
+    return `<div class="ll ${nr ? 'narr' : 'say'}${o.pend ? ' pend' : ''}${o.fresh ? ' ll-new' : ''}" ${o.i >= 0 ? `data-act="ly-seek" data-j="${j}"` : ''}>${nr ? '' : `<span class="ll-who" translate="no">${esc(o.who)}</span>`}${t}</div>`;
   }
   if (o.k === 'you') return `<div class="ll you"><span class="ll-who">You</span>${t}</div>`;
   if (o.k === 'q') return `<div class="ll q"><span class="ll-who">Your move</span>${t}</div>`;
@@ -4619,7 +4656,7 @@ function renderLyrics(force) {
     const old = LY.nodes[LY.cur], oi = old && it[LY.cur];
     if (old && oi && LY.tok) { const t = $('.ll-t', old); if (t) t.textContent = oi.text; }
     LY.tok = null; LY.cur = cur;
-    LY.nodes.forEach((n, j) => { n.classList.toggle('cur', j === cur); n.classList.toggle('past', j < cur); n.classList.toggle('far', j > cur + 2 && !(it[cur] && it[cur].k === 'q')); });
+    LY.nodes.forEach((n, j) => { n.classList.toggle('cur', j === cur); n.classList.toggle('past', j < cur); n.classList.toggle('far', j > cur + (it[cur] && it[cur].pre ? 4 : 2) && !(it[cur] && it[cur].k === 'q')); });   // lines written ahead of their voices: a few more stay in view
     const o = it[cur], node = LY.nodes[cur];
     if (o && node && o.k === 'line' && !o.pend && o.i >= 0) {   // split the current line so it can fill in as it is spoken
       const parts = o.text.match(/[㐀-鿿豈-﫿぀-ヿ]|[^\s㐀-鿿豈-﫿぀-ヿ]+\s*|\s+/g) || [o.text];
