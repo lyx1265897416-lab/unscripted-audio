@@ -1547,9 +1547,13 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
    * counts as finished now depends on what she has said so far (like semantic VAD in voice agents): the relay tags every partial
    * with eou — 'done' (reads as a finished answer / instruction), 'open' (clearly mid-sentence: ends on "and then", "I want him to",
    * a comma), 'unk' — by rules at once, and by a fast model when the rules can't tell and her words have stopped.
-   * done → 0.7 s of quiet (0.9 s when it was the model that said so), unk → 1.3 s (1.6 s once she has talked for 2.5 s), open → 2.6 s.
+   * done → 0.7 s of quiet (1.1 s once she has talked for 2.5 s), unk → 1.3 s (1.6 s), open → 2.6 s. The model's verdict is only
+   * used to wait longer (open), never to end sooner.
    * Without the live socket (calls, old browsers) the old 0.9 / 1.6 s rule stays. */
-  const EOU = { v: 'unk', text: '', at: 0, llm: false };
+  /* Over the tunnel the partials run 1–2 s behind her voice, so the words we hold may be older than her last sound. Every message
+   * says how many seconds of audio the relay has heard (d.at); nothing ends while it has not caught up with her last sound
+   * (cover < voicePos), up to 2.6 s of quiet. */
+  const EOU = { v: 'unk', text: '', at: 0, llm: false, cover: 0 }; let voicePos = 0;
   const lsClose = () => {
     try { if (LS.proc) { LS.proc.onaudioprocess = null; LS.proc.disconnect(); } if (LS.src) LS.src.disconnect(); if (LS.sink) LS.sink.disconnect(); } catch (e) { /* ignore */ }
     LS.proc = LS.src = LS.sink = null;
@@ -1570,8 +1574,9 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
         let d = null; try { d = JSON.parse(e.data); } catch (x) { return; }
         LS.got += 1;
         if (d.final != null) { if (LS.fin) { const f = LS.fin; LS.fin = null; f(d); } return; }
+        if (d.at != null) EOU.cover = Math.max(EOU.cover, +d.at || 0);
         if (d.t && !finished) { EOU.text = d.t; EOU.at = Date.now(); EOU.v = d.eou || 'unk'; EOU.llm = false; try { onPartial(d.t); } catch (x) { /* ignore */ } }
-        else if (d.eou && d.for === EOU.text) { EOU.v = d.eou; EOU.llm = true; }   // the fast model's verdict on the words that are still the latest
+        else if (d.eou === 'open' && d.for === EOU.text) EOU.v = 'open';   // the fast model only ever buys her more time: a sentence that merely reads complete is not hurried   // the fast model's verdict on the words that are still the latest
       };
       w.onclose = w.onerror = () => { LS.open = false; if (LS.fin) { const f = LS.fin; LS.fin = null; f(null); } };
       LS.src = actx.createMediaStreamSource(VI.stream); LS.proc = actx.createScriptProcessor(4096, 1, 1); LS.sink = actx.createGain(); LS.sink.gain.value = 0;
@@ -1630,7 +1635,7 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
       if (lv < 0) blind = true;
       else {
         n += 1; if (n <= 4) floor = Math.min(0.02, Math.max(floor, lv));   // room noise from the first 0.4 s — capped, so a voice that starts at once is not taken for the room
-        if (n > 2 && lv > Math.max(0.02, floor * 2.4)) { if (!speechAt) { speechAt = now; st('speaking'); } lastVoice = now; }
+        if (n > 2 && lv > Math.max(0.02, floor * 2.4)) { if (!speechAt) { speechAt = now; st('speaking'); } lastVoice = now; voicePos = LS.sent / 16000; }
       }
       partial();
       if (manual) { if (now - t0 > max) finish(true); return; }
@@ -1641,10 +1646,14 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
       if (!speechAt) return;
       if (now - speechAt > max) { finish(true); return; }
       const quiet = now - lastVoice;
-      if (LS.got && EOU.text) {   // the live socket is telling us what she has said: wait by how finished it reads, and never while new words are still arriving
-        const need = EOU.v === 'done' ? (EOU.llm ? 900 : 700) : EOU.v === 'open' ? 2600 : (now - speechAt > 2500 ? 1600 : 1300);   // unk: a long instruction gets a little more room than a short answer
-        if (quiet > need && now - EOU.at > (EOU.v === 'done' ? 200 : 450)) finish(true);
-      } else if (quiet > (now - speechAt > 3000 ? 1600 : (LS.open ? 1300 : 900))) finish(true);   // no words back yet (or no socket): the level alone decides
+      if (LS.open || LS.got) {   // the live socket is telling us what she has said: wait by how finished it reads
+        const fresh = EOU.cover >= voicePos - 0.3;   // the relay has heard up to her last sound
+        if (fresh && EOU.text) {
+          const long = now - speechAt > 2500;   // a long instruction gets a little more room than a short answer
+          const need = EOU.v === 'done' ? (long ? 1100 : 700) : EOU.v === 'open' ? 2600 : (long ? 1600 : 1300);
+          if (quiet > need) finish(true);
+        } else if (quiet > (fresh ? 1300 : 2600)) finish(true);   // heard it all and no words (a noise, a mumble) → the final pass decides; not caught up → wait for it, but not for ever
+      } else if (quiet > (now - speechAt > 3000 ? 1600 : 900)) finish(true);   // no socket (calls, old browsers): the level alone decides
     }, 100);
   })();
   return { done, stop: () => finish(true), cancel: () => { canceled = true; finish(false); } };

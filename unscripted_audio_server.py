@@ -1091,7 +1091,7 @@ def understand(sess, text, timeout=2.4):
 # ---- 11-12 语音输入判停（她说：稍微停一下就被当成说完了，其实还要接着说；停顿时长也不要太久）----
 # 参考的做法：OpenAI Realtime 的 semantic_vad（按“说完了”的概率决定等多久，话没说完就多等）、AssemblyAI（先等一小段安静再看内容，
 # 最长 1.28–2.56 秒强制结束）、LiveKit（最短 0.5 秒、最长 3 秒）。这里：中转在每个中间识别结果上给一个判断 eou，
-# 手机按它决定安静多久算说完——done 0.7 秒（快模型判的 0.9 秒）、unk 1.3 秒（说了 2.5 秒以上 1.6 秒）、open 2.6 秒。
+# 手机按它决定安静多久算说完——done 0.7 秒（说了 2.5 秒以上 1.1 秒）、unk 1.3 秒（1.6 秒）、open 2.6 秒；快模型的判断只用来多等（open），不用来提前结束。
 _EOU_OPEN_ZH = re.compile(r'(然后|但是|可是|不过|因为|所以|而且|并且|还有|或者|以及|如果|要是|虽然|就是|就是说|那个|这个|那么|比如|比如说|另外|同时|接着|之后|我想|我要|想要|我觉得|我希望|希望|'
                           r'能不能|可不可以|你能不能|我想让他|我想让她|让他|让她|叫他|叫她|告诉他|告诉她|问他|问她|先|再|和|跟|与|把|被|让|给|对着|为了|关于|嗯|呃|额|那)$')
 _EOU_DONE_ZH = re.compile(r'(吧|吗|呢|了|啊|呀|哦|嘛|啦|好|好的|行|可以|对|是的|不要|不行|不用|谢谢|就这样|就这些|好了|说完了|选[一二12ABab]|第[一二12]个|选项[一二12ABab]|^[ABab]$)$')
@@ -1819,9 +1819,10 @@ def asr_stream(h, q):
                     if sess and g('go') == '1' and text: threading.Thread(target=pre_next, args=(sess, text[:400]), daemon=True).start()  # 选择点上的回答：马上开写下一集
                     log('asr-stream', {'sid': g('sid'), 'final': text, 'sec': round(n / 32000, 1), 'asr_ms': r.get('ms'), 'at': time.strftime('%F %T')})
                     break
-                if lang != 'zh' and n < 2 * 32000 and re.search(r'[\u4e00-\u9fff]', text): continue   # 英文版：开头两秒里冒出来的中文多半是误认（“嗯”“一”），不显示
-                if text and text != last and not re.fullmatch(r'[嗯啊呃哦唔额一。，,.!?！？\s]+', text):   # 刚开口那零点几秒常被认成“嗯”“一”：不推，等下一遍
-                    last = text; same = 0
+                told = False
+                if lang != 'zh' and n < 2 * 32000 and re.search(r'[\u4e00-\u9fff]', text): pass   # 英文版：开头两秒里冒出来的中文多半是误认（“嗯”“一”），不显示
+                elif text and text != last and not re.fullmatch(r'[嗯啊呃哦唔额一。，,.!?！？\s]+', text):   # 刚开口那零点几秒常被认成“嗯”“一”：不推，等下一遍
+                    last = text; same = 0; told = True
                     ws_send(h.wfile, lock, json.dumps({'t': text, 'at': round(n / 32000, 2), 'eou': eou_heur(text, lang, chs)}, ensure_ascii=False))   # eou：这句话像不像说完了（手机据此决定安静多久算说完）
                 elif text and text == last:
                     same += 1
@@ -1834,6 +1835,7 @@ def asr_stream(h, q):
                                 try: ws_send(h.wfile, lock, json.dumps({'eou': v, 'for': tx}, ensure_ascii=False))
                                 except Exception: pass
                         threading.Thread(target=judge, daemon=True).start()
+                if not told: ws_send(h.wfile, lock, json.dumps({'at': round(n / 32000, 2)}))   # 没有新字也报一声“听到第几秒了”：手机知道这边已经跟上她最后说的话（过隧道时中间结果会晚 1–2 秒，没跟上就判停会把半句话截断）
             except Exception: break
         st['closed'] = True
     th = threading.Thread(target=worker, daemon=True); th.start()
