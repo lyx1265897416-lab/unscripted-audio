@@ -383,6 +383,13 @@ def pack(ids):
             src = d / f'{cid}.jpg'; lo = d / 'lo' / f'{cid}.jpg'
             if not lo.exists() or lo.stat().st_mtime < src.stat().st_mtime:
                 Image.open(src).convert('RGB').resize((360, 540), Image.LANCZOS).save(lo, quality=62, optimize=True, progressive=True)
+        # 11-12 中等图 still/md/<片段>.webp（720×1080，≈48 KB）：换背景时先上这张（手机上已经清楚），2k 的等音频缓冲够了再补——慢网不再卡在上一张
+        (d / 'md').mkdir(exist_ok=True)
+        for cid in ix['still']:
+            src = d / f'{cid}.webp' if (d / f'{cid}.webp').exists() else d / f'{cid}.jpg'; md = d / 'md' / f'{cid}.webp'
+            if not md.exists() or md.stat().st_mtime < src.stat().st_mtime:
+                Image.open(src).convert('RGB').resize((720, 1080), Image.LANCZOS).save(md, 'WEBP', quality=70, method=5)
+        ix['md'] = 1
         fin = (json.load(open(SHOT)).get('final') or {}).get(sid, {}) if SHOT.exists() else {}   # measure --final 量过的景别
         q = ix.setdefault('q', {})
         for c in ix['still']:

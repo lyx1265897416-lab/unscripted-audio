@@ -282,6 +282,14 @@ function netProbe() {
   } catch (e) { /* ignore */ }
 }
 try { performance.setResourceTimingBufferSize(600); } catch (e) { /* ignore */ }
+/* 11-12 a visit with everything cached has nothing to measure: fetch one small file of the page past the cache, once, so the
+ * link's speed is known within a second or two. Until it is known (netKnown), nothing preloads a whole episode. */
+function netMeasure() {
+  netProbe(); if (NET.kbs || NET.asked) return; NET.asked = 1;
+  fetch(absUrl('style.css?np=' + Date.now()), { cache: 'no-store' }).then((r) => r.arrayBuffer()).then(() => setTimeout(netProbe, 60)).catch(() => {});
+}
+window.addEventListener('load', () => setTimeout(netMeasure, 600));
+const netKnown = () => NET.kbs > 0 || Q.get('net') === 'fast';
 const slowNet = () => {
   if (Q.get('net') === 'slow') return true;   // test switches: &net=slow behaves as on a slow link, &net=fast as on a good one
   if (Q.get('net') === 'fast') return false;
@@ -789,7 +797,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id) };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), get PS() { return PS; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -3867,7 +3875,7 @@ function warmResume(id) {
 }
 function warmEp1(s, must) {
   const u = s && s.ep1 && s.ep1.audio;
-  if (slowNet() && !must) return;   // slow link: no whole-file preloads; Play streams from the first bytes instead
+  if ((slowNet() || !netKnown()) && !must) return;   // slow link, or speed not measured yet: no whole-file preloads; Play streams from the first bytes instead
   if (u && !getSess(s.id)) fetchLocalBlob(u);
   if (!u || MOCK || getSess(s.id) || /^ep1\//.test(u) || WARM.some((a) => a.dataset.u === u)) return;
   try {
@@ -4213,7 +4221,7 @@ const STX = {};
 function stillIndex(sid) {
   if (!NARRA || STX[sid]) return;
   STX[sid] = { set: new Set(), ready: false };
-  const done = (j) => { STX[sid] = { set: new Set((j && j.still) || []), q: (j && j.q) || {}, w: new Set((j && j.w) || []), lo: !!(j && j.lo), v: (j && j.v) || 0, ready: true }; const s0 = byId(sid); if (s0 && s0.visuals) s0.visuals._planKey = ''; PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true); };
+  const done = (j) => { STX[sid] = { set: new Set((j && j.still) || []), q: (j && j.q) || {}, w: new Set((j && j.w) || []), lo: !!(j && j.lo), md: !!(j && j.md), v: (j && j.v) || 0, ready: true }; const s0 = byId(sid); if (s0 && s0.visuals) s0.visuals._planKey = ''; PS.url = ''; if (P.id === sid && playerOpen) renderVisual(true); };
   fetch(absUrl(`v/${sid}/still/index.json`), { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then(done).catch(() => done(null));
 }
 /** the pictures of one scene clip: hi = the sharpest there is, low = a small one to put up first on a slow link */
@@ -4223,9 +4231,9 @@ function stillOf(s, id) {
    * on a slow link the small picture put up first was a different, older frame. Now the frames are redrawn in 2k
    * (build_stills_hd.py → <clip>.webp, listed in index.json "w"), and the small picture is the same image at 360×540 (lo/). */
   const X = STX[s.id], has = !!(X && X.set.has(id)), ver = has && X.v ? '?v=' + X.v : '';
-  const st = has ? `v/${s.id}/still/${id}.${X.w && X.w.has(id) ? 'webp' : 'jpg'}${ver}` : '', lo = has && X.lo ? `v/${s.id}/still/lo/${id}.jpg${ver}` : '';
+  const st = has ? `v/${s.id}/still/${id}.${X.w && X.w.has(id) ? 'webp' : 'jpg'}${ver}` : '', lo = has && X.md ? `v/${s.id}/still/md/${id}.webp${ver}` : has && X.lo ? `v/${s.id}/still/lo/${id}.jpg${ver}` : '';   // md: 720×1080 WebP ≈ 48 KB (11-12); lo: 360×540, older lists
   const hd = hdOf(c).poster || '', sq = posterOf(c);
-  /* 11-12 the small picture (≈20 KB) is always there to go up first: a change of background never waits for the 2k one */
+  /* 11-12 the medium picture (720×1080, ≈48 KB — already clear on a phone) is always there to go up first: a change of background never waits for the 2k one */
   return { low: lo || (slowNet() ? hd || sq : ''), hi: st || hd || sq };
 }
 /** Which picture belongs to which part of the episode — a pure function of the position, so dragging the bar, tapping a line
@@ -4325,9 +4333,11 @@ function audioRoom() {
 }
 /** 11-12 "some content never changes its background, and loading / playing is slow": the pictures of an episode are fetched in
  * an order that cannot hold a change back or starve the audio —
- *  1. the small picture (360×540, ≈20 KB) of every stretch of the episode, the one on screen first: a change always has it;
- *  2. the 2k picture of the one on screen, then of the next few — and, apart from the one on screen on a good link, only
- *     while the audio has enough buffered (audioRoom), one at a time on a slow link.
+ *  1. the medium picture (720×1080, ≈48 KB) of the stretch on screen at once, then — as soon as the audio is playing — of every
+ *     other stretch of the episode in the order they come: a change of background always has its picture;
+ *  2. the 2k picture only while the audio has enough buffered (audioRoom; on a good link the one on screen does not wait):
+ *     good link — the one on screen and the next four, two at a time; slow link — one at a time, and the one that will
+ *     still be on screen when it arrives (a 2k picture that lands after its stretch is over is wasted bandwidth).
  * Called on every tick; showPoster puts up whatever has arrived. */
 function warmStills(s) {
   const V = s.visuals, ep = P.ep; if (!V || !ep) return;
@@ -4339,9 +4349,21 @@ function warmStills(s) {
     const im = new Image(), fin = (good) => { PS.busy -= 1; if (hi) PS.hiBusy -= 1; if (good) PS.seen.add(u); else setTimeout(() => PS.req.delete(u), 4000); if (P.id === s.id && playerOpen) renderVisual(); };
     im.onload = () => fin(true); im.onerror = () => fin(false); im.src = absUrl(u);
   };
-  for (const id of ids) { if (PS.busy >= 3) return; const p = stillOf(s, id); if (p.low && p.low !== p.hi) get(p.low, false); }
-  const room = audioRoom(), capHi = slow ? 1 : 2;
-  ids.slice(0, slow ? 3 : 5).forEach((id, k) => { if (PS.hiBusy < capHi && (room || (k === 0 && !slow))) get(stillOf(s, id).hi, true); });
+  const going = audio.currentTime > 0.3 || audio.readyState >= 3 || audioRoom();   // until the audio has started, only the picture on screen
+  ids.slice(0, going ? 99 : 1).forEach((id) => { const p = stillOf(s, id); if (PS.busy < (slow ? 2 : 3) && p.low && p.low !== p.hi) get(p.low, false); });
+  const room = audioRoom();
+  if (!slow) { ids.slice(0, 5).forEach((id, k) => { if (PS.hiBusy < 2 && (room || k === 0)) get(stillOf(s, id).hi, true); }); return; }
+  if (!room || PS.hiBusy >= 1 || PS.busy >= 2) return;
+  let pick = ids[0];
+  if (ep.kind !== 'live') {   // which stretch will still be up when a 2k picture (≈260 KB) has come down this link?
+    const t = audio.currentTime || 0, d = audio.duration || ep.dur || 0, eta = (260 / Math.max(8, NET.kbs || 30)) * 1.3 + 3;
+    pick = null;
+    for (let j = cur; j < plan.length && !pick; j++) {
+      const end = j + 1 < plan.length ? plan[j + 1][0] : d, u = stillOf(s, plan[j][1]).hi;
+      if (end - t > eta && u && !PS.seen.has(u) && !PS.req.has(u)) pick = plan[j][1];
+    }
+  }
+  if (pick) get(stillOf(s, pick).hi, true);
 }
 function hdIndex(sid) {
   if (!NARRA || HDX[sid] || !HD_IDS.has(sid)) return;
