@@ -4570,13 +4570,25 @@ function renderLyrics(force) {
 function placeLyrics() {
   const box = $('#nr-lyr'), roll = $('#nr-roll'), n = LY.nodes[LY.cur]; if (!box || !roll || !n) return;
   LY.placed = Date.now();
-  const H = box.clientHeight, room = H - n.offsetHeight;
+  const ask = !!(P.needChoice && LY.it[LY.cur] && LY.it[LY.cur].k === 'q');
+  if (!ask) { LY.lock = null; if (!box.closest('.nr-ask')) LY.hPlay = box.clientHeight; }
+  /* 11-11 choice point: the question, A, B and the answer box pop up once and stay there (she talks into the box where it popped up).
+     Placed against the height the lyrics had while the transport was showing, then locked for this choice point; it only moves up if what she types grows past the bottom. */
+  if (ask && LY.lock && LY.lock.sig === LY.sig) {
+    const last = LY.nodes[LY.nodes.length - 1], Hn = box.clientHeight;
+    const bottom = LY.lock.y + last.offsetTop + last.offsetHeight;
+    const y = bottom > Hn - 6 ? LY.lock.y - (bottom - (Hn - 6)) : LY.lock.y;
+    roll.style.transform = `translateY(${Math.round(y)}px)`;
+    return;
+  }
+  const H = ask && LY.hPlay ? Math.min(LY.hPlay, box.clientHeight) : box.clientHeight, room = H - n.offsetHeight;
   let extra = 0;   // a question keeps its two choices in view
   if (LY.it[LY.cur] && LY.it[LY.cur].k === 'q') for (let j = LY.cur + 1; j < LY.nodes.length; j++) extra += LY.nodes[j].offsetHeight + 8;
   const lastOne = !LY.nodes.slice(LY.cur + 1).some((x) => !x.classList.contains('far'));   // nothing after it (e.g. "Writing your episode…"): sit lower, more of what came before stays in view
   let top = Math.max(H * 0.06, Math.min(H * (lastOne ? 0.56 : 0.42), room - extra - H * 0.08));
   if (extra && top + n.offsetHeight + extra > H - 6) top = H - 6 - n.offsetHeight - extra;   // a long question on a short screen: the answer box stays in view, the question slides up   // the current line sits a little below the middle-top: two earlier lines stay readable above it
   roll.style.transform = `translateY(${Math.round(top - n.offsetTop)}px)`;
+  if (ask) LY.lock = { sig: LY.sig, y: Math.round(top - n.offsetTop) };
 }
 function lyProgress() {
   const o = LY.it[LY.cur], ep = P.ep; if (!o || o.k !== 'line' || !ep) return 0;

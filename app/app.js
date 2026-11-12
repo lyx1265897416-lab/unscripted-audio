@@ -269,17 +269,23 @@ function withTimeout(init, ms) {  // a stalled tunnel request must not hang the 
  * only happens when it can afford to: kbs = download speed of the page's own files, rt = a plain API round trip. */
 const NET = { kbs: 0, rt: 0 };
 function netProbe() {
+  /* 11-12 her phone was treated as a fast link on every visit after the first: the page's own files come from the cache then
+   * (transferSize 0), so no speed was ever measured — no small picture first, a whole episode of 2k pictures fetched side by
+   * side with the audio, and the background stayed on its first picture. Now the stills and the Episode-1 audio count too,
+   * and the figure is the best of the latest downloads, so it follows the link as it is now. */
   try {
     const v = performance.getEntriesByType('resource')
-      .filter((e) => /\/(app\.js|style\.css|i18n\.js|covers\/)/.test(e.name) && e.transferSize > 6000 && e.responseEnd > e.responseStart)
-      .map((e) => e.transferSize / 1024 / Math.max(0.03, (e.responseEnd - e.responseStart) / 1000)).sort((a, b) => b - a);
+      .filter((e) => /\/(app\.js|style\.css|i18n\.js|covers\/|still\/|ep1\/)/.test(e.name) && e.transferSize > 6000 && e.responseEnd > e.responseStart)
+      .slice(-8).map((e) => e.transferSize / 1024 / Math.max(0.03, (e.responseEnd - e.responseStart) / 1000)).sort((a, b) => b - a);
     if (v.length) NET.kbs = v[0];
+    NET.at = Date.now();
   } catch (e) { /* ignore */ }
 }
+try { performance.setResourceTimingBufferSize(600); } catch (e) { /* ignore */ }
 const slowNet = () => {
   if (Q.get('net') === 'slow') return true;   // test switches: &net=slow behaves as on a slow link, &net=fast as on a good one
   if (Q.get('net') === 'fast') return false;
-  if (!NET.kbs) netProbe();
+  if (!NET.kbs || Date.now() - (NET.at || 0) > 5000) netProbe();
   const c = navigator.connection;
   return (NET.kbs > 0 && NET.kbs < 150) || NET.rt > 2500 || !!(c && (c.saveData || /(^|-)2g|3g/.test(c.effectiveType || '')));
 };
@@ -4193,7 +4199,7 @@ function queueClips(urls) {
   pump();
 }
 /* narra: every clip has a poster (same name, .jpg). It is on screen as soon as the line starts; the moving clip fades in over it when it has loaded. */
-const PS = { url: '', tok: 0, seen: new Set(), req: new Set(), fail: 0, busy: 0 };
+const PS = { url: '', tok: 0, seen: new Set(), req: new Set(), fail: 0, busy: 0, hiBusy: 0, lvl: 0, at: 0 };
 const posterOf = (clipUrl) => String(clipUrl || '').replace(/\.mp4$/, '.jpg');
 /* 11-11 (2) sharper backgrounds: the 13 realtime series have portrait HD versions of their scenes (build_hd.py →
  * v/<id>/hd/<clip>.mp4 + .jpg, up to 720×1080 like the covers; the stills are HD pictures only and move by CSS).
@@ -4219,8 +4225,8 @@ function stillOf(s, id) {
   const X = STX[s.id], has = !!(X && X.set.has(id)), ver = has && X.v ? '?v=' + X.v : '';
   const st = has ? `v/${s.id}/still/${id}.${X.w && X.w.has(id) ? 'webp' : 'jpg'}${ver}` : '', lo = has && X.lo ? `v/${s.id}/still/lo/${id}.jpg${ver}` : '';
   const hd = hdOf(c).poster || '', sq = posterOf(c);
-  if (slowNet()) return { low: lo || hd || sq, hi: st || hd || sq };   // slow link: the small picture first (≈15 KB), the sharp one over it once it has loaded
-  return { low: '', hi: st || hd || sq };
+  /* 11-12 the small picture (≈20 KB) is always there to go up first: a change of background never waits for the 2k one */
+  return { low: lo || (slowNet() ? hd || sq : ''), hi: st || hd || sq };
 }
 /** Which picture belongs to which part of the episode — a pure function of the position, so dragging the bar, tapping a line
  * or skipping lands on that part's picture at once. It follows the story's own picture timeline (the picture changes where the
@@ -4309,19 +4315,33 @@ function stillClip(s) {
   } else if (!V._cur) { const plan = stillPlan(s, ep); if (plan.length) V._cur = plan[plan.length - 1][1]; }
   return V._cur || null;
 }
-/** keep this episode's pictures in memory so a switch (or a drag) never waits for the network: two at a time, the one on
- * screen first, then in the order the episode uses them; on a slow link only the next two. */
+/** has the audio enough in hand for pictures to use the link? (all of it buffered, or well ahead of the playhead; nothing playing counts as yes) */
+function audioRoom() {
+  if (P.aux || P.needChoice || P.gen || P.loading || audio.ended || (audio.paused && audio.currentTime > 0)) return true;
+  const d = audio.duration || 0, t = audio.currentTime || 0, bf = audio.buffered; let end = 0;
+  for (let i = 0; i < bf.length; i++) if (bf.start(i) <= t + 0.5 && bf.end(i) > end) end = bf.end(i);
+  if (d && end >= d - 1) return true;
+  return end - t >= (slowNet() ? 25 : 8);
+}
+/** 11-12 "some content never changes its background, and loading / playing is slow": the pictures of an episode are fetched in
+ * an order that cannot hold a change back or starve the audio —
+ *  1. the small picture (360×540, ≈20 KB) of every stretch of the episode, the one on screen first: a change always has it;
+ *  2. the 2k picture of the one on screen, then of the next few — and, apart from the one on screen on a good link, only
+ *     while the audio has enough buffered (audioRoom), one at a time on a slow link.
+ * Called on every tick; showPoster puts up whatever has arrived. */
 function warmStills(s) {
-  const V = s.visuals, ep = P.ep; if (!V || !ep || PS.busy >= 2) return;
-  const plan = stillPlan(s, ep), cur = Math.max(0, plan.findIndex((p) => p[1] === V._cur));
-  const order = plan.slice(cur).concat(slowNet() ? [] : plan.slice(0, cur)).slice(0, slowNet() ? 3 : 60);
-  for (const p of order) {
-    const u = stillOf(s, p[1]).hi; if (!u || PS.seen.has(u) || PS.req.has(u)) continue;
-    PS.req.add(u); PS.busy += 1;
-    const im = new Image(), fin = (good) => { PS.busy -= 1; if (good) PS.seen.add(u); else setTimeout(() => PS.req.delete(u), 4000); if (P.id === s.id) warmStills(s); };
+  const V = s.visuals, ep = P.ep; if (!V || !ep) return;
+  const plan = stillPlan(s, ep), cur = Math.max(0, plan.findIndex((p) => p[1] === V._cur)), slow = slowNet();
+  const ids = [...new Set(plan.slice(cur).concat(plan.slice(0, cur)).map((p) => p[1]))];
+  const get = (u, hi) => {
+    if (!u || PS.seen.has(u) || PS.req.has(u)) return;
+    PS.req.add(u); PS.busy += 1; if (hi) PS.hiBusy += 1;
+    const im = new Image(), fin = (good) => { PS.busy -= 1; if (hi) PS.hiBusy -= 1; if (good) PS.seen.add(u); else setTimeout(() => PS.req.delete(u), 4000); if (P.id === s.id && playerOpen) renderVisual(); };
     im.onload = () => fin(true); im.onerror = () => fin(false); im.src = absUrl(u);
-    if (PS.busy >= 2) return;
-  }
+  };
+  for (const id of ids) { if (PS.busy >= 3) return; const p = stillOf(s, id); if (p.low && p.low !== p.hi) get(p.low, false); }
+  const room = audioRoom(), capHi = slow ? 1 : 2;
+  ids.slice(0, slow ? 3 : 5).forEach((id, k) => { if (PS.hiBusy < capHi && (room || (k === 0 && !slow))) get(stillOf(s, id).hi, true); });
 }
 function hdIndex(sid) {
   if (!NARRA || HDX[sid] || !HD_IDS.has(sid)) return;
@@ -4336,21 +4356,19 @@ function hdOf(clipUrl) {
   if (!x) return {};
   return { poster: x.poster.has(m[2]) ? `v/${m[1]}/hd/${m[2]}.jpg` : '', video: x.video.has(m[2]) ? `v/${m[1]}/hd/${m[2]}.mp4` : '' };
 }
-/** put a picture up: the small one at once (slow link), the sharp one over it as soon as it has loaded */
+/** put a picture up from what has arrived (warmStills fetches): the sharp one if it is there; else the small one — at once on
+ * a change, the sharp one over it as soon as it has loaded. On a good link the sharp one gets a moment (300 ms) to show up first. */
 function showPoster(low, hi) {
   const a = $('#pl-pst'), b = $('#pl-pst2'); if (!a || !b) return;
-  const key = hi || low; if (!key || key === PS.url) return;
-  PS.url = key; const tok = ++PS.tok; let gotHi = false;
-  const put = (src, isHi) => {
-    if (PS.tok !== tok || (gotHi && !isHi)) return;
-    if (isHi) gotHi = true;
+  const key = hi || low; if (!key) return;
+  if (key !== PS.url) { PS.url = key; PS.tok += 1; PS.lvl = 0; PS.at = Date.now(); }
+  const swap = (u, lvl) => {
+    PS.lvl = lvl;
     const front = a.classList.contains('on') ? a : b, back = front === a ? b : a;
-    back.src = src; back.classList.add('on'); front.classList.remove('on');
+    back.src = absUrl(u); back.classList.add('on'); front.classList.remove('on');
   };
-  const load = (u, isHi) => { const im = new Image(); im.onload = () => { PS.seen.add(u); put(im.src, isHi); }; im.onerror = () => { if (!isHi) PS.fail += 1; setTimeout(() => { if (PS.tok === tok && !gotHi && PS.url === key) PS.url = ''; }, 1500); }; im.src = absUrl(u); };   // a failed picture is asked for again (was: the old background stayed for good)
-  if (hi && PS.seen.has(hi)) { load(hi, true); return; }
-  if (low && low !== hi) load(low, false);
-  if (hi) load(hi, true);
+  if (PS.lvl < 2 && hi && PS.seen.has(hi)) return swap(hi, 2);
+  if (PS.lvl < 1 && low && low !== hi && PS.seen.has(low) && (slowNet() || Date.now() - PS.at >= 300)) swap(low, 1);
 }
 function visualClipId(s) {
   const V = s.visuals, ep = P.ep;
@@ -4375,7 +4393,7 @@ function renderVisual(force) {
     const sid = stillClip(s); if (!sid) return;
     a.parentNode.classList.toggle('nr-fast', Date.now() < (VS.fastUntil || 0));   // right after a drag / jump the change is quick, not a slow dissolve
     const pic = stillOf(s, sid);
-    showPoster(pic.low, pic.hi); warmStills(s);
+    warmStills(s); showPoster(pic.low, pic.hi);
     return;
   }
   const id = visualClipId(s); if (!id) return;
@@ -4570,13 +4588,25 @@ function renderLyrics(force) {
 function placeLyrics() {
   const box = $('#nr-lyr'), roll = $('#nr-roll'), n = LY.nodes[LY.cur]; if (!box || !roll || !n) return;
   LY.placed = Date.now();
-  const H = box.clientHeight, room = H - n.offsetHeight;
+  const ask = !!(P.needChoice && LY.it[LY.cur] && LY.it[LY.cur].k === 'q');
+  if (!ask) { LY.lock = null; if (!box.closest('.nr-ask')) LY.hPlay = box.clientHeight; }
+  /* 11-11 choice point: the question, A, B and the answer box pop up once and stay there (she talks into the box where it popped up).
+     Placed against the height the lyrics had while the transport was showing, then locked for this choice point; it only moves up if what she types grows past the bottom. */
+  if (ask && LY.lock && LY.lock.sig === LY.sig) {
+    const last = LY.nodes[LY.nodes.length - 1], Hn = box.clientHeight;
+    const bottom = LY.lock.y + last.offsetTop + last.offsetHeight;
+    const y = bottom > Hn - 6 ? LY.lock.y - (bottom - (Hn - 6)) : LY.lock.y;
+    roll.style.transform = `translateY(${Math.round(y)}px)`;
+    return;
+  }
+  const H = ask && LY.hPlay ? Math.min(LY.hPlay, box.clientHeight) : box.clientHeight, room = H - n.offsetHeight;
   let extra = 0;   // a question keeps its two choices in view
   if (LY.it[LY.cur] && LY.it[LY.cur].k === 'q') for (let j = LY.cur + 1; j < LY.nodes.length; j++) extra += LY.nodes[j].offsetHeight + 8;
   const lastOne = !LY.nodes.slice(LY.cur + 1).some((x) => !x.classList.contains('far'));   // nothing after it (e.g. "Writing your episode…"): sit lower, more of what came before stays in view
   let top = Math.max(H * 0.06, Math.min(H * (lastOne ? 0.56 : 0.42), room - extra - H * 0.08));
   if (extra && top + n.offsetHeight + extra > H - 6) top = H - 6 - n.offsetHeight - extra;   // a long question on a short screen: the answer box stays in view, the question slides up   // the current line sits a little below the middle-top: two earlier lines stay readable above it
   roll.style.transform = `translateY(${Math.round(top - n.offsetTop)}px)`;
+  if (ask) LY.lock = { sig: LY.sig, y: Math.round(top - n.offsetTop) };
 }
 function lyProgress() {
   const o = LY.it[LY.cur], ep = P.ep; if (!o || o.k !== 'line' || !ep) return 0;
