@@ -105,16 +105,45 @@ def cache_line(u, timeout=25):
     if not u or not u.startswith(GCS_PREFIX): return None
     f = LINE_CACHE / (hashlib.sha1(u.encode()).hexdigest() + '.mp3')
     if f.exists() and f.stat().st_size > 0: return f
+    # 11-13 同一句只下一次：配完音后台在下、手机 / 混音又来要时，等那一次的结果，不再各下各的
+    with _DL_LOCK:
+        ev = _DL.get(u); mine = ev is None
+        if mine: ev = _DL[u] = threading.Event()
+    if not mine:
+        ev.wait(timeout)
+        return f if f.exists() and f.stat().st_size > 0 else None
     try:
-        b = op.open(U.Request(u), timeout=timeout).read()
+        b = _download(u, timeout)
         if b:
             tmp = f.with_suffix('.part' + rid(4)); tmp.write_bytes(b)
             try: AL.level_file(tmp)   # 11-11 每句拉到同一响度：旁白和各角色、第 1 集和后面几集不再忽大忽小（约 0.15 秒）
             except Exception as e: print('level failed', repr(e)[:80], flush=True)
             tmp.rename(f); return f
+        else: print(time.strftime('%m-%d %H:%M:%S'), 'cache_line failed', u[-40:], flush=True)
     except Exception as e:
         print(time.strftime('%m-%d %H:%M:%S'), 'cache_line failed', u[-40:], repr(e)[:80], flush=True)
+    finally:
+        with _DL_LOCK: _DL.pop(u, None)
+        ev.set()
     return None
+
+
+_DL, _DL_LOCK = {}, threading.Lock()
+def _download(u, timeout=25):
+    """从云存储取一句配音。11-13 真机那次整段等了 39 秒：一次下载卡住（半开连接 / SSL EOF）要等满超时。
+    现在 3.5 秒没回就再发一路（最多 4 路），谁先回用谁；总时限 timeout 秒。"""
+    box = {}; done = threading.Event()
+    def one():
+        try:
+            b = op.open(U.Request(u), timeout=10).read()
+            if b and 'b' not in box: box['b'] = b; done.set()
+        except Exception: pass
+    t_end = time.time() + timeout; n = 0
+    while time.time() < t_end and not done.is_set() and n < 4:
+        threading.Thread(target=one, daemon=True).start(); n += 1
+        done.wait(3.5)
+    done.wait(max(0, t_end - time.time()))
+    return box.get('b')
 
 
 SID_RE = re.compile(r'^[0-9]{8}[a-z0-9]{4}$')
@@ -205,7 +234,8 @@ def tts(series, who, text, lang, engine='v4', pool=None):
     err = None
     for attempt in range(3):
         try:
-            _t = time.time(); r = waku(model, params, pool=pool)
+            # 11-13 单次限时：平时一句 3–9 秒，原来一卡就等满 120 秒（真机上“说完 95 秒没声音”）。超时会杀掉这条通道换新的再试
+            _t = time.time(); r = waku(model, params, timeout=(22, 28, 45)[attempt], pool=pool)
             if TTS_DEBUG: print(time.strftime('%H:%M:%S'), 'tts', engine, 'call' if pool is CALL_POOL else 'main', who, round(time.time() - _t, 2), 'ok' if r.get('asset_url') else str(r)[:80], text[:12], flush=True)
             if r.get('asset_url'): return r['asset_url']
             err = r.get('error') or r
@@ -228,7 +258,18 @@ def tts_hedged(series, who, text, lang, n, engine='v4', pool=None):
             errs.append(e)
             if len(errs) >= n: done.set()
     for _ in range(n): threading.Thread(target=one, daemon=True).start()
-    done.wait(150)
+    # 11-13 迟迟不回就再补发：第 9 秒补一路同引擎，第 16 秒补一路换引擎（各模型在 Waku 端各排各的队）；谁先好用谁
+    alt = {'flash': 'turbo', 'turbo': 'flash', 'v4': 'turbo'}.get(engine, 'flash')
+    def late(eng):
+        try:
+            u = tts(series, who, text, lang, eng, pool)
+            if not done.is_set(): box['u'] = u; done.set(); print(time.strftime('%m-%d %H:%M:%S'), 'tts late hedge won', eng, text[:16], flush=True)
+        except Exception as e: errs.append(e)
+    if not done.wait(9):
+        threading.Thread(target=late, args=(engine,), daemon=True).start()
+        if not done.wait(7):
+            threading.Thread(target=late, args=(alt,), daemon=True).start()
+            done.wait(80)
     if 'u' in box: return box['u']
     raise RuntimeError(str(errs[:1]))
 
@@ -390,6 +431,7 @@ def system_prompt(sess):
 
 
 MAPPER = os.environ.get('CLIP_MAPPER', 'deepseek/deepseek-v4.1-flash')  # 实测 3 句约 4 秒
+MAPPER_ALT = os.environ.get('CLIP_MAPPER_ALT', 'qwen/qwen3.6-flash')
 
 
 def map_clips(series, ctx, items):
@@ -404,7 +446,16 @@ def map_clips(series, ctx, items):
     body = {'model': MAPPER, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': 300, 'temperature': 0, 'reasoning': {'enabled': False}}
     req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
                     headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
-    t = json.loads(op.open(req, timeout=30).read())['choices'][0]['message']['content']
+    t = None
+    for model in (MAPPER, MAPPER_ALT):   # 11-13 模型偶尔回空内容（content=None），原来直接抛异常、这一批台词没有画面：换一个模型再问一次
+        try:
+            body['model'] = model
+            req = U.Request('https://openrouter.ai/api/v1/chat/completions', data=json.dumps(body).encode(),
+                            headers={'Authorization': 'Bearer ' + os.environ['OPENROUTER_API_KEY'], 'Content-Type': 'application/json'})
+            t = json.loads(op.open(req, timeout=20).read())['choices'][0]['message'].get('content')
+            if t and '{' in t: break
+        except Exception as e: print('map_clips', model, repr(e)[:100], flush=True)
+    if not t or '{' not in t: return {}
     j = json.loads(t[t.find('{'):t.rfind('}') + 1]); ids = {c['id'] for c in v['clips']}
     return {int(k): c for k, c in j.items() if str(k).isdigit() and c in ids}
 
@@ -1642,6 +1693,120 @@ def ear_feed(c, data, ctype, end=False, lo=700.0):
     return None
 
 
+# ---------- 11-13 整段混音（/api/mix）：实时写的集不再让手机逐句取音频 ----------
+# 真机慢网 + 锁屏：一集 12–15 句各取一次（每句 128 kbps、各自过一次隧道），和背景图抢带宽，两分钟的一集里有 30–40 秒在等；
+# 锁屏卡片上还是一句一句几秒钟的小片段。现在中转把连续的几句配音 + 配乐 + 音效混成一段 64 kbps 的 MP3（十几到几十秒一段），
+# 手机提前取到本地再播：一集只换 2–3 次音源，播放时不依赖网络，锁屏时配乐也在。
+MIX_SR = 44100
+MIX_GAP = 0.32      # 句与句之间的停顿（秒）
+MIX_BGM = 0.126     # 和前端 WebAudio 配乐同一个音量
+MIX_SFX = 0.9
+_MIXPCM = {}
+_MIXLOCK = threading.Lock()
+
+
+def _decode_pcm(path):
+    r = subprocess.run([FF, '-v', 'error', '-i', str(path), '-ac', '1', '-ar', str(MIX_SR), '-f', 's16le', '-'], capture_output=True, timeout=60)
+    return r.stdout if r.returncode == 0 else b''
+
+
+def line_pcm(u):
+    """一句配音的 PCM（44.1k 单声道）。解一次存在缓存旁边（.pcm），之后直接读。没有配音（url 为空 / 取不到）返回 b''。"""
+    if not u: return b''
+    f = cache_line(u, timeout=14)
+    if not f: return None   # 还没取到（不是“没有配音”）：调用方决定等不等
+    p = f.with_suffix('.pcm')
+    if p.exists() and p.stat().st_size > 0: return p.read_bytes()
+    b = _decode_pcm(f)
+    if b:
+        tmp = p.with_suffix('.pcmpart' + rid(4)); tmp.write_bytes(b); tmp.rename(p)
+    return b
+
+
+def asset_pcm(rel):
+    """app/ 下的配乐、音效（bgm/<剧>.mp3、sfx/<id>.mp3）解成 PCM，留在内存里"""
+    with _MIXLOCK:
+        if rel in _MIXPCM: return _MIXPCM[rel]
+    f = APP / rel
+    b = _decode_pcm(f) if f.is_file() else b''
+    with _MIXLOCK:
+        if len(_MIXPCM) > 60: _MIXPCM.pop(next(iter(_MIXPCM)))
+        _MIXPCM[rel] = b
+    return b
+
+
+def _fade(buf, n, out):
+    """buf 头（out=False）或尾（out=True）的 n 个采样做线性淡入 / 淡出"""
+    import array
+    n = min(n, len(buf) // 2)
+    if n <= 0: return buf
+    a = array.array('h'); a.frombytes(bytes(buf[-n * 2:] if out else buf[:n * 2]))
+    for i in range(n): a[i] = int(a[i] * ((n - i) / n if out else i / n))
+    return (bytes(buf[:-n * 2]) + a.tobytes()) if out else (a.tobytes() + bytes(buf[n * 2:]))
+
+
+def mix_ep(sess, n, jid):
+    j = JOBS.get(jid) if jid else None
+    if j and (j.get('ep') or {}).get('n') == n and j.get('status') != 'cancelled': return j['ep'], j
+    full = (sess.get('_full') or {}).get(n)
+    return (full, None) if full else (None, None)
+
+
+def mix_chunk(sess, ep, job, start, mn, mx, wait=22.0):
+    """从第 start 句起，等到连续 mn 句都配好（或整集配完 / 等满 wait 秒），把此刻已配好的连续几句（最多 mx 句）混成一段 MP3。
+    返回 (mp3, meta)；meta：from / to（不含）/ durs（每句配音时长，秒；没配上的是 0）/ gap / end（这一集到 to 为止已经全部给完）。"""
+    import audioop
+    t0 = time.time(); done = lambda: job is None or job.get('status') in ('done', 'error', 'cancelled')
+    while True:
+        ls = ep.get('lines') or []; k = start
+        while k < len(ls) and ls[k].get('url') is not None and k - start < mx: k += 1
+        if k - start >= mn or done() or (k > start and time.time() - t0 > wait) or time.time() - t0 > wait + 6: break
+        time.sleep(0.12)
+    ls = ep.get('lines') or []
+    series = sess['series']; gap = b'\0' * (int(MIX_GAP * MIX_SR) * 2)
+    # 这几句（和前面几句）的音频并行取到本机，最多等 12 秒；到时还没取到的那句起先不给，下一段再给——一句卡住不拖住整段
+    box = {}
+    def grab(i): box[i] = line_pcm(ls[i].get('url'))
+    ths = [threading.Thread(target=grab, args=(i,), daemon=True) for i in range(0, k)]
+    [t.start() for t in ths]; dl = time.time() + 12
+    [t.join(max(0.05, dl - time.time())) for t in ths]
+    for i in range(start, k):
+        if box.get(i) is None: k = i; break
+    meta = {'from': start, 'to': k, 'durs': [], 'gap': MIX_GAP, 'end': bool(done() and k >= len(ls))}
+    if k <= start: return b'', meta
+    # 这一段在整集里从第几秒开始（配乐接着上一段的位置走，不从头来）
+    base = 0
+    for i in range(start):
+        if box.get(i): base += len(box[i]) // 2 + len(gap) // 2
+    parts = []; marks = []; pos = 0
+    for i in range(start, k):
+        l = ls[i]; b = box[i]
+        meta['durs'].append(round(len(b) / 2 / MIX_SR, 3))
+        if not b: continue
+        marks.append((pos, l.get('sfx')))
+        parts.append(b); parts.append(gap); pos += len(b) + len(gap)
+    voice = b''.join(parts)
+    if not voice: return b'', meta
+    out = voice
+    bgm = asset_pcm(f'bgm/{series}.mp3')
+    if bgm:
+        off = (base * 2) % len(bgm); need = len(voice); bed = bytearray()
+        while len(bed) < need:
+            bed += bgm[off:off + need - len(bed)]; off = 0
+        bed = audioop.mul(bytes(bed), 2, MIX_BGM)
+        bed = _fade(_fade(bed, int(0.05 * MIX_SR), False), int(0.05 * MIX_SR), True)   # 段首段尾各 50 ms 淡入淡出：换段时不“咔”一下
+        out = audioop.add(out, bed, 2)
+    for at, sid_ in marks:
+        if not sid_: continue
+        fx = asset_pcm(f'sfx/{sid_}.mp3')
+        if not fx: continue
+        fx = audioop.mul(fx[:len(out) - at], 2, MIX_SFX)
+        out = out[:at] + audioop.add(out[at:at + len(fx)], fx, 2) + out[at + len(fx):]
+    r = subprocess.run([FF, '-v', 'error', '-f', 's16le', '-ar', str(MIX_SR), '-ac', '1', '-i', '-', '-c:a', 'libmp3lame', '-b:a', '64k', '-write_xing', '0', '-id3v2_version', '0', '-f', 'mp3', '-'],
+                       input=out, capture_output=True, timeout=60)
+    return (r.stdout if r.returncode == 0 else b''), meta
+
+
 BC_ZH = set('嗯 嗯嗯 嗯哼 哦 噢 啊 嗨 喂 好 好的 对 对啊 对对 是 是啊 哈 哈哈 嘿 嗯呢 行 唔 呃'.split())
 BC_EN = set('hi hey hello mm mhm mmhmm hmm yeah yep yes ok okay uh um huh oh ah right sure aha'.split())
 def backchannel(text, lang):
@@ -1998,6 +2163,18 @@ class H(BaseHTTPRequestHandler):
                     if not (L and L[0].get('url')): continue
                     out[ch] = {'job': sp['job'], 'n': j['ep']['n'], 'ep': dict(j['ep'], lines=[dict(x) for x in L])}
                 return self._send(200, {'n': len(sess['eps']) + 1 if sess else 0, 'specs': out, 'bridge': sel_bridge(sess, len(sess['eps']), False) if sess else None, 'beats': beat_card(sess) if sess else None})
+            if u.path == '/api/mix':  # 11-13 实时集的一段连续音频（几句配音 + 配乐 + 音效混好）：?sid=&n=&job=&from=&min=&max=
+                sess = get_sess(g('sid'))
+                if not sess: return self._send(404, {'error': 'session expired'})
+                ep, job = mix_ep(sess, int(g('n') or 0), g('job'))
+                if not ep: return self._send(404, {'error': 'no episode'})
+                try: b, meta = mix_chunk(sess, ep, job, max(0, int(g('from') or 0)), max(1, int(g('min') or 1)), max(1, int(g('max') or 8)), wait=min(25.0, max(0.2, float(g('wait') or 22))))
+                except Exception as e: traceback.print_exc(); return self._send(500, {'error': 'mix failed: ' + repr(e)[:120]})
+                self.send_response(200 if b else 204); self.send_header('Content-Type', 'audio/mpeg'); self.send_header('Content-Length', str(len(b)))
+                self.send_header('X-Mix', json.dumps(meta)); self.send_header('Access-Control-Expose-Headers', 'X-Mix')
+                self.send_header('Cache-Control', 'no-store'); self.send_header('Access-Control-Allow-Origin', '*'); self.end_headers()
+                if b: self.wfile.write(b)
+                return
             if u.path == '/api/a':  # 一句配音（本机缓存，带跨域头），手机取成 blob 提前放在本地
                 f = cache_line(g('u'))
                 return self._send(200, f.read_bytes(), 'audio/mpeg', 'public, max-age=604800, immutable') if f else self._send(404, {'error': 'no audio'})

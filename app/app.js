@@ -799,7 +799,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), openUnlockSheet: (id, n) => openUnlockSheet(id, n, () => {}), showIncoming: (id, who, sid) => showIncoming(id, who, sid), callersOf: (id) => callersOf(byId(id)).map((c) => c.key), get S() { return S; }, get ms() { const m = navigator.mediaSession && navigator.mediaSession.metadata; return m ? { title: m.title, artist: m.artist, album: m.album } : null; }, get PS() { return PS; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), openUnlockSheet: (id, n) => openUnlockSheet(id, n, () => {}), showIncoming: (id, who, sid) => showIncoming(id, who, sid), callersOf: (id) => callersOf(byId(id)).map((c) => c.key), get S() { return S; }, get ms() { const m = navigator.mediaSession && navigator.mediaSession.metadata; return m ? { title: m.title, artist: m.artist, album: m.album } : null; }, get PS() { return PS; }, get MIX() { return MIX; }, skip: (x) => skip(x), lySeek: (j) => lySeek(j), get LY() { return LY; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -812,8 +812,148 @@ function togglePlay() {
 }
 const isPlaying = () => P.want && (!audio.paused || P.waiting);
 
+/* =========================================================================
+ * 11-13 Episodes written live play as a few long pieces, not line by line.
+ * On her phone (slow link, locked screen) every line was its own download through the tunnel (128 kbps each, competing with
+ * the pictures): about a third of an episode was spent waiting, and the lock screen showed a row of 3-second clips.
+ * The relay now mixes consecutive lines + the series music + the effects into one 64 kbps piece (/api/mix); the phone fetches
+ * each piece into a local blob ahead of time. An episode is 2–4 pieces: playback itself needs no network, the lock screen
+ * shows a real stretch of the story, and the music is there with the screen locked. P.idx still says which line is being
+ * spoken — it now follows the clock inside the piece — so lyrics, pictures, progress and jumps work as before.
+ * If the relay can't mix (old relay, error twice) the episode falls back to the line-by-line path below.
+ * ========================================================================= */
+const MIX_OK = Q.get('mix') !== '0';
+const MIX = { key: '', chunks: [], inflight: new Map(), fails: 0 };
+const MIXWARM = new Map();   // job id → first piece fetched before that episode starts (the two pre-written choices, the episode being written)
+const mixOn = (ep) => { ep = ep || P.ep; const ss = P.id && getSess(P.id); return !!(MIX_OK && ep && ep.kind === 'live' && !ep.audio && !MOCK && ss && ss.sid && !ep._nomix); };
+const mixJobOf = (ss, ep) => (ss && ss.job && ss.job.n === ep.n ? ss.job.id : '');
+function mixMake(meta, blob) {
+  const starts = []; let t = 0;
+  meta.durs.forEach((d) => { starts.push(t); if (d > 0) t += d + meta.gap; });
+  return { from: meta.from, to: meta.to, durs: meta.durs, gap: meta.gap, end: !!meta.end, starts, len: t, url: blob ? URL.createObjectURL(blob) : '' };
+}
+/** one piece from the relay: lines [from, …) — it answers once `min` lines are voiced (or `wait` s have passed and at least one is). */
+async function mixGet(sid, n, job, from, min, max, wait) {
+  for (let a = 0; a < 2; a++) {
+    try {
+      const res = await apiFetch(() => { const u = new URL(apiUrl('api/mix')); const q = u.searchParams; q.set('k', TOKEN); q.set('sid', sid); q.set('n', n); if (job) q.set('job', job); q.set('from', from); q.set('min', min); q.set('max', max); q.set('wait', wait.toFixed(1)); return u.toString(); }, {}, 45000);
+      if (res.status === 404 || res.status >= 500) throw new Error('mix ' + res.status);
+      const meta = JSON.parse(res.headers.get('X-Mix') || 'null'); if (!meta) throw new Error('no meta');
+      const b = res.status === 200 ? await res.blob() : null;
+      return mixMake(meta, b && b.size ? (b.type ? b : new Blob([b], { type: 'audio/mpeg' })) : null);
+    } catch (e) { if (a === 0) await sleep(500); }
+  }
+  return null;
+}
+function mixFetch(ss, ep, from, min, max, wait) {
+  const key = MIX.key, k = from;
+  if (MIX.inflight.has(k)) return MIX.inflight.get(k);
+  const p = mixGet(ss.sid, ep.n, mixJobOf(ss, ep), from, min, max, wait).then((c) => {
+    if (MIX.key !== key) { if (c && c.url) URL.revokeObjectURL(c.url); return null; }
+    MIX.inflight.delete(k);
+    if (!c) { MIX.fails += 1; return null; }
+    MIX.fails = 0;
+    if (c.url && !MIX.chunks.some((x) => x.from === c.from)) { MIX.chunks.push(c); MIX.chunks.sort((x, y) => x.from - y.from); }
+    else if (c.url) URL.revokeObjectURL(c.url);
+    return c;
+  });
+  MIX.inflight.set(k, p);
+  return p;
+}
+/** the first piece of an episode that has not started yet (a pre-written choice, or the one being written while the bridge plays) */
+function mixWarm(sid, n, job, max) {
+  if (!MIX_OK || MOCK || !job || MIXWARM.has(job)) return;
+  const r = { c: null }; MIXWARM.set(job, r);
+  r.p = mixGet(sid, n, job, 0, Math.min(3, max || 3), max || 3, 1.6).then((c) => { if (c && c.url && c.from === 0) r.c = c; else MIXWARM.delete(job); return r.c; });
+  if (MIXWARM.size > 6) for (const [k, v] of MIXWARM) { if (MIXWARM.size <= 4) break; if (v.c && v.c.url !== P.cur) { URL.revokeObjectURL(v.c.url); MIXWARM.delete(k); } }
+}
+function mixUse(ss, ep) {
+  const key = ss.sid + ':' + ep.n;
+  if (MIX.key === key) return;
+  MIX.chunks.forEach((c) => { if (c.url && c.url !== P.cur) URL.revokeObjectURL(c.url); });
+  MIX.key = key; MIX.chunks = []; MIX.inflight = new Map(); MIX.fails = 0; MIX.empty = 0;
+  const w = MIXWARM.get(mixJobOf(ss, ep));
+  if (w && w.c) { MIX.chunks.push(w.c); MIXWARM.delete(mixJobOf(ss, ep)); }
+}
+const mixSecsAhead = () => {   // seconds of story already on the phone from the playhead on
+  const c = P.clip; if (!c) return 0;
+  let t = Math.max(0, c.len - (audio.currentTime || 0)), to = c.to;
+  for (const x of MIX.chunks) if (x.from === to) { t += x.len; to = x.to; }
+  return t;
+};
+/** keep fetching the pieces after the one that is playing, so the next one is already local when this one ends */
+function mixAhead(ss, ep) {
+  if (!P.clip || P.ep !== ep) return;
+  let last = P.clip;
+  for (;;) { const nx = MIX.chunks.find((x) => x.from === last.to); if (!nx) break; last = nx; }
+  const lines = ep.lines || [];
+  if (last.end || (P.jobDone && last.to >= lines.length) || MIX.inflight.size) return;
+  const from = last.to, left = Math.max(1, Math.min(3, lines.length - from));
+  mixFetch(ss, ep, from, left, 8, Math.max(0.5, mixSecsAhead() / (S.speed || 1) - 2.5)).then((c) => {
+    if (P.ep !== ep) return;
+    if (c && c.to > c.from) { if (P.waiting && P.want) liveAdvance(); else mixAhead(ss, ep); }
+    else if (!(c && c.end)) setTimeout(() => { if (P.ep === ep) mixAhead(ss, ep); }, c ? 400 : 1500);
+  });
+}
+function mixAdvance() {
+  const ep = P.ep, lines = ep.lines || [], ss = getSess(P.id);
+  mixUse(ss, ep);
+  ep.durs = ep.durs || {};
+  while (P.idx < lines.length && lines[P.idx].url === '') P.idx++;
+  if (P.idx >= lines.length) {
+    P.clip = null;
+    if (P.jobDone) { P.waiting = false; onEpisodeEnd(); } else { P.waiting = true; updatePlayerUI(); }
+    return;
+  }
+  const c = MIX.chunks.find((x) => x.from <= P.idx && P.idx < x.to);
+  if (c) {
+    const at = c.starts[P.idx - c.from] || 0;
+    P.waiting = false; P.blobWait = null;
+    c.durs.forEach((d, j) => { if (d) ep.durs[c.from + j] = d; });
+    P.lineStart = 0; for (let i = 0; i < P.idx; i++) P.lineStart += ep.durs[i] || 0;
+    if (P.clip === c && P.cur === c.url && !P.aux && !audio.error && audio.readyState > 0) { try { audio.currentTime = at + 0.01; } catch (e) { /* ignore */ } }
+    else { P.clip = c; loadSrc(c.url, at > 0.05 ? at : 0); }
+    if (P.want) doPlay();
+    mixAhead(ss, ep);
+    renderVisual(); saveProgress(); setMediaSession(); updatePlayerUI(true);
+    return;
+  }
+  P.clip = null; P.waiting = true; updatePlayerUI();
+  const e0 = ep, i0 = P.idx;
+  setTimeout(() => { if (P.ep === e0 && P.idx === i0 && P.waiting && P.want) keepAlive(); }, 900);   // no dead air while the piece is on its way
+  const w = P.idx === 0 && MIXWARM.get(mixJobOf(ss, ep));
+  if (w && !w.c && w.p && !w.asked) {
+    w.asked = true;
+    w.p.then((c) => { if (c && MIX.key === ss.sid + ':' + e0.n && !MIX.chunks.some((x) => x.from === 0)) { MIX.chunks.push(c); MIX.chunks.sort((x, y) => x.from - y.from); MIXWARM.delete(mixJobOf(ss, e0)); } if (P.ep === e0 && P.waiting && P.want) liveAdvance(); });
+    return;
+  }
+  mixFetch(ss, ep, P.idx, 1, MIX.chunks.length ? 8 : 3, 0.3).then((x) => {
+    if (P.ep !== e0 || !P.waiting) return;
+    if (x && x.to > x.from) { MIX.empty = 0; if (P.want) liveAdvance(); return; }
+    // the line is voiced but the relay could not get its audio into a piece twice in a row (≈25 s): play this episode line by line
+    if (x && !x.end && (e0.lines[i0] || {}).url && (MIX.empty = (MIX.empty || 0) + 1) >= 2) { e0._nomix = true; diag('mix-off', { ep: e0.n, why: 'empty' }); liveAdvance(); return; }
+    if (!x && MIX.fails >= 2) { e0._nomix = true; diag('mix-off', { ep: e0.n }); liveAdvance(); return; }   // the relay can't mix: line by line, as before
+    setTimeout(() => { if (P.ep === e0 && P.waiting && P.want) liveAdvance(); }, x ? 250 : 1200);
+  });
+}
+/** which line is being spoken, from the clock inside the piece */
+function mixTick() {
+  const c = P.clip, ep = P.ep;
+  if (!c || !ep || P.aux || P.waiting || P.cur !== c.url) return;
+  const t = audio.currentTime || 0; let j = -1;
+  for (let x = 0; x < c.starts.length; x++) if (c.durs[x] > 0 && (j < 0 || c.starts[x] <= t + 0.03)) j = x;
+  if (j < 0 || c.from + j === P.idx) return;
+  P.idx = c.from + j;
+  P.lineStart = 0; for (let i = 0; i < P.idx; i++) P.lineStart += (ep.durs && ep.durs[i]) || 0;
+  renderVisual(); saveProgress(); updatePlayerUI(true);
+}
+/** seconds into the line being spoken / that line's length — inside a mixed piece, or the line's own file */
+const lineT = () => { const c = P.clip; if (!c || P.cur !== c.url) return audio.currentTime || 0; const j = P.idx - c.from; return clamp((audio.currentTime || 0) - (c.starts[j] || 0), 0, c.durs[j] || 0); };
+const lineD = () => { const c = P.clip; if (!c || P.cur !== c.url) return audio.duration || 0; return c.durs[P.idx - c.from] || 0; };
+
 /** Start an episode (produced: one mp3 + cues; live: sequential lines). */
 function playEpisode(id, ep, opts = {}) {
+  P.clip = null;
   cancelUpNext(); stopAutoCountdown(); hfStop(true);
   P.id = id; P.ep = ep; P.needChoice = false; P.waiting = false; P.loading = false;
   P.idx = opts.line || 0; P.lineStart = 0;
@@ -838,6 +978,8 @@ function playEpisode(id, ep, opts = {}) {
 
 function liveAdvance() {
   const ep = P.ep; if (!ep || ep.kind !== 'live') return;
+  if (mixOn(ep)) { mixAdvance(); return; }
+  P.clip = null;
   const lines = ep.lines || [];
   while (P.idx < lines.length && lines[P.idx].url === '') P.idx++;
   if (P.idx >= lines.length) {
@@ -889,6 +1031,9 @@ audio.addEventListener('ended', () => {
   if (!P.cur || audio.src.startsWith('data:')) return;
   if (!P.ep) return;
   if (P.ep.kind === 'live') {
+    if (P.clip && P.cur === P.clip.url) {   // a mixed piece is over: on to the next one (already local, as a rule)
+      P.idx = P.clip.to; P.clip = null; P.waiting = true; updatePlayerUI(); setTimeout(liveAdvance, 20); return;
+    }
     P.ep.durs = P.ep.durs || {};
     if (isFinite(audio.duration)) P.ep.durs[P.idx] = audio.duration;
     P.idx += 1;
@@ -901,12 +1046,12 @@ audio.addEventListener('ended', () => {
   }
 });
 audio.addEventListener('loadedmetadata', () => {
-  if (!P.aux && P.ep && P.ep.kind === 'live' && isFinite(audio.duration)) { P.ep.durs = P.ep.durs || {}; P.ep.durs[P.idx] = audio.duration; }
+  if (!P.aux && !P.clip && P.ep && P.ep.kind === 'live' && isFinite(audio.duration)) { P.ep.durs = P.ep.durs || {}; P.ep.durs[P.idx] = audio.duration; }
   updatePlayerUI();
 });
 audio.addEventListener('play', () => updatePlayerUI());
 audio.addEventListener('pause', () => updatePlayerUI());
-audio.addEventListener('timeupdate', () => { tickUI(); maybeSpecs(); if (P.ep && P.ep.visuals && !P.aux && playerOpen) renderVisual(); });
+audio.addEventListener('timeupdate', () => { mixTick(); tickUI(); maybeSpecs(); if (P.ep && P.ep.visuals && !P.aux && playerOpen) renderVisual(); });
 
 /* Speculative next episodes: the relay pre-writes the next episode for both choices while she listens.
  * Near the end of the episode we fetch them and warm the first line's audio, so tapping a choice
@@ -932,6 +1077,7 @@ function maybeSpecs(force) {
     Object.entries(r.specs || {}).forEach(([ch, sp]) => {
       if (SPEC.map[ch]) return;
       SPEC.map[ch] = sp;
+      if (MIX_OK && sp.job && sp.ep && sp.ep.n) { mixWarm(ss.sid, sp.ep.n, sp.job, 4); return; }   // the first lines of each choice come as one mixed piece
       (sp.ep.lines || []).slice(0, 4).forEach((l) => {
         if (!l.url) return;
         if (blobable(l.url)) fetchBlob(l.url);
@@ -943,7 +1089,12 @@ function maybeSpecs(force) {
 audio.addEventListener('error', () => {
   if (P.aux) { const f = P.auxEnd; P.auxEnd = null; if (f) f(); return; }
   if (!P.cur || audio.src.startsWith('data:')) return;
-  if (P.ep && P.ep.kind === 'live') { P.idx += 1; setTimeout(liveAdvance, 120); }
+  if (P.ep && P.ep.kind === 'live' && P.clip) {   // a mixed piece would not play: drop it and fetch it again; the second time go line by line
+    const c = P.clip; P.clip = null; MIX.chunks = MIX.chunks.filter((x) => x !== c); MIX.fails += 1; diag('mix-err', { ep: P.ep.n, from: c.from });
+    if (MIX.fails >= 2) P.ep._nomix = true;
+    P.waiting = true; setTimeout(liveAdvance, 150);
+  }
+  else if (P.ep && P.ep.kind === 'live') { P.idx += 1; setTimeout(liveAdvance, 120); }
   else toast('Could not load this episode audio');
 });
 
@@ -989,7 +1140,7 @@ function epFraction() {
     return d ? clamp(audio.currentTime / d, 0, 1) : 0;
   }
   const n = (ep.lines || []).length || 1;
-  const frac = audio.duration && P.cur && !P.waiting ? clamp(audio.currentTime / audio.duration, 0, 1) : 0;
+  const frac = lineD() && P.cur && !P.waiting ? clamp(lineT() / lineD(), 0, 1) : 0;
   return clamp((P.idx + frac) / n, 0, 1);
 }
 function saveProgress() {
@@ -1056,6 +1207,13 @@ function skip(sec) {
   VS.fastUntil = Date.now() + 1500;
   const d = audio.duration || 0;
   if (P.ep.kind !== 'live') { audio.currentTime = clamp(audio.currentTime + sec, 0, Math.max(0, d - 0.2)); tickUI(); return; }
+  if (P.clip && P.cur === P.clip.url) {   // inside a mixed piece: move the clock; past either end, the neighbouring line
+    const c = P.clip, t = (audio.currentTime || 0) + sec;
+    if (t < 0) { if (c.from > 0) { P.idx = c.from - 1; liveAdvance(); } else audio.currentTime = 0; }
+    else if (t > c.len - 0.3) { audio.pause(); P.idx = c.to; P.clip = null; liveAdvance(); }
+    else { audio.currentTime = t; mixTick(); }
+    tickUI(); return;
+  }
   if (sec < 0) {
     if (audio.currentTime > 2) audio.currentTime = Math.max(0, audio.currentTime + sec);
     else { let j = P.idx - 1; while (j >= 0 && P.ep.lines[j].url === '') j--; if (j >= 0) { P.idx = j; liveAdvance(); } else audio.currentTime = 0; }
@@ -1748,7 +1906,7 @@ function bgmStart(sid) {
 }
 function bgmSync() {
   const ep = P.ep;
-  const want = !!(!MOCK && actx && actx.state === 'running' && ep && ep.kind === 'live' && P.want && !P.needChoice && !P.gen && !P.aux && !callActive());
+  const want = !!(!MOCK && actx && actx.state === 'running' && ep && ep.kind === 'live' && !mixOn(ep) && P.want && !P.needChoice && !P.gen && !P.aux && !callActive());   // a mixed piece carries the music itself
   if (want && (!SND.on || SND.sid !== P.id)) { if (SND.on) bgmStop(); if (Date.now() - (SND.failAt || 0) > 30000) bgmStart(P.id); }   // a missing / failed track is not asked for again for 30 s
   else if (!want && SND.on) bgmStop();
 }
@@ -2311,6 +2469,7 @@ function startGeneration(jobId, n, text, resumed, alreadyPlaying) {
         let ready = 0; for (let x = k; x < lines.length && lines[x].url; x++) ready++;
         // 11-09: start on the first voiced line (the others are being voiced in parallel; the bridge already covered the wait).
         // Never cut the ack / bridge mid-sentence: check again the moment it ends.
+        if (lines[k] && lines[k].url && ss.job && ss.job.n === ep.n && !ep._nomix) mixWarm(ss.sid, ep.n, ss.job.id, 3);   // fetch the opening piece while the bridge is still talking
         if (((lines[k] && lines[k].url && ready >= 1) || j.status === 'done') && auxTalking()) { if (P.gen) P.gen.ready = true; const w = () => (auxTalking() ? setTimeout(w, 100) : poll()); setTimeout(w, 100); return; }
         if ((lines[k] && lines[k].url && ready >= 1) || (j.status === 'done')) {
           started = true;
@@ -4272,6 +4431,8 @@ function renderPlayer() {
   const vid = $('#pl-vid'), mo = NARRA ? '' : motionOf(s);   // narra: a still background, no moving cover
   if (VS.sid !== s.id) {  // another series: drop the old one's picture at once (its cover shows) instead of leaving it up until the new clip loads
     VS.sid = s.id; VS.url = null; VS.tok++; stillIndex(s.id); hdIndex(s.id); PS.url = ''; PS.tok++; ['#pl-pst', '#pl-pst2'].forEach((q) => { const x = $(q); if (x) { x.classList.remove('on'); x.removeAttribute('src'); } });
+    // 11-13 never a black stage: the cover (already on the phone from the list / series page) is up until the first scene picture has arrived
+    if (NARRA) { const x = $('#pl-pst'); if (x) { x.src = absUrl(slowNet() ? thumbOf(s) : coverOf(s)); x.classList.add('on'); } }
     [vid, $('#pl-vid2')].forEach((v) => { v.classList.remove('on'); v.oncanplay = null; v.onplaying = null; try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ } delete v.dataset.src; });
     warmVisuals(s);
   }
@@ -4442,6 +4603,7 @@ function stillClip(s) {
 /** has the audio enough in hand for pictures to use the link? (all of it buffered, or well ahead of the playhead; nothing playing counts as yes) */
 function audioRoom() {
   if (P.aux || P.needChoice || P.gen || P.loading || audio.ended || (audio.paused && audio.currentTime > 0)) return true;
+  if (mixOn()) return !!P.clip && MIX.inflight.size === 0;   // written episodes: the sound comes in pieces — pictures wait while one is being fetched
   const d = audio.duration || 0, t = audio.currentTime || 0, bf = audio.buffered; let end = 0;
   for (let i = 0; i < bf.length; i++) if (bf.start(i) <= t + 0.5 && bf.end(i) > end) end = bf.end(i);
   if (d && end >= d - 1) return true;
@@ -4756,7 +4918,7 @@ function lyProgress() {
   const o = LY.it[LY.cur], ep = P.ep; if (!o || o.k !== 'line' || !ep) return 0;
   if (P.needChoice || P.gen) return 1;
   if (P.aux) return 0;
-  if (ep.kind === 'live') return !P.waiting && audio.duration ? clamp((audio.currentTime / audio.duration) * 1.04, 0, 1) : 0;
+  if (ep.kind === 'live') return !P.waiting && lineD() ? clamp((lineT() / lineD()) * 1.04, 0, 1) : 0;
   const c = (ep.cues || [])[o.i]; if (!c) return 0;
   return clamp((((audio.currentTime || 0) - c.s) / Math.max(0.4, c.e - c.s)) * 1.08, 0, 1);
 }
@@ -4862,12 +5024,12 @@ function tickUI() {
   } else {
     const lines = ep.lines || [];
     const segs = $('#pl-segs');
-    const frac = audio.duration && !P.waiting ? clamp(audio.currentTime / audio.duration, 0, 1) : 0;
+    const frac = lineD() && !P.waiting ? clamp(lineT() / lineD(), 0, 1) : 0;
     Array.from(segs.children).forEach((c, i) => {
       const p = P.needChoice ? 1 : i < P.idx ? 1 : i === P.idx ? frac : 0;
       c.style.setProperty('--p', p.toFixed(3));
     });
-    const el = P.needChoice ? Object.values(ep.durs || {}).reduce((a, b) => a + b, 0) : P.lineStart + (P.waiting ? 0 : audio.currentTime || 0);
+    const el = P.needChoice ? Object.values(ep.durs || {}).reduce((a, b) => a + b, 0) : P.lineStart + (P.waiting ? 0 : lineT());
     $('#pl-el').textContent = fmtTime(el);
     const allKnown = P.jobDone && lines.every((l, i) => l.url === '' || (ep.durs && ep.durs[i]));
     if (allKnown) $('#pl-tot').textContent = fmtTime(Object.values(ep.durs).reduce((a, b) => a + b, 0));
