@@ -509,3 +509,11 @@ id：reborn（带着超强技能重生）、hellqueen（和地狱女王一起养
 - 锁屏按键没变：选择点上“上一首”= 再听一遍问题，“下一首”= 立刻开始回答；通话没有锁屏挂断键，要解锁后挂断。
 - `&debug=1` 多了几个调试入口：`__ua.openUnlockSheet(id, n)`、`__ua.showIncoming(id, who, sid)`、`__ua.callersOf(id)`、`__ua.S`、`__ua.ms`（读当前锁屏卡片文字），用来截解锁弹层、来电界面和核对锁屏文字。
 - 已在无头 Chrome 里逐个状态读出核对；真机锁屏样式和行为还没在 iPhone 上验证。
+
+## v77：不带参数默认就是 narra（11-13）
+
+真机上看到的还是原版界面（NOW PLAYING + 方形封面），不是缓存没更新：代码已是最新，只是打开的地址里没有 `ui=narra`（手输地址、Safari 历史建议、旧书签都会这样），而之前不带参数默认走原版。
+
+- 现在不带 `ui` 参数默认是 narra；原版界面要显式加 `&ui=classic`。
+- 打开后地址栏会补上 `ui=narra`，刷新、复制地址、切换语言都保持同一套界面；分享出去的链接也带明确的 `ui`。
+- 原版测试链接从“去掉 `&ui=narra`”改成“加 `&ui=classic`”：`…/?k=…&lang=zh&ui=classic`、`…/?k=…&lang=en&ui=classic`。

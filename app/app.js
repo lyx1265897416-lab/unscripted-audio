@@ -41,12 +41,14 @@ let MOCK = Q.get('mock') === '1';
 /* 11-11 a second UI kept beside the classic one: ?ui=narra — product name "narra", lyric-style player (review with 阿炫):
  * full-bleed scene picture behind, the story scrolling like lyrics (earlier lines dim, the current one bright), no cover box or
  * big title, call + share at the top right, the listening mode in the bottom toolbar, a small voice bubble at each choice point. */
-const NARRA = Q.get('ui') === 'narra';
+/* 11-13 narra is the default now: a link without ui= (typed address, history suggestion, an old bookmark) used to fall back to the
+ * classic UI, which on a phone looked like "the app didn't update". The classic UI stays reachable with ?ui=classic. */
+const NARRA = Q.get('ui') !== 'classic';
 const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
 if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
-if (Q.has('k')) {
-  store.set('ua.k', Q.get('k'));
-  Q.delete('k');
+if (Q.has('k') || !Q.has('ui')) {
+  if (Q.has('k')) { store.set('ua.k', Q.get('k')); Q.delete('k'); }
+  if (Q.get('ui') !== 'classic') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI
   const qs = Q.toString();
   history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
@@ -5050,7 +5052,7 @@ document.addEventListener('click', (e) => {
     case 'call-silent': sendCallTurn('', 'silence'); break;
     case 'call-mute': toggleCallMute(); break;
     case 'open-safari': {
-      const u = location.origin + location.pathname + '?k=' + encodeURIComponent(TOKEN) + '&lang=' + LANG + (TTS !== 'v4' ? '&tts=' + TTS : '') + (NARRA ? '&ui=narra' : '');
+      const u = location.origin + location.pathname + '?k=' + encodeURIComponent(TOKEN) + '&lang=' + LANG + (TTS !== 'v4' ? '&tts=' + TTS : '') + (NARRA ? '&ui=narra' : '&ui=classic');
       const done = () => toast(tz('Link copied — open Safari and paste it', '链接已复制，打开 Safari 粘贴到地址栏'));
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(done).catch(() => window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u));
       else window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u);
@@ -5136,7 +5138,7 @@ function onEpisodeTap(id, n, kind) {
 
 async function shareSeries(id) {
   const s = byId(id); if (!s) return;
-  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1'); if (NARRA) q.set('ui', 'narra'); if (REAL_ONLY) q.set('real', '1');
+  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1'); q.set('ui', NARRA ? 'narra' : 'classic'); if (REAL_ONLY) q.set('real', '1');
   const url = `${location.origin}${location.pathname}?${q}#/series/${encodeURIComponent(id)}`;
   let ok = false;
   try {
