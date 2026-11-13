@@ -836,10 +836,13 @@ function mixMake(meta, blob) {
 async function mixGet(sid, n, job, from, min, max, wait) {
   for (let a = 0; a < 2; a++) {
     try {
+      const t0 = performance.now();
       const res = await apiFetch(() => { const u = new URL(apiUrl('api/mix')); const q = u.searchParams; q.set('k', TOKEN); q.set('sid', sid); q.set('n', n); if (job) q.set('job', job); q.set('from', from); q.set('min', min); q.set('max', max); q.set('wait', wait.toFixed(1)); return u.toString(); }, {}, 45000);
       if (res.status === 404 || res.status >= 500) throw new Error('mix ' + res.status);
       const meta = JSON.parse(res.headers.get('X-Mix') || 'null'); if (!meta) throw new Error('no meta');
       const b = res.status === 200 ? await res.blob() : null;
+      // how fast pieces come down this link (KB/s, the relay's own waiting taken out): the next one is asked for that much earlier
+      if (b && b.size > 20000 && meta.held != null) { const dl = (performance.now() - t0) / 1000 - meta.held; if (dl > 0.05) { const r = b.size / 1024 / dl; MIX.rate = MIX.rate ? MIX.rate * 0.5 + r * 0.5 : r; } }
       return mixMake(meta, b && b.size ? (b.type ? b : new Blob([b], { type: 'audio/mpeg' })) : null);
     } catch (e) { if (a === 0) await sleep(500); }
   }
@@ -889,7 +892,11 @@ function mixAhead(ss, ep) {
   const lines = ep.lines || [];
   if (last.end || (P.jobDone && last.to >= lines.length) || MIX.inflight.size) return;
   const from = last.to, left = Math.max(1, Math.min(3, lines.length - from));
-  mixFetch(ss, ep, from, left, 8, Math.max(0.5, mixSecsAhead() / (S.speed || 1) - 2.5)).then((c) => {
+  /* 11-13 (2) on a slow link a 30 s piece (≈250 KB) takes 5 s to come down: asked for 2.5 s before the end it arrived late and
+   * the episode stopped for music. The lead now covers the download at the speed the last pieces came (≈25 s of audio), and
+   * pieces are kept shorter there. */
+  const lead = 2.5 + (MIX.rate ? clamp(200 / MIX.rate, 0, 9) : (slowNet() ? 5 : 0));
+  mixFetch(ss, ep, from, left, MIX.rate && MIX.rate < 80 ? 5 : 8, Math.max(0.5, mixSecsAhead() / (S.speed || 1) - lead)).then((c) => {
     if (P.ep !== ep) return;
     if (c && c.to > c.from) { if (P.waiting && P.want) liveAdvance(); else mixAhead(ss, ep); }
     else if (!(c && c.end)) setTimeout(() => { if (P.ep === ep) mixAhead(ss, ep); }, c ? 400 : 1500);

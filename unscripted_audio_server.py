@@ -1759,7 +1759,9 @@ def mix_chunk(sess, ep, job, start, mn, mx, wait=22.0):
     t0 = time.time(); done = lambda: job is None or job.get('status') in ('done', 'error', 'cancelled')
     while True:
         ls = ep.get('lines') or []; k = start
-        while k < len(ls) and ls[k].get('url') is not None and k - start < mx: k += 1
+        # 整集已经配完、只比 mx 多出一两句：一起给，不单独剩一句几秒钟的小段
+        cap = mx + 2 if done() and len(ls) - start <= mx + 2 else mx
+        while k < len(ls) and ls[k].get('url') is not None and k - start < cap: k += 1
         if k - start >= mn or done() or (k > start and time.time() - t0 > wait) or time.time() - t0 > wait + 6: break
         time.sleep(0.12)
     ls = ep.get('lines') or []
@@ -1804,6 +1806,7 @@ def mix_chunk(sess, ep, job, start, mn, mx, wait=22.0):
         out = out[:at] + audioop.add(out[at:at + len(fx)], fx, 2) + out[at + len(fx):]
     r = subprocess.run([FF, '-v', 'error', '-f', 's16le', '-ar', str(MIX_SR), '-ac', '1', '-i', '-', '-c:a', 'libmp3lame', '-b:a', '64k', '-write_xing', '0', '-id3v2_version', '0', '-f', 'mp3', '-'],
                        input=out, capture_output=True, timeout=60)
+    meta['held'] = round(time.time() - t0, 2)   # 中转这边等配音 + 混音用了多久：手机用“总耗时 − held”算这条线路下一段要多久
     return (r.stdout if r.returncode == 0 else b''), meta
 
 
