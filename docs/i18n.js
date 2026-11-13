@@ -77,7 +77,7 @@
     'Every episode unlocked. Every choice, no waiting. (Simulated ad)': '所有剧集解锁，每个选择不用等。（模拟广告）', 'Wait-free in': '免费等待：', 'Not enough coins · Get more': '金币不够 · 去获取',
     'VIP calls are free': 'VIP 通话免费', 'Test coins — no real payment. Tapping a pack just adds coins.': '测试金币，不会真实付款。点一下礼包就会加金币。', 'Link copied': '链接已复制', 'Share link ready: ': '分享链接：',
     // calls
-    'Call': '打电话', 'Calling': '正在呼叫', 'Accept': '接听', 'Decline': '拒绝', 'Hang up': '挂断', 'Hanging up…': '正在挂断…', 'Call back': '回拨', 'Call ended': '通话结束', 'call ended': '通话结束', 'Call failed': '通话失败',
+    'Call': '打电话', 'Calling': '正在呼叫', 'Accept': '接听', 'Decline': '拒绝', 'Hang up': '挂断', 'Hanging up…': '正在挂断…', 'Call back': '回拨', 'Call ended': '通话结束', 'Call again': '再打一次', 'call ended': '通话结束', 'Call failed': '通话失败',
     'Incoming call…': '来电…', 'On call now': '通话中', 'Call history': '通话记录', 'Call history cleared': '通话记录已清空', 'Call deleted': '通话已删除', 'Delete call': '删除通话', 'Call transcript': '通话文字记录',
     'Transcript': '文字记录', 'Call speed': '通话语速', 'Replay speed': '回放速度', 'Hold to talk': '按住说话', 'Listening… release to send': '在听… 松开发送', 'Your reply': '你的回复', 'Your turn': '轮到你了',
     'Quick reply': '快捷回复', 'Who do you want to call?': '你想打给谁？', 'Call a lead from any series page.': '在任意剧集页都能给主角打电话。', 'Call your favorite': '打给你喜欢的角色',
@@ -123,7 +123,7 @@
     [/^Unlock Episode (\d+)$/, '解锁第 $1 集'], [/^Episode (\d+) unlocked([\s\S]*)$/, '第 $1 集已解锁$2'], [/^Auto-unlocked Ep (\d+) \(−(\d+)\)$/, '已自动解锁第 $1 集（−$2）'], [/^Unlock with (\d+) coins$/, '用 $1 金币解锁'],
     [/^Call with (\d+) coins$/, '用 $1 金币通话'], [/^Watch an ad to (unlock|call free)$/, (m, a) => (a === 'unlock' ? '看广告解锁' : '看广告免费通话')], [/^Spend (\d+) coins automatically on Ep 4\+$/, '第 4 集起自动花 $1 金币解锁'],
     [/^written live from your choice$/, '按你的选择实时生成'], [/^([\s\S]+) · written live from your choice$/, '$1 · 按你的选择实时生成'], [/^([\s\S]+) · your first call was free$/, '$1 · 第一次通话免费'],
-    [/^Call ([\s\S]+)$/, '打给 $1'], [/^\+(\d+) coins$/, '+$1 金币'], [/^\+(\d+) coins · Day (\d+)$/, '+$1 金币 · 第 $2 天'], [/^\+(\d+) test coins$/, '+$1 测试金币'], [/^−(\d+) coins$/, '−$1 金币'],
+    [/^Call (?!ended\b|failed\b|dropped\b|again\b)([\s\S]+)$/, '打给 $1'],   // 11-12 只接名字：原来把 Call ended / Call again / Call dropped: … 也翻成了“打给 ended” [/^\+(\d+) coins$/, '+$1 金币'], [/^\+(\d+) coins · Day (\d+)$/, '+$1 金币 · 第 $2 天'], [/^\+(\d+) test coins$/, '+$1 测试金币'], [/^−(\d+) coins$/, '−$1 金币'],
     [/^(\d+) coins$/, '$1 金币'], [/^(\d+) coins \/ call$/, '$1 金币 / 次'], [/^coins · (\d+) series started$/, '金币 · 已开始 $1 部剧'], [/^(\d+) records$/, '$1 条记录'], [/^Day (\d+)$/, '第 $1 天'],
     [/^Daily check-in · Day (\d+)$/, '每日签到 · 第 $1 天'], [/^Task · ([\s\S]+)$/, '任务 · $1'], [/^Coin pack (\d+)([\s\S]*) \(test\)$/, '金币礼包 $1$2（测试）'], [/^Ad unlock Ep (\d+) · ([\s\S]+)$/, '看广告解锁第 $1 集 · $2'],
     [/^Auto-unlock Ep (\d+) · ([\s\S]+)$/, '自动解锁第 $1 集 · $2'], [/^Unlock Ep (\d+) · ([\s\S]+)$/, '解锁第 $1 集 · $2'], [/^Ad call · ([\s\S]+)$/, '看广告通话 · $1'], [/^Balance:$/, '余额：'],
@@ -144,6 +144,7 @@
     const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(t);
     const core = m[2];
     let out = Object.prototype.hasOwnProperty.call(EX, core) ? EX[core] : null;
+    if (out == null && / ·$/.test(core)) { const r = tr(core.slice(0, -2)); if (r !== core.slice(0, -2)) out = r + ' ·'; }   // "Call ended ·" + a separate element after it
     if (out == null) {
       for (const [r, f] of RX) { if (r.test(core)) { out = core.replace(r, f); break; } }
     }
