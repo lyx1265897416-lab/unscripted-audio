@@ -1600,7 +1600,7 @@ def echo_of_him(c, text, extra=None):
     return False
 
 
-def ear_feed(c, data, ctype, end=False):
+def ear_feed(c, data, ctype, end=False, lo=700.0):
     """锁屏通话：手机每 ~2 秒传一段录音（锁屏后网页没法测音量），这里解码拼起来，用能量检测找“她说完的一句”
     （说了 ≥0.3 秒、之后静 ≥1 秒）。返回说完的那段 16k 单声道 PCM，没有就 None。"""
     import array, tempfile
@@ -1613,20 +1613,25 @@ def ear_feed(c, data, ctype, end=False):
     a = array.array('h'); a.frombytes(bytes(E['buf'][len(E['buf']) - len(pcm):]) if pcm else b'')
     fr = 480  # 30 ms
     base = (len(E['buf']) - len(pcm)) // 2
-    done = None
+    done = None; mx = 0.0; nv = 0
     for i in range(0, len(a) - fr + 1, fr):
         x = a[i:i + fr]; rms = (sum(v * v for v in x) / fr) ** 0.5
-        th = max(700.0, E['floor'] * 3)
+        # 11-13 底噪跟踪改成“快降慢升”，说话期间也在跟：原来开口后底噪就冻住了，手机自动增益把环境声 / 外放漏音抬过门限时
+        # 会被当成她一直在说（永远等不到“说完”，锁屏选择点既不识别也不往下走）。现在持续的环境声约 1–2 秒内被吸收进底噪（每帧 +3%，约 0.7 秒翻倍；一有更低的声音就立刻降回去），门限跟着抬上去。
+        f = E['floor']
+        f = f * 0.7 + rms * 0.3 if rms < f else min(f * 1.03, 6000.0)
+        E['floor'] = f = max(f, 60.0)
+        th = max(lo, f * 3); mx = max(mx, rms)
         if rms > th:
+            nv += 1
             if E['start'] is None: E['start'] = max(0, base + i - 8000)  # 0.5 秒前开始，别吃掉第一个字
             E['voiced'] += 0.03; E['quiet'] = 0
-        else:
-            if E['start'] is None: E['floor'] = E['floor'] * 0.97 + rms * 0.03
-            else: E['quiet'] += 0.03
+        elif E['start'] is not None: E['quiet'] += 0.03
         # 锁屏时她句中停顿常有 0.8 秒，等 1 秒再算说完；已经说了 2 秒以上（长回答、边想边说）就等 1.6 秒，别把一段话切断（11-09）
         if E['start'] is not None and E['quiet'] >= (1.0 if E['voiced'] < 2 else 1.6):
             if E['voiced'] >= 0.3: done = bytes(E['buf'][E['start'] * 2:(base + i + fr) * 2])
             E['start'] = None; E['voiced'] = 0; E['quiet'] = 0
+    E['last'] = {'sec': round(len(pcm) / 32000, 2), 'peak': round(mx), 'th': round(max(lo, E['floor'] * 3)), 'voiced_ms': nv * 30}  # 这一段的音量（11-13 真机诊断用）
     if end and not done and E['start'] is not None and E['voiced'] >= 0.3:  # 最后一段（说到上限了）：说到哪算哪
         done = bytes(E['buf'][E['start'] * 2:]); E['start'] = None; E['voiced'] = 0; E['quiet'] = 0
     if E['start'] is None and len(E['buf']) > 16000 * 2 * 6: del E['buf'][:len(E['buf']) - 16000 * 2 * 2]  # 不在说话时只留最后 2 秒
@@ -2075,15 +2080,24 @@ class H(BaseHTTPRequestHandler):
             data = self.rfile.read(n) if 0 < n <= 4_000_000 else b''
             with sess.setdefault('_earlock', threading.Lock()):
                 if gq('first') == '1': sess.pop('_ear', None)
-                try: wav = ear_feed(sess, data, self.headers.get('Content-Type') or '', end=gq('end') == '1') if data else None
+                # 11-13 选择点的门限放低到 450（约 -37 dBFS）：真机锁屏时手机常放在桌上，声音比贴着说小一截
+                try: wav = ear_feed(sess, data, self.headers.get('Content-Type') or '', end=gq('end') == '1', lo=450.0) if data else None
                 except Exception as e: print('asr/chunk', repr(e)[:160], flush=True); wav = None
                 E = sess.get('_ear') or {}
                 speaking = E.get('start') is not None
-            if not wav: return self._send(200, {'text': '', 'speaking': speaking, 'heard': speaking or bool(E.get('voiced'))})
+            # 每一段都记进会话日志：手机端麦克风轨道状态 + 这一段解出来多长、多响（锁屏“没反应”时能直接看出是没录到、太小声还是没发上来）
+            dg = {'i': gq('i'), 'bytes': n, 'tr': gq('tr'), 'hid': gq('hid'), 'ax': gq('ax'), 'ms': gq('ms'), 'speaking': speaking, **(E.get('last') or {})}
+            if not wav:
+                log(sess['sid'], {'ear': dg, 'at': time.strftime('%F %T')})
+                return self._send(200, {'text': '', 'speaking': speaking, 'heard': speaking or bool(E.get('voiced'))})
             ch = (sess['eps'][-1].get('choices') or [])[:2]
             hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
             try: text = asr_local(wav, 'audio/wav', sess['lang'], hint, choice=True)  # 选择点：短回答再用字母提示认一遍（A/B）
             except Exception as e: text = ''; print('asr/chunk asr', repr(e)[:120], flush=True)
+            log(sess['sid'], {'ear': dict(dg, text=text, wav_sec=round((len(wav) - 44) / 32000, 2)), 'at': time.strftime('%F %T')})
+            if not text and gq('end') != '1':  # 11-13 有声音但不是一句话（咳嗽、外放漏音）：不算她答完，接着听到 5 秒窗口结束
+                E['start'] = None; E['voiced'] = 0; E['quiet'] = 0
+                return self._send(200, {'text': '', 'speaking': False, 'heard': False, 'noise': True})
             sess.pop('_ear', None)
             if text: threading.Thread(target=pre_next, args=(sess, text), daemon=True).start()  # 不等手机再发 /api/next，马上开写
             return self._send(200, {'text': text, 'done': True})
@@ -2219,6 +2233,10 @@ class H(BaseHTTPRequestHandler):
             out = jid or free or start_job(run_episode, sess, next_msg(sess, her, br and br['text']), None, her)
             sess['wishes'] = []
             return self._send(200, {'job': out, 'matched': matched, 'via': via, 'spec': bool(jid), 'bridge': br})
+        if u.path == '/api/diag':  # 11-13 手机端的语音状态（走哪条路、麦克风轨道被系统停掉/静音、开麦失败）记进会话日志
+            sess = get_sess(body.get('sid'))
+            if sess: log(sess['sid'], {'diag': str(body.get('ev') or '')[:40], 'd': {str(k)[:20]: str(v)[:80] for k, v in list((body.get('d') or {}).items())[:12]}, 'at': time.strftime('%F %T')})
+            return self._send(200, {'ok': True})
         if u.path == '/api/wish':  # 听的过程中对故事说的话：记下，按它重写两个选项的下一集（仍然秒开）
             sess = get_sess(body.get('sid'))
             if not sess: return self._send(404, {'error': 'session expired'})

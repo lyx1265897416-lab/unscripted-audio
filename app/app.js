@@ -1027,7 +1027,7 @@ function setMediaSession() {
   } else if (!P.ep) return;
   else if (P.gen) { title = tz('Writing your episode…', '正在为你写这一集…'); artist = s.title; }
   else if (P.needChoice) {
-    title = modeOf() === 'voice' ? tz('Your move · say your answer', '轮到你了 · 直接说出你的回答') : modeOf() === 'auto' ? tz('The story carries on…', '故事自己往下走…') : tz('Your move', '轮到你了');
+    title = modeOf() === 'voice' ? (HF.phase === 'listen' ? tz('Listening · say your answer', '正在听 · 直接说出你的回答') : HF.phase === 'speaking' ? tz('Hearing you…', '听到你在说…') : HF.phase === 'heard' ? tz('Got it', '听到了') : tz('Your move · say your answer', '轮到你了 · 直接说出你的回答')) : modeOf() === 'auto' ? tz('The story carries on…', '故事自己往下走…') : tz('Your move', '轮到你了');
     artist = cleanText(P.ep.prompt || '') || s.title;
   } else { title = tz(`Ep ${P.ep.n} · ${P.ep.title || ''}`, `第 ${P.ep.n} 集 · ${P.ep.title || ''}`); artist = s.title; }
   const key = title + '|' + artist + '|' + s.id;
@@ -1474,11 +1474,22 @@ function fetchCue(sid, n) {
  * In Hands-free the mic stream is opened once (first Play tap) and kept, so she can answer with the screen locked where the
  * browser allows it (Android Chrome; iOS Safari may suspend capture when locked — then the story simply carries on). */
 const VI = { stream: null, an: null, buf: null, denied: false, primed: false };
+/* 11-13 what the phone's mic is doing goes into the session log on the relay (lock-screen answers can't be debugged from the desk):
+ * which path a choice point took, whether iOS ended / muted the mic track, a failed re-open. Fire and forget. */
+const micState = () => { const t = VI.stream && VI.stream.getAudioTracks()[0]; return !t ? 'none' : t.readyState !== 'live' ? 'ended' : t.muted ? 'muted' : 'live'; };
+function diag(ev, d) {
+  try {
+    const ss = P.id && getSess(P.id); if (!ss || !ss.sid || MOCK) return;
+    fetch(apiUrl('api/diag'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({ k: TOKEN, sid: ss.sid, ev, d: Object.assign({ tr: micState(), hid: document.hidden ? 1 : 0, ax: actx ? actx.state : 'none' }, d || {}) }) }).catch(() => {});
+  } catch (e) { /* ignore */ }
+}
 async function micStream() {
   if (VI.stream && VI.stream.getAudioTracks().some((t) => t.readyState === 'live')) return VI.stream;
   try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch (e) { /* ignore */ }  // let Safari pick record+play itself (forcing it was one suspect for the 0:00 stall)
   VI.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, voiceIsolation: true } });  // 11-10 voiceIsolation: browsers that support it keep only the nearest voice
   VI.denied = false;
+  VI.stream.getAudioTracks().forEach((t) => ['ended', 'mute', 'unmute'].forEach((ev) => t.addEventListener(ev, () => diag('mic-' + ev))));
   // iOS switches the audio session when the mic opens and may pause the story that is playing: pick it straight back up
   [150, 700].forEach((ms) => setTimeout(() => {
     if (((P.want && P.cur && !P.waiting) || (P.aux && audio.loop)) && audio.paused && !callActive()) audio.play().catch(() => {});
@@ -1824,15 +1835,15 @@ const LOCK_WAIT = 5000;  // 11-09：锁屏给她 5 秒开口；5 秒内没声音
 const LOCK_PIECE = 1250;  // 每段 1.25 秒：第 4 段正好录到第 5 秒
 const LOCK_CAP = 90000;   // 一口气最多听 90 秒，到了就把已说的识别掉
 function hfListenLocked(key) {
-  const t0 = Date.now(); let first = true, heard = false, over = false, rec = null, timer = 0, pending = 0, voiceEnd = 0;
+  const t0 = Date.now(); let first = true, heard = false, over = false, rec = null, timer = 0, pending = 0, voiceEnd = 0, pieceN = 0;
   const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
   const stop = () => { over = true; clearTimeout(timer); if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } micBusy = Math.max(0, micBusy - 1); };
   const ok = () => HF.key === key && P.needChoice && !over;
   const piece = () => {
     if (!ok()) return;
     // “没说话”只在回包里判断（下面 onstop）：按时间判的话，回包还在隧道上她已经开口了，结果先自动续播、她的话被丢掉
-    if (!heard && Date.now() - t0 > LOCK_WAIT + 9000) { stop(); continueOnItsOwn('quiet'); return; }   // 回包一直不来（断网）
-    try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { stop(); continueOnItsOwn('quiet'); return; }
+    if (!heard && Date.now() - t0 > LOCK_WAIT + 9000) { stop(); diag('lock-end', { why: 'no-reply' }); continueOnItsOwn('quiet'); return; }   // 回包一直不来（断网）
+    try { rec = new MediaRecorder(VI.stream, type ? { mimeType: type } : undefined); } catch (e) { stop(); diag('lock-end', { why: 'rec-new', err: String(e && e.name) }); continueOnItsOwn('quiet'); return; }
     const chunks = [], pStart = Date.now() - t0, last = pStart + LOCK_PIECE >= LOCK_CAP;
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     rec.onstop = async () => {
@@ -1842,6 +1853,7 @@ function hfListenLocked(key) {
       try {
         const ss = getSess(P.id);
         const u = new URL(apiUrl('api/asr/chunk')); u.searchParams.set('k', TOKEN); u.searchParams.set('sid', (ss && ss.sid) || ''); if (f) u.searchParams.set('first', '1'); if (last) u.searchParams.set('end', '1');
+        u.searchParams.set('i', String(pieceN++)); u.searchParams.set('tr', micState()); u.searchParams.set('hid', document.hidden ? '1' : '0'); u.searchParams.set('ax', actx ? actx.state : 'none'); u.searchParams.set('ms', String(pStart));
         const res = await fetch(u.toString(), { method: 'POST', headers: { 'Content-Type': b.type || 'audio/mp4' }, body: b });
         r = res.ok ? await res.json() : null;
       } catch (e) { r = null; }
@@ -1852,7 +1864,7 @@ function hfListenLocked(key) {
       else if (r && !r.done) {
         heard = false;  // 咳嗽、碰一下这种没成句的声音不算开口
         // 录到第 5 秒（或上次出声后 3 秒）还是没声音，而且前面的段都回来了 → 她真的没说话，故事自己往下走
-        if (pEnd >= Math.max(LOCK_WAIT, voiceEnd ? voiceEnd + 3000 : 0) && pending === 0) { stop(); continueOnItsOwn('quiet'); return; }
+        if (pEnd >= Math.max(LOCK_WAIT, voiceEnd ? voiceEnd + 3000 : 0) && pending === 0) { stop(); diag('lock-end', { why: 'quiet', pieces: pieceN }); continueOnItsOwn('quiet'); return; }
       }
       if (r && r.done) {
         stop();
@@ -1861,7 +1873,7 @@ function hfListenLocked(key) {
         else continueOnItsOwn('unclear');
       } else if (last && ok()) { stop(); continueOnItsOwn(heard ? 'unclear' : 'quiet'); }
     };
-    try { rec.start(); } catch (e) { stop(); continueOnItsOwn('quiet'); return; }
+    try { rec.start(); } catch (e) { stop(); diag('lock-end', { why: 'rec-start', err: String(e && e.name) }); continueOnItsOwn('quiet'); return; }
     timer = setTimeout(() => { if (rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* ignore */ } } if (!last) piece(); }, LOCK_PIECE);
   };
   micBusy++;
@@ -1870,11 +1882,28 @@ function hfListenLocked(key) {
 }
 function hfListen() {
   if (!P.needChoice || !VOICE_OK) return;
-  if (VI.stream && (document.hidden || !actx || actx.state !== 'running')) {   // locked: piece-by-piece, ends when she does
+  const lockedNow = document.hidden || !actx || actx.state !== 'running';
+  if (lockedNow && (VI.stream || lockHold())) {   // locked: piece-by-piece, ends when she does
     stopAutoCountdown(); if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
-    keepAlive(); HF.phase = 'listen'; HF.heard = ''; askText(''); paintHF();
-    hfListenLocked(HF.key); return;
+    const key = HF.key, st = micState();
+    diag('listen', { path: 'locked', ep: P.ep && P.ep.n });
+    const my = HF.go = {};   // hfStop() drops this: a chime that was cut short must not open the mic afterwards
+    const go = () => {
+      if (HF.key !== key || !P.needChoice || HF.go !== my) return;
+      HF.phase = 'listen'; HF.heard = ''; askText(''); paintHF();
+      // 11-13 the lock screen has no picture: a short chime (on the story's own <audio>, WebAudio is asleep) says "your turn — I'm listening"
+      playAux('ear.mp3').then(() => { if (HF.key !== key || !P.needChoice || HF.phase !== 'listen' || HF.go !== my) return; keepAlive(); hfListenLocked(key); });
+    };
+    if (st === 'live' || st === 'muted') { go(); return; }
+    // iOS ended the mic while the phone was locked (or it was never opened): one try to reopen it, then the story carries on rather than hang
+    HF.phase = 'listen'; paintHF(); keepAlive();
+    Promise.race([micStream(), sleep(2500).then(() => { throw new Error('timeout'); })]).then(go, (e) => {
+      diag('lock-end', { why: 'no-mic', err: String(e && (e.name || e.message)) });
+      if (HF.key === key && P.needChoice) continueOnItsOwn('quiet');
+    });
+    return;
   }
+  diag('listen', { path: 'live', ep: P.ep && P.ep.n });
   stopAutoCountdown();
   if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
   keepAlive();
@@ -1907,6 +1936,7 @@ function hfListen() {
   });
 }
 function hfStop(silent) {
+  HF.go = null;
   if (HF.rec) { const r = HF.rec; HF.rec = null; r.cancel(); }
   if (P.aux && !audio.loop && P.auxEnd) { const f = P.auxEnd; P.auxEnd = null; try { audio.pause(); } catch (e) { /* ignore */ } f(); }
   if (!silent) { HF.phase = ''; paintHF(); }
@@ -1962,6 +1992,7 @@ function bindAsk() {
   paintAsk();
 }
 function paintHF() {
+  setMediaSession();   // the lock-screen card follows: Your move → Listening
   paintAsk();
   const el = $('#ch-hf'); if (!el) return;
   const ph = HF.phase;
