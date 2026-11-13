@@ -225,15 +225,49 @@ def tts_text(text, lead, lang):
     return text.strip()
 
 
-def waku(model, params, timeout=120, pool=None, prio=0, started=None):
+# ---------- 11-13 (8) 配音的止损 ----------
+# 当天 09:07–09:15 配音服务变慢时，一局测试 8 分钟内发了约 400 次配音（平时一局几十次）、烧掉 4,500 多额度：
+#   一句等不到通道就放弃了，但它排着队的两三路请求之后照样拿到通道、发出去、计费（没人用）；这些“孤儿”请求又占着通道，
+#   后面的句子更等不到 → 每句再补发两路 → 越堵越发。超时的请求杀掉重发，服务端多半已经做完并计了费。
+# 现在：① 一句有了结果或放弃了，它还在排队的请求一律作废（拿到通道也立刻还回去，不发）；
+#       ② 通道在排队 / 最近连着超时（“降级”）/ 这一分钟发得太多时：每句只发一路、不补发、不重试；
+#       ③ 等通道超过 45 秒的句子直接放弃，不再补发。
+_TTS_TO = []      # 最近的超时时刻
+_TTS_CALLS = []   # 最近真正发出去的配音请求时刻
+_TTS_LOCK = threading.Lock()
+TTS_PER_MIN = int(os.environ.get('TTS_PER_MIN', '150'))
+TTS_FAKE_SLOW = float(os.environ.get('TTS_FAKE_SLOW', '0') or 0)
+def _recent(lst, secs):
+    now = time.time()
+    with _TTS_LOCK:
+        while lst and now - lst[0] > 180: lst.pop(0)
+        return sum(1 for t in lst if now - t < secs)
+def tts_degraded(): return _recent(_TTS_TO, 90) >= 3
+def tts_busy(pool=None):
+    p = CALL_POOL if (pool is CALL_POOL and CALL_POOL_N[0]) else POOL
+    return len(_PWAIT.get(id(p)) or []) >= 4 or _recent(_TTS_CALLS, 60) >= TTS_PER_MIN
+
+
+class _Dropped(Exception): pass
+
+
+def waku(model, params, timeout=120, pool=None, prio=0, started=None, cancel=None):
     if pool is CALL_POOL and not CALL_POOL_N[0]: pool = POOL  # 通话通道还没建好就先用公共的
     pool = pool or POOL
     _w = time.time(); m = pool_get(pool, prio)
+    if cancel is not None and cancel.is_set(): pool_put(pool, m); raise _Dropped()   # 这一句已经有结果 / 已经放弃：不发了，通道还回去
     if started is not None: started.set()   # 这一句拿到通道、真正开始配了
+    with _TTS_LOCK: _TTS_CALLS.append(time.time())
+    if TTS_FAKE_SLOW:   # 演练用（TTS_FAKE_SLOW=秒）：不真发请求、不计费，假装服务卡住到超时——验证上面的止损
+        try: time.sleep(min(TTS_FAKE_SLOW, timeout));
+        finally: pool_put(pool, m)
+        with _TTS_LOCK: _TTS_TO.append(time.time())
+        raise TimeoutError('fake slow')
     if TTS_DEBUG and time.time() - _w > 0.3: print('waku pool wait', round(time.time() - _w, 2), 'call' if pool is CALL_POOL else 'main', flush=True)
     try:
         return m.tool('multimodal_run_model', {'capability': 'multimodal.generate.audio', 'model_id': model, 'parameters': params}, timeout=timeout)
     except TimeoutError:
+        with _TTS_LOCK: _TTS_TO.append(time.time())
         try: m.p.kill()
         except Exception: pass
         m = WakuMCP(); raise
@@ -251,7 +285,7 @@ def credit_alarm():
 
 
 TTS_DEBUG = os.environ.get('TTS_DEBUG', '0') == '1'  # 排查配音慢时设 1
-def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
+def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None, cancel=None):
     vid, lead = voice_of(series, who, lang)
     params = dict(text=tts_text(text, lead, lang), voice_id=vid, stability=0.4, similarity=0.8)
     if engine == 'flash': params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', params['text']), voice_id=vid)  # v2.5 不认表演标签，会念出来
@@ -263,13 +297,17 @@ def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
                       sample_rate=48000, output_format='mp3', voice_instruction=sd.get(f'instr_{lang}') or sd.get('instr_en') or '')
     err = None
     for attempt in range(3):
+        if cancel is not None and cancel.is_set(): raise _Dropped()
+        deg = tts_degraded()
+        if deg and attempt: break   # 服务在连着超时：不重试（超时的那次多半已经计费），这一句就算没配上
         try:
             # 11-13 单次限时：平时一句 3–9 秒，原来一卡就等满 120 秒（真机上“说完 95 秒没声音”）。超时会杀掉这条通道换新的再试
-            _t = time.time(); r = waku(model, params, timeout=(22, 28, 45)[attempt], pool=pool, prio=prio, started=started)
+            _t = time.time(); r = waku(model, params, timeout=45 if deg else (22, 28, 45)[attempt], pool=pool, prio=prio, started=started, cancel=cancel)
             if TTS_DEBUG: print(time.strftime('%H:%M:%S'), 'tts', engine, 'call' if pool is CALL_POOL else 'main', who, round(time.time() - _t, 2), 'ok' if r.get('asset_url') else str(r)[:80], text[:12], flush=True)
             if r.get('asset_url'): return r['asset_url']
             err = r.get('error') or r
             if 'insufficient_credit' in str(err): credit_alarm()
+        except _Dropped: raise
         except Exception as e:
             err = e
         if attempt == 1 and not sd: params['text'] = re.sub(r'\[[^\]]*\]\s*', '', params['text'])  # 标签导致参数错误时去标签再试
@@ -279,11 +317,14 @@ def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
 def tts_hedged(series, who, text, lang, n, engine='v4', pool=None, prio=0, info=None):
     """同一句发 n 条，谁先好用谁"""
     done = threading.Event(); box = {}; errs = []; started = threading.Event()
+    tight = tts_degraded() or tts_busy(pool)   # 通道在排队 / 服务在超时 / 这一分钟发得太多：只发一路、不补发
+    if tight: n = 1
 
     def one():
         try:
-            u = tts(series, who, text, lang, engine, pool, prio, started)
+            u = tts(series, who, text, lang, engine, pool, prio, started, cancel=done)
             if not done.is_set(): box['u'] = u; done.set()
+        except _Dropped: pass
         except Exception as e:
             errs.append(e)
             if len(errs) >= n: done.set()
@@ -292,18 +333,24 @@ def tts_hedged(series, who, text, lang, n, engine='v4', pool=None, prio=0, info=
     alt = {'flash': 'turbo', 'turbo': 'flash', 'v4': 'turbo'}.get(engine, 'flash')
     def late(eng):
         try:
-            u = tts(series, who, text, lang, eng, pool, prio)
+            u = tts(series, who, text, lang, eng, pool, prio, cancel=done)
             if not done.is_set(): box['u'] = u; done.set(); print(time.strftime('%m-%d %H:%M:%S'), 'tts late hedge won', eng, text[:16], flush=True)
+        except _Dropped: pass
         except Exception as e: errs.append(e)
     # 11-13 (4) 补发从“这一句拿到通道”起算：还在排队的句子不再往队里加第二、第三路（原来排队 9 秒就补发，越堵越补）
     t_q = time.time()
-    while not started.is_set() and not done.is_set() and time.time() - t_q < 60: started.wait(0.2)
-    if info is not None: info['q'] = round(time.time() - t_q, 1)   # 等通道等了多久
-    if not done.wait(9):
+    while not started.is_set() and not done.is_set() and time.time() - t_q < 45: started.wait(0.2)
+    q = time.time() - t_q
+    if info is not None: info['q'] = round(q, 1)   # 等通道等了多久
+    if not started.is_set() and not done.is_set():   # 45 秒都没轮到：这一句放弃，排着队的请求全部作废（不会之后再发出去计费）
+        done.set(); raise RuntimeError('tts: no channel in 45 s')
+    if tight or q > 3 or tts_degraded() or tts_busy(pool): done.wait(100)   # 在排队 / 在超时：就等这一路，不补发
+    elif not done.wait(9):
         threading.Thread(target=late, args=(engine,), daemon=True).start()
         if not done.wait(7):
-            threading.Thread(target=late, args=(alt,), daemon=True).start()
+            if not (tts_degraded() or tts_busy(pool)): threading.Thread(target=late, args=(alt,), daemon=True).start()
             done.wait(80)
+    done.set()   # 有结果了，或者不等了：这一句其余还在排队的请求作废
     if 'u' in box: return box['u']
     raise RuntimeError(str(errs[:1]))
 
@@ -831,8 +878,19 @@ def race_write(job, sess, user_msg, her, on_line):
     shown = ' / '.join(f'{w}: {v}' for w, v in lines)
     more = (f'\n这一集开头两行已经写好、正在播出：{shown}。从第三行接着写（输出里不要再写这两行，也别再回答一遍她的话），TITLE/PROMPT/C1/C2/END 照常写。' if lang == 'zh'
             else f'\nThe first two lines of this episode are already written and playing: {shown}. Continue from line three (do not output those two lines again or re-answer her); TITLE/PROMPT/C1/C2/END as usual.')
+    # 11-13 (8) 主写手偶尔不听“别再写这两行”，开头把这两句原样又写一遍（当天 59 集里 5 集，听起来就是开头两句说了两遍）：
+    # 它写的前三句台词里，和已播出的两句一样（或几乎一样）的直接丢掉
+    import difflib
+    said = [_norm_said(v) for _, v in lines]; seen = {'n': 0}
+    def on_cont(k, v):
+        if k not in ('TITLE', 'PROMPT', 'C1', 'C2', 'END'):
+            seen['n'] += 1
+            nv = _norm_said(v)
+            if seen['n'] <= 3 and nv and any(s and (nv == s or difflib.SequenceMatcher(None, nv, s).ratio() >= 0.85) for s in said):
+                job['t']['dedup'] = job['t'].get('dedup', 0) + 1; return
+        on_line(k, v)
     wctx = {'_got_lines': True}
-    out = write_episode(wctx, user_msg + more, on_line, sysm=sysm, fast_model=EP_FAST)
+    out = write_episode(wctx, user_msg + more, on_cont, sysm=sysm, fast_model=EP_FAST)
     job['writer'] = wctx.get('writer'); return out
 
 
@@ -2440,7 +2498,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path); q = parse_qs(u.query); g = lambda k, d='': q.get(k, [d])[0]
         lang = 'zh' if g('lang') == 'zh' else 'en'
-        if u.path == '/health': return self._send(200, {'ok': True, 'sessions': len(SESS)})
+        if u.path == '/health': return self._send(200, {'ok': True, 'sessions': len(SESS), 'tts': {'calls_60s': _recent(_TTS_CALLS, 60), 'calls_180s': _recent(_TTS_CALLS, 180), 'timeouts_90s': _recent(_TTS_TO, 90), 'degraded': tts_degraded(), 'waiting': len(_PWAIT.get(id(CALL_POOL)) or []) + len(_PWAIT.get(id(POOL)) or [])}})
         if u.path.startswith('/api/'):
             if g('k') != TOKEN: return self._send(403, {'error': 'bad key'})
             if u.path == '/api/asr/ws' and (self.headers.get('Upgrade') or '').lower() == 'websocket': return asr_stream(self, q)
