@@ -61,6 +61,26 @@ FALLBACK = os.environ.get('WRITER_FALLBACK', 'z-ai/glm-5.3-prime')
 MAX_EPS = 12
 
 POOL = queue.Queue()
+# ---------- 11-13 (4) 配音通道按“先要播的先拿” ----------
+# 一集十几句同时提交、前几句还各发两三路，通话专用通道只有 8 条：谁先拿到通道是随机的。线上复测里第 4 句排到第 28 秒才配好，
+# 手机播完前三句只能垫 11 秒配乐等它（同一集里第 16 句第 13 秒就好了）。现在等通道的调用按 prio 排队：实时集第 i 句 prio = i，
+# 数小的先拿；其它调用（通话、提问、过渡句）prio = 0。
+import heapq, itertools
+_PWAIT = {}; _PLOCK = threading.Lock(); _PSEQ = itertools.count()
+def pool_get(pool, prio=0):
+    with _PLOCK:
+        h = _PWAIT.setdefault(id(pool), [])
+        if not h:
+            try: return pool.get_nowait()
+            except queue.Empty: pass
+        item = [prio, next(_PSEQ), threading.Event(), None]; heapq.heappush(h, item)
+    item[2].wait()
+    return item[3]
+def pool_put(pool, m):
+    with _PLOCK:
+        h = _PWAIT.get(id(pool))
+        if h: item = heapq.heappop(h); item[3] = m; item[2].set(); return
+        pool.put(m)
 def _mcp():
     for k in range(6):  # 11-09：shim 偶尔初始化失败，原来一失败中转就起不来（launchd 反复重启）
         try: return WakuMCP()
@@ -68,7 +88,7 @@ def _mcp():
     return WakuMCP()
 def _fill_pool(n):
     for _ in range(n):
-        try: POOL.put(_mcp())
+        try: pool_put(POOL, _mcp())
         except Exception as e: print('pool', repr(e)[:100], flush=True)
 # 11-11 配音通道放到后台建（3 路并行，共 10 条）：原来 10 条串行建完才开始接请求，网络慢的时候重启一次线上要断几分钟；
 # 现在重启后页面、剧目列表、第 1 集文字稿马上能用，要配音的请求等第一条通道建好（POOL.get 会等）
@@ -79,7 +99,7 @@ CALL_POOL_N = [0]
 def _fill_call_pool(n):
     for _ in range(n):
         for k in range(3):  # waku mcp shim 偶尔初始化失败（机器上 shim 太多时），重试
-            try: CALL_POOL.put(WakuMCP()); CALL_POOL_N[0] += 1; break
+            try: pool_put(CALL_POOL, WakuMCP()); CALL_POOL_N[0] += 1; break
             except Exception as e: print('call pool', repr(e)[:100], flush=True); time.sleep(3)
 threading.Thread(target=_fill_call_pool, args=(int(os.environ.get('CALL_POOL', '8')),), daemon=True).start()  # 后台建，不拖慢重启；11-09 实测 14 条 + 三路并发并不更快（Waku 端排队）
 SESS, JOBS, EP1_LOCK = {}, {}, {}
@@ -201,10 +221,11 @@ def tts_text(text, lead, lang):
     return text.strip()
 
 
-def waku(model, params, timeout=120, pool=None):
+def waku(model, params, timeout=120, pool=None, prio=0, started=None):
     if pool is CALL_POOL and not CALL_POOL_N[0]: pool = POOL  # 通话通道还没建好就先用公共的
     pool = pool or POOL
-    _w = time.time(); m = pool.get()
+    _w = time.time(); m = pool_get(pool, prio)
+    if started is not None: started.set()   # 这一句拿到通道、真正开始配了
     if TTS_DEBUG and time.time() - _w > 0.3: print('waku pool wait', round(time.time() - _w, 2), 'call' if pool is CALL_POOL else 'main', flush=True)
     try:
         return m.tool('multimodal_run_model', {'capability': 'multimodal.generate.audio', 'model_id': model, 'parameters': params}, timeout=timeout)
@@ -213,7 +234,7 @@ def waku(model, params, timeout=120, pool=None):
         except Exception: pass
         m = WakuMCP(); raise
     finally:
-        pool.put(m)
+        pool_put(pool, m)
 
 
 _CREDIT_T = [0]
@@ -226,7 +247,7 @@ def credit_alarm():
 
 
 TTS_DEBUG = os.environ.get('TTS_DEBUG', '0') == '1'  # 排查配音慢时设 1
-def tts(series, who, text, lang, engine='v4', pool=None):
+def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
     vid, lead = voice_of(series, who, lang)
     params = dict(text=tts_text(text, lead, lang), voice_id=vid, stability=0.4, similarity=0.8)
     if engine == 'flash': params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', params['text']), voice_id=vid)  # v2.5 不认表演标签，会念出来
@@ -235,7 +256,7 @@ def tts(series, who, text, lang, engine='v4', pool=None):
     for attempt in range(3):
         try:
             # 11-13 单次限时：平时一句 3–9 秒，原来一卡就等满 120 秒（真机上“说完 95 秒没声音”）。超时会杀掉这条通道换新的再试
-            _t = time.time(); r = waku(model, params, timeout=(22, 28, 45)[attempt], pool=pool)
+            _t = time.time(); r = waku(model, params, timeout=(22, 28, 45)[attempt], pool=pool, prio=prio, started=started)
             if TTS_DEBUG: print(time.strftime('%H:%M:%S'), 'tts', engine, 'call' if pool is CALL_POOL else 'main', who, round(time.time() - _t, 2), 'ok' if r.get('asset_url') else str(r)[:80], text[:12], flush=True)
             if r.get('asset_url'): return r['asset_url']
             err = r.get('error') or r
@@ -246,13 +267,13 @@ def tts(series, who, text, lang, engine='v4', pool=None):
     raise RuntimeError(f'tts failed: {str(err)[:200]}')
 
 
-def tts_hedged(series, who, text, lang, n, engine='v4', pool=None):
+def tts_hedged(series, who, text, lang, n, engine='v4', pool=None, prio=0):
     """同一句发 n 条，谁先好用谁"""
-    done = threading.Event(); box = {}; errs = []
+    done = threading.Event(); box = {}; errs = []; started = threading.Event()
 
     def one():
         try:
-            u = tts(series, who, text, lang, engine, pool)
+            u = tts(series, who, text, lang, engine, pool, prio, started)
             if not done.is_set(): box['u'] = u; done.set()
         except Exception as e:
             errs.append(e)
@@ -262,9 +283,12 @@ def tts_hedged(series, who, text, lang, n, engine='v4', pool=None):
     alt = {'flash': 'turbo', 'turbo': 'flash', 'v4': 'turbo'}.get(engine, 'flash')
     def late(eng):
         try:
-            u = tts(series, who, text, lang, eng, pool)
+            u = tts(series, who, text, lang, eng, pool, prio)
             if not done.is_set(): box['u'] = u; done.set(); print(time.strftime('%m-%d %H:%M:%S'), 'tts late hedge won', eng, text[:16], flush=True)
         except Exception as e: errs.append(e)
+    # 11-13 (4) 补发从“这一句拿到通道”起算：还在排队的句子不再往队里加第二、第三路（原来排队 9 秒就补发，越堵越补）
+    t_q = time.time()
+    while not started.is_set() and not done.is_set() and time.time() - t_q < 60: started.wait(0.2)
     if not done.wait(9):
         threading.Thread(target=late, args=(engine,), daemon=True).start()
         if not done.wait(7):
@@ -283,11 +307,11 @@ def dur(path):
 
 
 def upload(path, ctype='audio/mpeg'):
-    m = POOL.get()
+    m = pool_get(POOL)
     try:
         r = m.tool('polyverse_upload_local_asset', {'filename': Path(path).name, 'content_type': ctype, 'data_base64': base64.b64encode(open(path, 'rb').read()).decode(), 'asset_kind': 'audio'}, timeout=180)
     finally:
-        POOL.put(m)
+        pool_put(POOL, m)
     return r.get('public_url') or r.get('asset_url') or r.get('url')
 
 
@@ -843,7 +867,7 @@ def run_episode(job, sess, user_msg, spec=None, her=None, gate=None):
             # 她说完现写的那集：前三句走专用配音通道（不跟后台预写、过渡句排队；11-09 实测排队时第一句要 7–8 秒，单独 3–4 秒）
             # 11-10 卡顿：后台在预写下一集的两个分支（30 多句配音），正在播的这集第 4 句起跟它们排同一个队就会断——整集都走专用通道，第 4–6 句也两路
             u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (3 if (i == 1 and not spec) else 2 if (i < 6 and not spec) or (spec and i == SPEC_LINES) else 1), eng,
-                           pool=CALL_POOL if (not spec or job.get('_committed')) else None)  # 她已经选了这条预写分支：剩下的句子也走专用通道
+                           pool=CALL_POOL if (not spec or job.get('_committed')) else None, prio=i)  # 她已经选了这条预写分支：剩下的句子也走专用通道；prio：先要播的句子先拿通道
             ep['lines'][i]['url'] = u
             if first: first_ev.set()
             threading.Thread(target=cache_line, args=(u,), daemon=True).start()
