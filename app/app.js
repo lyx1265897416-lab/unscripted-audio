@@ -2719,6 +2719,7 @@ function beginCallRequest(call) {
       if (r.prepared && (r.lines || []).length && !call.lines.length) {  // 11-10 prepared while she was on the page: his first lines are already voiced
         call.lines = r.lines.map((l) => ({ who: l.who, text: cleanText(l.text), url: l.url }));
         call.lines.forEach((l) => fetchBlob(l.url).then(() => { if (C === call && !call.pickedUp) callAdvance(); }));
+        recSyncHim(call);   // his prepared opening goes into the saved transcript too
       }
       if (r.greet && !(call.greet || []).length) { call.greet = [r.greet]; fetchBlob(r.greet); callAdvance(); }
       lowFetch(call, r.bridges || []);   // his "first sentence" replies: fetched after the first lines (browsers open only ~6 connections; 11-10 they queued the first line 9 s)
@@ -3065,12 +3066,14 @@ async function sendCallSay(call, wav, u) {
 function takeHerTurn(call, r) {
   stopCallPoll(); clearTimeout(call.thinkT); clearTimeout(call.silentT);
   if (call.held || call.playing) { try { callAudio.pause(); } catch (e) { /* ignore */ } }
-  call.transcript.push({ who: 'you', text: r.text }); recHer(call, r.text, 'voice');
+  call.transcript.push({ who: 'you', text: r.text });
+  recSyncHim(call); recTrimSpoken(call);   // 11-13 keep what he has said in this turn before the turn moves on (not the lines she cut off)
   call.turn += 1;
+  recHer(call, r.text, 'voice');   // was written before the turn moved on: it replaced the turn that held his lines, so the saved transcript only ever had her side
   Object.assign(call, { lines: [], idx: 0, jobDone: false, choices: [], logged: new Set(), caption: null, phase: 'thinking', waiting: true, playing: false, held: false, listen: '', job: r.job, said: r.text });
   // 11-09: the relay hands back the whole sentence he says first (pre-voiced, e.g. "That's a good question. Let me tell you.")
   // → it plays the moment her words are recognised, while the rest of his turn is written and voiced
-  if (r.first && r.first.url) { call.lines = [{ who: r.first.who || call.who, text: cleanText(r.first.text), url: r.first.url }]; fetchBlob(r.first.url); }
+  if (r.first && r.first.url) { call.lines = [{ who: r.first.who || call.who, text: cleanText(r.first.text), url: r.first.url }]; fetchBlob(r.first.url); recSyncHim(call); }
   scheduleThink(call, call.turn);
   renderCall();
   if (call.lines.length) callAdvance();
@@ -3158,6 +3161,7 @@ function endCall(reason) {
   call.secs = base ? Math.round((Date.now() - base) / 1000) : 0;
   call.phase = 'ended'; call.endReason = reason;
   if (call.cid) API.callEnd({ cid: call.cid, seconds: call.secs }).catch(() => {});
+  recSyncHim(call); recTrimSpoken(call);
   recFinish(call, reason === 'error' && !call.t0 ? 'failed' : 'done');
   renderCall();
 }
@@ -3388,6 +3392,12 @@ function recSyncHim(call) {
   const now = Date.now();
   t.him = call.lines.map((l, i) => ({ text: l.text, url: l.url, at: (t.him[i] && t.him[i].at) || now }));
   if (JSON.stringify(t.him.map((h) => [h.text, h.url])) !== prev) { saveCalls(); if (TR && TR.rid === rec.rid) renderTranscriptView(); }
+}
+/** when a turn is over (she spoke, or the call ended) keep only the lines he actually started saying */
+function recTrimSpoken(call) {
+  const t = call.rec && call.rec.turns[call.turn]; if (!t || !call.logged) return;
+  const n = t.him.length; t.him = t.him.filter((h, i) => call.logged.has(i));
+  if (t.him.length !== n) saveCalls();
 }
 function recHer(call, text, via) {
   const rec = call.rec; if (!rec) return;
