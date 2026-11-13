@@ -355,6 +355,20 @@ h1, h2, h3, h4, p { margin: 0; }
 .cast-row span { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .cast-row em { display: inline-flex; align-items: center; gap: 4px; font-style: normal; color: var(--dim); font-size: 12px; margin-top: 3px; }
 .cast-row em .ic { width: 12px; height: 12px; }
+/* 11-13 (6) a line in the character's own voice; the row is a button */
+.cast-row.cq { cursor: pointer; -webkit-tap-highlight-color: transparent; border-radius: 14px; margin: 0 -8px; padding: 8px; transition: background .15s ease; }
+.cast-row.cq:active { background: rgba(255, 255, 255, .06); }
+.cast-row em.cq-line { display: flex; align-items: flex-start; gap: 7px; margin-top: 6px; color: #fff; font-size: 13.5px; line-height: 1.4; }
+.cast-row em.cq-line q { quotes: '“' '”'; font-style: italic; opacity: .92; }
+.cast-row .cq-ic { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #1A0B06; position: relative; }
+.cast-row .cq-ic .ic { width: 10px; height: 10px; grid-area: 1 / 1; }
+.cast-row .cq-ic .ic:nth-child(2) { display: none; }
+.cast-row.cq.on .cq-ic .ic:nth-child(1) { display: none; }
+.cast-row.cq.on .cq-ic .ic:nth-child(2) { display: block; }
+.cast-row.cq.on em.cq-line q { color: var(--b); opacity: 1; }
+.cast-row.cq.load .cq-ic { background: none; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .18); }
+.cast-row.cq.load .cq-ic .ic { display: none; }
+.cast-row.cq.load .cq-ic::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--b); animation: spin .8s linear infinite; }
 .about-block { margin-top: 18px; }
 .about-block h4 { font-family: var(--fd); font-size: 15px; font-weight: 800; margin-bottom: 8px; }
 .about-block p { color: rgba(255, 255, 255, .75); font-size: 14px; line-height: 1.55; }

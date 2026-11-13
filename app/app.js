@@ -799,7 +799,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), openUnlockSheet: (id, n) => openUnlockSheet(id, n, () => {}), showIncoming: (id, who, sid) => showIncoming(id, who, sid), callersOf: (id) => callersOf(byId(id)).map((c) => c.key), get S() { return S; }, get ms() { const m = navigator.mediaSession && navigator.mediaSession.metadata; return m ? { title: m.title, artist: m.artist, album: m.album } : null; }, get PS() { return PS; }, get MIX() { return MIX; }, skip: (x) => skip(x), lySeek: (j) => lySeek(j), get LY() { return LY; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom(), get AUXL() { return AUXL; }, get BEDS() { return BEDS; }, get HF() { return HF; }, get POS() { return POS; }, posState: () => posState() };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), openUnlockSheet: (id, n) => openUnlockSheet(id, n, () => {}), showIncoming: (id, who, sid) => showIncoming(id, who, sid), callersOf: (id) => callersOf(byId(id)).map((c) => c.key), get S() { return S; }, get ms() { const m = navigator.mediaSession && navigator.mediaSession.metadata; return m ? { title: m.title, artist: m.artist, album: m.album } : null; }, get PS() { return PS; }, get MIX() { return MIX; }, skip: (x) => skip(x), lySeek: (j) => lySeek(j), get LY() { return LY; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom(), get AUXL() { return AUXL; }, get BEDS() { return BEDS; }, get HF() { return HF; }, get POS() { return POS; }, posState: () => posState(), get QA() { return QA; } };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -4402,7 +4402,7 @@ function renderRewards() {
 }
 
 /* Detail */
-let detailId = null, detailTab = 'episodes', synOpen = false;
+let detailId = null, detailTab = 'about', synOpen = false;   // 11-13 (6) About comes first: who is in it, in their own voices
 const isDetailOpen = (id) => $('#detail').classList.contains('on') && (!id || detailId === id);
 /* Episode 1 audio lives on cloud storage whose first byte takes ~3 s; warm it as soon as she opens a series so Play starts at once */
 const WARM = [];
@@ -4433,7 +4433,7 @@ async function showDetail(id) {
     if (NARRA) { stillIndex(id); hdIndex(id); return; }   // narra: stills only (their lists first; the pictures follow in warmStills)
     if (!slowNet()) clipBlob(u);
   });  // first pictures ready before Play
-  if (detailId !== id) { detailTab = 'episodes'; synOpen = false; }
+  if (detailId !== id) { detailTab = 'about'; synOpen = false; quoteStop(); }
   detailId = id;
   renderDetail();
   const page = $('#detail');
@@ -4505,7 +4505,7 @@ function renderDetail() {
     </div>
     <div class="synopsis ${synOpen ? 'open' : ''}"><p>${esc(d.synopsis || s.hook)}</p><button data-act="syn">${synOpen ? 'Show less' : 'More'}</button></div>
     <div class="tabs" role="tablist">
-      ${[['episodes', 'Episodes'], ['about', 'About'], ['more', 'More like this']].map(([k, l]) => `<button role="tab" class="${detailTab === k ? 'on' : ''}" aria-selected="${detailTab === k}" data-act="dt-tab" data-t="${k}">${l}</button>`).join('')}
+      ${[['about', 'About'], ['episodes', 'Episodes'], ['more', 'More like this']].map(([k, l]) => `<button role="tab" class="${detailTab === k ? 'on' : ''}" aria-selected="${detailTab === k}" data-act="dt-tab" data-t="${k}">${l}</button>`).join('')}
     </div>
     <div class="tab-pane" id="dt-pane"></div>`;
   renderDetailPane();
@@ -4521,8 +4521,8 @@ function renderDetailPane() {
     box.innerHTML = `
       <div class="about-block"><h4>Cast</h4>
         <div class="cast">${cast.length ? cast.map((c, i) => `
-          <div class="cast-row">${c.avatar ? `<img src="${esc(c.avatar)}" alt="" loading="lazy">` : (c.narr || /^(Narrator|旁白)$/.test(c.name || '')) ? `<span class="ph narr">${ic('wave')}</span>` : `<span class="ph">${esc((c.name || '?').slice(0, 1))}</span>`}
-            <div><b>${esc(c.name)}</b><span>${esc(c.role)}</span><em>${ic('mic')} Voice: ${esc(c.voice || '—')}</em></div></div>`).join('') : DETAIL_ST[s.id] === 'fail' ? `<button class="cast-retry" data-act="dt-retry">${ic('restart', 'sm')}<span>${tz('Couldn’t load the cast · Tap to try again', '演员表没加载出来 · 点这里重试')}</span></button>` : '<div class="skel" style="height:52px"></div>'}
+          <div class="cast-row${c.quote ? ' cq' : ''}" ${c.quote ? `data-act="cast-quote" data-key="${esc(c.key || '')}" role="button" tabindex="0" aria-label="${esc(tz('Hear ' + c.name, '试听 ' + c.name))}"` : ''}>${c.avatar ? `<img src="${esc(c.avatar)}" alt="" loading="lazy">` : (c.narr || /^(Narrator|旁白)$/.test(c.name || '')) ? `<span class="ph narr">${ic('wave')}</span>` : `<span class="ph">${esc((c.name || '?').slice(0, 1))}</span>`}
+            <div><b>${esc(c.name)}</b><span>${esc(c.role)}</span>${c.quote ? `<em class="cq-line"><i class="cq-ic">${ic('play')}${ic('pause')}</i><q translate="no">${esc(c.quote)}</q></em>` : ''}</div></div>`).join('') : DETAIL_ST[s.id] === 'fail' ? `<button class="cast-retry" data-act="dt-retry">${ic('restart', 'sm')}<span>${tz('Couldn’t load the cast · Tap to try again', '演员表没加载出来 · 点这里重试')}</span></button>` : '<div class="skel" style="height:52px"></div>'}
         </div></div>
       <div class="about-block"><h4>How it works</h4>
         <div class="how">
@@ -4531,10 +4531,57 @@ function renderDetailPane() {
           <div><b>3</b><span>The next episode is written and voiced live from what you chose${S.name ? `, and they’ll call you ${esc(S.name)}` : ''}.</span></div>
         </div></div>
       <div class="about-block"><h4>Genres</h4><div class="tags" style="justify-content:flex-start">${(s.genres || []).map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div></div>`;
+    quoteMark();
+    if (cast.length && cast.some((c) => c.quote) && !MOCK) {   // the relay voices this series' lines now (once, kept after that); the lead's is fetched ahead: a tap plays at once
+      const wk = s.id + '|' + LANG;
+      if (!QA.warm.has(wk)) { QA.warm.add(wk); apiFetch(() => { const u = new URL(apiUrl('api/quote')); u.searchParams.set('k', TOKEN); u.searchParams.set('series', s.id); u.searchParams.set('lang', LANG); u.searchParams.set('warm', '1'); return u.toString(); }, {}, 15000).catch(() => {}); }
+      if (cast[0].quote && !slowNet()) quoteGet(s.id, cast[0].key);
+    }
   } else {
     const others = weave(SERIES.filter((x) => x.id !== s.id).sort((a, b) => sharedGenres(b, s) - sharedGenres(a, s)));
     box.innerHTML = `<div class="mlt-grid">${others.map((x) => card(x)).join('')}</div>`;
   }
+}
+/* 11-13 (6) "tap a character to hear them": each cast row carries one line that sounds like them (data/quotes.json on the relay),
+ * voiced by the same voice they have in the episodes (/api/quote: made once, then kept). It plays on its own small player;
+ * the story, if it is playing, steps aside. Tap again to stop. */
+const QA = { a: null, k: '', st: '', blobs: new Map(), warm: new Set() };
+const quoteKey = (sid, key) => sid + '|' + key + '|' + LANG;
+function quoteGet(sid, key) {
+  const k = quoteKey(sid, key);
+  if (MOCK || !sid || !key) return Promise.resolve('');
+  if (!QA.blobs.has(k)) {
+    QA.blobs.set(k, apiFetch(() => { const u = new URL(apiUrl('api/quote')); u.searchParams.set('k', TOKEN); u.searchParams.set('series', sid); u.searchParams.set('who', key); u.searchParams.set('lang', LANG); return u.toString(); }, {}, 40000)
+      .then((r) => (r.ok ? r.blob() : null)).then((b) => (b && b.size > 1500 ? URL.createObjectURL(b.type ? b : new Blob([b], { type: 'audio/mpeg' })) : ''))
+      .catch(() => '').then((u) => { if (!u) QA.blobs.delete(k); return u; }));
+  }
+  return QA.blobs.get(k);
+}
+function quoteMark() {   // paint which row is loading / playing
+  $$('.cast-row.cq').forEach((r) => { const on = QA.k === quoteKey(detailId, r.dataset.key); r.classList.toggle('load', on && QA.st === 'load'); r.classList.toggle('on', on && QA.st === 'play'); });
+}
+function quoteStop() {
+  if (QA.a) { try { QA.a.pause(); } catch (e) { /* ignore */ } }
+  QA.k = ''; QA.st = ''; quoteMark();
+}
+function quotePlay(sid, key) {
+  const k = quoteKey(sid, key);
+  if (QA.k === k) { quoteStop(); return; }   // tapped again: stop
+  quoteStop();
+  if (P.cur && isPlaying()) doPause();   // the story steps aside
+  const a = QA.a || (QA.a = new Audio());
+  a.onended = () => { if (QA.k === k && QA.st === 'play') quoteStop(); };
+  a.onerror = () => { if (QA.k === k && QA.st === 'play') quoteStop(); };
+  QA.k = k; QA.st = 'load'; quoteMark();
+  // inside the tap: start the element now (iOS only lets a tap start sound), the real line follows as soon as it is here
+  try { a.src = SILENT; const p0 = a.play(); if (p0 && p0.catch) p0.catch(() => {}); } catch (e) { /* ignore */ }
+  quoteGet(sid, key).then((u) => {
+    if (QA.k !== k) return;
+    if (!u) { quoteStop(); toast(tz('Couldn’t load this voice. Try again.', '这段声音没加载出来，再点一次试试')); return; }
+    a.src = u;
+    const p = a.play(); QA.st = 'play'; quoteMark();
+    if (p && p.catch) p.catch(() => { if (QA.k === k) quoteStop(); });
+  });
 }
 const sharedGenres = (a, b) => (a.genres || []).filter((g) => (b.genres || []).indexOf(g) >= 0).length;
 function renderDetailEpisodes() {
@@ -5452,7 +5499,8 @@ document.addEventListener('click', (e) => {
     case 'syn': synOpen = !synOpen; renderDetail(); break;
     case 'dt-retry': DETAIL_ST[detailId] = ''; loadDetail(detailId, true); break;
     case 'pl-detail': openDetailFromPlayer(); break;
-    case 'dt-tab': detailTab = el.dataset.t; $$('.tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === detailTab); b.setAttribute('aria-selected', b.dataset.t === detailTab); }); renderDetailPane(); break;
+    case 'cast-quote': quotePlay(detailId, el.dataset.key); break;
+    case 'dt-tab': quoteStop(); detailTab = el.dataset.t; $$('.tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === detailTab); b.setAttribute('aria-selected', b.dataset.t === detailTab); }); renderDetailPane(); break;
     case 'ep': onEpisodeTap(id, +el.dataset.n, el.dataset.k); break;
     case 'genre': exGenre = el.dataset.g; exQuery = ''; go('explore'); break;
     case 'ex-genre': exGenre = exGenre === el.dataset.g ? '' : el.dataset.g; renderExplore(); break;

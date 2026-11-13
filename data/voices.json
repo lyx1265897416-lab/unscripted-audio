@@ -144,7 +144,15 @@
    "zh": "hkfHEbBvdQFNX4uWHqRF",
    "zh_name": "Stacy",
    "en": "Lily",
-   "lead": true
+   "lead": true,
+   "seed": {
+    "voice": "mindy_en_es_id_pt_zh",
+    "pitch": 4,
+    "speed": 0.92,
+    "instr_en": "Perform a fictional tiny preschool-age kitten character, sounding much younger than a teen or adult: very small, innocent, naturally childlike light head resonance, soft rounded vowels, short childlike phrasing. Clear intelligible American English. Natural intimate dialogue, not narration or an advertisement. Avoid mature chest resonance, husky whisper, shrill squeaking, cartoon falsetto, robotic effects, singing, meowing, music or added words. Sound about four years old, warm, milky-soft. ",
+    "instr_zh": "Perform a fictional tiny preschool-age kitten character, sounding much younger than a teen or adult: very small, innocent, naturally childlike light head resonance, soft rounded vowels, short childlike phrasing. Clear intelligible Mandarin Chinese. Natural intimate dialogue, not narration or an advertisement. Avoid mature chest resonance, husky whisper, shrill squeaking, cartoon falsetto, robotic effects, singing, meowing, music or added words. Sound about four years old, warm, milky-soft. "
+   },
+   "_seed说明": "11-13 她要求：咪用她剧集里定好的音色（咪替我上班 / 情景喜剧同款：seed-speech-tts-2.0 的 mindy 声线、音高 +4、语速 0.92、四岁左右的幼童声），第 1 集、实时集、通话、介绍页试听都用这一个。"
   },
   "Store Clerk": {
    "zh": "tOuLUAIdXShmWH7PEUrU",

@@ -256,6 +256,11 @@ def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
     params = dict(text=tts_text(text, lead, lang), voice_id=vid, stability=0.4, similarity=0.8)
     if engine == 'flash': params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', params['text']), voice_id=vid)  # v2.5 不认表演标签，会念出来
     model = TTS_ENGINES.get(engine, MODEL_TTS)
+    sd = (VOICES.get(series) or {}).get(who, {}).get('seed') if who != 'NARR' else None
+    if sd:   # 11-13 这个角色有她定好的专属音色（咪）：第 1 集、实时集、通话、试听都走这一个，不管调用方要哪个引擎
+        model = 'bytedance/seed-speech-tts-2.0'
+        params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', text).strip(), voice=sd['voice'], pitch=sd.get('pitch', 0), speed=sd.get('speed', 1.0), language=lang,
+                      sample_rate=48000, output_format='mp3', voice_instruction=sd.get(f'instr_{lang}') or sd.get('instr_en') or '')
     err = None
     for attempt in range(3):
         try:
@@ -267,7 +272,7 @@ def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
             if 'insufficient_credit' in str(err): credit_alarm()
         except Exception as e:
             err = e
-        if attempt == 1: params['text'] = re.sub(r'\[[^\]]*\]\s*', '', params['text'])  # 标签导致参数错误时去标签再试
+        if attempt == 1 and not sd: params['text'] = re.sub(r'\[[^\]]*\]\s*', '', params['text'])  # 标签导致参数错误时去标签再试
     raise RuntimeError(f'tts failed: {str(err)[:200]}')
 
 
@@ -2154,10 +2159,42 @@ def cast_of(sid, lang):
         key = ch['name'].split()[0] if ch['name'].split()[0] in VOICES[sid] else ch['name']
         av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'   # 11-11 介绍页演员表每人一张头像
         cast.append({'name': ch['name'] if lang == 'en' else (ch.get('name_zh') or ch['name']), 'role': ch.get(f'role_{lang}') or ch.get('role_zh', ''),
-                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en'),
+                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en'), 'key': key, 'quote': ((QUOTES.get(sid) or {}).get(key) or {}).get(lang),
                      'avatar': f'{av}?v={int((APP / av).stat().st_mtime) % 1000000}' if (APP / av).exists() else None})   # ?v=：同名文件换了图（11-11 换成角色包主图），手机不拿旧缓存
-    cast.append({'name': 'Narrator' if lang == 'en' else '旁白', 'role': 'Narrator' if lang == 'en' else '旁白', 'voice': VOICES['NARR']['zh_name'] if lang == 'zh' else VOICES['NARR']['en'], 'narr': True})
+    cast.append({'name': 'Narrator' if lang == 'en' else '旁白', 'role': 'Narrator' if lang == 'en' else '旁白', 'voice': VOICES['NARR']['zh_name'] if lang == 'zh' else VOICES['NARR']['en'], 'narr': True,
+                 'key': 'NARR', 'quote': ((QUOTES.get(sid) or {}).get('NARR') or {}).get(lang)})
     return cast
+
+
+# ---------- 11-13 (6) 介绍页角色的一句话，点一下试听（/api/quote）----------
+# 每个角色一句有个性的台词（data/quotes.json，build_quotes.py 写的；咪那部是手写的），用这个角色在剧里的同一个声音配：
+# 第一次有人要时配一次（Eleven v4，和第 1 集同一个引擎；咪走她的专属音色），拉到统一响度存盘，之后直接给。
+QUOTES = json.load(open(DATA / 'quotes.json')) if (DATA / 'quotes.json').exists() else {}
+_QLOCK = {}
+def quote_file(sid, key, lang, make=True):
+    q = ((QUOTES.get(sid) or {}).get(key) or {}).get(lang)
+    if not q or (key != 'NARR' and key not in VOICES.get(sid, {})): return None
+    f = CACHE / 'quote' / f'{sid}.{key.replace(" ", "")}.{lang}.{hashlib.sha1(q.encode()).hexdigest()[:8]}.mp3'
+    if f.exists() and f.stat().st_size > 2000: return f
+    if not make: return None
+    with _QLOCK.setdefault(str(f), threading.Lock()):
+        if f.exists() and f.stat().st_size > 2000: return f
+        f.parent.mkdir(parents=True, exist_ok=True)
+        u = tts_hedged(sid, key, q, lang, 1, 'v4')
+        tmp = f.with_suffix('.part' + rid(4)); download(u, tmp)
+        try: AL.level_file(tmp)
+        except Exception: pass
+        tmp.rename(f)
+    return f
+
+
+def quote_warm(sid, lang):
+    """她打开某部剧的介绍页：这部剧每个角色的那一句先配好（已有的跳过），点的时候不用等"""
+    def go():
+        for key in list((QUOTES.get(sid) or {}).keys()):
+            try: quote_file(sid, key, lang)
+            except Exception as e: print('quote', sid, key, lang, repr(e)[:100], flush=True)
+    threading.Thread(target=go, daemon=True).start()
 
 
 def series_about(sid, lang):
@@ -2444,6 +2481,13 @@ class H(BaseHTTPRequestHandler):
                 self.send_header('Cache-Control', 'no-store'); self.send_header('Access-Control-Allow-Origin', '*'); self.end_headers()
                 if b: self.wfile.write(b)
                 return
+            if u.path == '/api/quote':   # 11-13 (6) 角色的一句话：?series=&who=<key>&lang=；?warm=1 只把这部剧的先配好
+                sid = g('series')
+                if sid not in BASE: return self._send(404, {'error': 'no series'})
+                if g('warm') == '1': quote_warm(sid, lang); return self._send(200, {'ok': True})
+                try: f = quote_file(sid, g('who'), lang)
+                except Exception as e: return self._send(502, {'error': 'voice failed: ' + repr(e)[:120]})
+                return self._send(200, f.read_bytes(), 'audio/mpeg', 'public, max-age=86400') if f else self._send(404, {'error': 'no quote'})
             if u.path == '/api/aux':  # 11-13 (2) 选择点的短句（转成统一格式）/ 一部剧的配乐垫段：手机把两者接成一条长音轨
                 try:
                     if g('bed'):

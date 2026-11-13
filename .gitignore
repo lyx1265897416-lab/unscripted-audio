@@ -59,3 +59,6 @@ data/cast_pack/
 qa/still-compare/
 # 重绘的 2k 原图（只留本机）
 data/stills_hd/
+
+# 介绍页角色的一句话（build_quotes.py 生成，含按世界卡改写的内容）：只留本机
+data/quotes.json

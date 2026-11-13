@@ -205,7 +205,8 @@ def mix(sid, lang):
     ep = json.load(open(ej)); cues = ep['cues']
     bak = CACHE / 'ep1' / f'{sid}.{lang}.bak-v58.mp3'
     if not bak.exists(): shutil.copy(mp3, bak)
-    total = int(round(float(subprocess.run([FP, '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(bak)], capture_output=True, text=True).stdout.strip()) * SR))
+    # 11-13 换过角色配音的集（build_revoice.py）：各句时长变了，总长按新的时间轴（ep['total']），不再取旧成片的长度
+    total = int(round(ep['total'] * SR)) if ep.get('total') else int(round(float(subprocess.run([FP, '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(bak)], capture_output=True, text=True).stdout.strip()) * SR))
     y = np.zeros(total); before, after, who = [], [], []
     for i, c in enumerate(cues):
         p = parts / f'{i:03d}.mp3'
