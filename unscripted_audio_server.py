@@ -1778,16 +1778,25 @@ def mix_ep(sess, n, jid):
     return (full, None) if full else (None, None)
 
 
-def mix_chunk(sess, ep, job, start, mn, mx, wait=22.0):
+def mix_chunk(sess, ep, job, start, mn, mx, wait=22.0, ah=None, kb=0.0):
     """从第 start 句起，等到连续 mn 句都配好（或整集配完 / 等满 wait 秒），把此刻已配好的连续几句（最多 mx 句）混成一段 MP3。
     返回 (mp3, meta)；meta：from / to（不含）/ durs（每句配音时长，秒；没配上的是 0）/ gap / end（这一集到 to 为止已经全部给完）。"""
     import audioop
     t0 = time.time(); done = lambda: job is None or job.get('status') in ('done', 'error', 'cancelled')
+    per = 0.24 if sess.get('lang') == 'zh' else 0.068   # 按字数估一句多长（秒 / 字），只用来估这一段有多大
+    est = lambda a, b: sum(max(1.0, len((ep.get('lines') or [])[i].get('text') or '') * per) + MIX_GAP for i in range(a, b))
     while True:
         ls = ep.get('lines') or []; k = start
         # 整集已经配完、只比 mx 多出一两句：一起给，不单独剩一句几秒钟的小段
         cap = mx + 2 if done() and len(ls) - start <= mx + 2 else mx
-        while k < len(ls) and ls[k].get('url') is not None and k - start < cap: k += 1
+        full = False
+        while k < len(ls) and ls[k].get('url') is not None and k - start < cap:
+            k += 1
+            # 11-13 (4) 手机报了这条线路的速度（kb，KB/s）：一段最多下 6 秒左右（64 kbps = 8 KB/s），慢网上不攒成一大段
+            if kb and k - start >= 1 and est(start, k) * 8.0 / kb > 6.0: full = True; break
+        # 手机还能播 ah 秒：这一段按现在的大小要下多久，就提前多久给（再留 1.5 秒来回），不等到最后一刻
+        if kb and ah is not None and k > start and time.time() - t0 >= ah - est(start, k) * 8.0 / kb - 1.5: break
+        if full: break
         if k - start >= mn or done() or (k > start and time.time() - t0 > wait) or time.time() - t0 > wait + 6: break
         time.sleep(0.12)
     ls = ep.get('lines') or []
@@ -2253,7 +2262,7 @@ class H(BaseHTTPRequestHandler):
                 if not sess: return self._send(404, {'error': 'session expired'})
                 ep, job = mix_ep(sess, int(g('n') or 0), g('job'))
                 if not ep: return self._send(404, {'error': 'no episode'})
-                try: b, meta = mix_chunk(sess, ep, job, max(0, int(g('from') or 0)), max(1, int(g('min') or 1)), max(1, int(g('max') or 8)), wait=min(25.0, max(0.2, float(g('wait') or 22))))
+                try: b, meta = mix_chunk(sess, ep, job, max(0, int(g('from') or 0)), max(1, int(g('min') or 1)), max(1, int(g('max') or 8)), wait=min(25.0, max(0.2, float(g('wait') or 22))), ah=float(g('ah')) if g('ah') else None, kb=float(g('kb') or 0))
                 except Exception as e: traceback.print_exc(); return self._send(500, {'error': 'mix failed: ' + repr(e)[:120]})
                 self.send_response(200 if b else 204); self.send_header('Content-Type', 'audio/mpeg'); self.send_header('Content-Length', str(len(b)))
                 self.send_header('X-Mix', json.dumps(meta)); self.send_header('Access-Control-Expose-Headers', 'X-Mix')

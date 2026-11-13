@@ -833,27 +833,30 @@ function mixMake(meta, blob) {
   return { from: meta.from, to: meta.to, durs: meta.durs, gap: meta.gap, end: !!meta.end, starts, len: t, url: blob ? URL.createObjectURL(blob) : '' };
 }
 /** one piece from the relay: lines [from, …) — it answers once `min` lines are voiced (or `wait` s have passed and at least one is). */
-async function mixGet(sid, n, job, from, min, max, wait) {
+async function mixGet(sid, n, job, from, min, max, wait, ah) {
   for (let a = 0; a < 2; a++) {
     try {
       const t0 = performance.now();
-      const res = await apiFetch(() => { const u = new URL(apiUrl('api/mix')); const q = u.searchParams; q.set('k', TOKEN); q.set('sid', sid); q.set('n', n); if (job) q.set('job', job); q.set('from', from); q.set('min', min); q.set('max', max); q.set('wait', wait.toFixed(1)); return u.toString(); }, {}, 45000);
+      const res = await apiFetch(() => { const u = new URL(apiUrl('api/mix')); const q = u.searchParams; q.set('k', TOKEN); q.set('sid', sid); q.set('n', n); if (job) q.set('job', job); q.set('from', from); q.set('min', min); q.set('max', max); q.set('wait', wait.toFixed(1)); const kb = mixRate(); if (kb) { q.set('kb', kb.toFixed(0)); if (ah != null) q.set('ah', Math.max(0, ah).toFixed(1)); } return u.toString(); }, {}, 45000);
       if (res.status === 404 || res.status >= 500) throw new Error('mix ' + res.status);
       const meta = JSON.parse(res.headers.get('X-Mix') || 'null'); if (!meta) throw new Error('no meta');
       const b = res.status === 200 ? await res.blob() : null;
       // how fast pieces come down this link (KB/s, the relay's own waiting taken out): the next one is asked for that much earlier
-      if (b && b.size > 20000 && meta.held != null) { const dl = (performance.now() - t0) / 1000 - meta.held; if (dl > 0.05) { const r = b.size / 1024 / dl; MIX.rate = MIX.rate ? MIX.rate * 0.5 + r * 0.5 : r; } }
+      if (b && b.size > 20000 && meta.held != null) { const dl = (performance.now() - t0) / 1000 - meta.held; if (dl > 0.05) { const r = b.size / 1024 / dl; MIX.rate = !MIX.rate ? r : r < MIX.rate ? MIX.rate * 0.3 + r * 0.7 : MIX.rate * 0.6 + r * 0.4; } }
       return mixMake(meta, b && b.size ? (b.type ? b : new Blob([b], { type: 'audio/mpeg' })) : null);
     } catch (e) { if (a === 0) await sleep(500); }
   }
   return null;
 }
-function mixFetch(ss, ep, from, min, max, wait) {
+/** KB/s a piece comes down at: measured on the pieces so far; before the first one, the page's own files (0 = unknown, a good link) */
+const mixRate = () => MIX.rate || (NET.kbs > 0 && NET.kbs < 150 ? NET.kbs : (slowNet() ? 40 : 0));
+function mixFetch(ss, ep, from, min, max, wait, ah) {
   const key = MIX.key, k = from;
   if (MIX.inflight.has(k)) return MIX.inflight.get(k);
-  const p = mixGet(ss.sid, ep.n, mixJobOf(ss, ep), from, min, max, wait).then((c) => {
+  const p = mixGet(ss.sid, ep.n, mixJobOf(ss, ep), from, min, max, wait, ah).then((c) => {
     if (MIX.key !== key) { if (c && c.url) URL.revokeObjectURL(c.url); return null; }
     MIX.inflight.delete(k);
+    setTimeout(() => { if (P.ep === ep && P.clip && !MIX.inflight.size) mixAhead(ss, ep); }, 0);   // 11-13 (4) whatever was in flight is done: the chain of pieces goes on (a stray request used to leave it stopped until the episode ran dry)
     if (!c) { MIX.fails += 1; return null; }
     MIX.fails = 0;
     if (c.url && !MIX.chunks.some((x) => x.from === c.from)) { MIX.chunks.push(c); MIX.chunks.sort((x, y) => x.from - y.from); }
@@ -895,8 +898,9 @@ function mixAhead(ss, ep) {
   /* 11-13 (2) on a slow link a 30 s piece (≈250 KB) takes 5 s to come down: asked for 2.5 s before the end it arrived late and
    * the episode stopped for music. The lead now covers the download at the speed the last pieces came (≈25 s of audio), and
    * pieces are kept shorter there. */
-  const lead = 2.5 + (MIX.rate ? clamp(200 / MIX.rate, 0, 9) : (slowNet() ? 5 : 0));
-  mixFetch(ss, ep, from, left, MIX.rate && MIX.rate < 80 ? 5 : 8, Math.max(0.5, mixSecsAhead() / (S.speed || 1) - lead)).then((c) => {
+  const kb = mixRate(), ah = mixSecsAhead() / (S.speed || 1);
+  const lead = 2.5 + (kb ? clamp(200 / kb, 0, 9) : 0);
+  mixFetch(ss, ep, from, left, kb && kb < 80 ? 5 : 8, Math.max(0.5, ah - lead), ah).then((c) => {
     if (P.ep !== ep) return;
     if (c && c.to > c.from) { if (P.waiting && P.want) liveAdvance(); else mixAhead(ss, ep); }
     else if (!(c && c.end)) setTimeout(() => { if (P.ep === ep) mixAhead(ss, ep); }, c ? 400 : 1500);
@@ -929,8 +933,12 @@ function mixAdvance() {
   const e0 = ep, i0 = P.idx;
   setTimeout(() => { if (P.ep === e0 && P.idx === i0 && P.waiting && P.want) keepAlive(); }, 900);   // no dead air while the piece is on its way
   const w = P.idx === 0 && MIXWARM.get(mixJobOf(ss, ep));
+  /* 11-13 (4) the opening piece is already on its way (asked while the bridge was talking): wait for that one. A second call
+   * here used to ask for it again — two downloads of the same piece side by side on a slow link, and the stray one kept the
+   * next piece from being asked for until the episode ran dry (the 7 s of music in mid-episode). */
+  if (w && !w.c && w.p && w.asked && Date.now() - w.asked < 15000) return;
   if (w && !w.c && w.p && !w.asked) {
-    w.asked = true;
+    w.asked = Date.now();
     w.p.then((c) => { if (c && MIX.key === ss.sid + ':' + e0.n && !MIX.chunks.some((x) => x.from === 0)) { MIX.chunks.push(c); MIX.chunks.sort((x, y) => x.from - y.from); MIXWARM.delete(mixJobOf(ss, e0)); } if (P.ep === e0 && P.waiting && P.want) liveAdvance(); });
     return;
   }
@@ -948,6 +956,7 @@ function mixAdvance() {
 function mixTick() {
   const c = P.clip, ep = P.ep;
   if (!c || !ep || P.aux || P.waiting || P.cur !== c.url) return;
+  if (!MIX.inflight.size && Date.now() - (MIX.lookAt || 0) > 1000) { MIX.lookAt = Date.now(); const ss = getSess(P.id); if (ss) mixAhead(ss, ep); }
   const t = audio.currentTime || 0; let j = -1;
   for (let x = 0; x < c.starts.length; x++) if (c.durs[x] > 0 && (j < 0 || c.starts[x] <= t + 0.03)) j = x;
   if (j < 0 || c.from + j === P.idx) return;
@@ -961,7 +970,7 @@ const lineD = () => { const c = P.clip; if (!c || P.cur !== c.url) return audio.
 
 /** Start an episode (produced: one mp3 + cues; live: sequential lines). */
 function playEpisode(id, ep, opts = {}) {
-  P.clip = null;
+  P.clip = null; P.eoe = null;
   POS.lead = POS.t0 && POS.n === ep.n ? clamp((Date.now() - POS.t0) / 1000, 0, 90) : 0; POS.t0 = 0; POS.n = 0; POS.endAt = 0;
   cancelUpNext(); stopAutoCountdown(); hfStop(true);
   P.id = id; P.ep = ep; P.needChoice = false; P.waiting = false; P.loading = false;
@@ -1043,7 +1052,7 @@ audio.addEventListener('ended', () => {
     return;
   }
   if (!P.cur || audio.src.startsWith('data:')) return;
-  if (!P.ep) return;
+  if (!P.ep || P.needChoice) return;
   if (P.ep.kind === 'live') {
     if (P.clip && P.cur === P.clip.url) {   // a mixed piece is over: on to the next one (already local, as a rule)
       P.idx = P.clip.to; P.clip = null; P.waiting = true; updatePlayerUI(); setTimeout(liveAdvance, 20); return;
@@ -1522,6 +1531,11 @@ function playStored(id, n) {
 function onEpisodeEnd() {
   const ss = getSess(P.id);
   const ep = P.ep; if (!ss || !ep) return;
+  /* 11-13 (4) the end of an episode was sometimes handled twice (the second call a moment after the first): the second one cut
+   * off the question the first had just started, and after that nobody opened the mic — the question played, "Listening"
+   * showed, and the story sat there on its music. Once per episode now. */
+  if (P.needChoice && P.eoe === ep) { if (Q.has('debug')) console.log('[lk] EOE-TWICE ' + new Error().stack.split('\n').slice(1, 9).map((x) => x.trim().replace(/https?:\/\/[^ )]*\//, '')).join(' < ')); diag('eoe-twice', { ep: ep.n }); return; }
+  P.eoe = ep;
   P.want = false; P.waiting = false;
   if (ep.kind === 'live') { ep.dur = Object.values(ep.durs || {}).reduce((a, b) => a + b, 0) || ep.dur; }
   const last = ss.eps[ss.eps.length - 1];
@@ -2079,8 +2093,8 @@ setInterval(auxTick, 120);
 function playAuxSoon(url, opt, ms) {
   if (!AUX_OK || MOCK || !url || auxNow(url)) return playAux(url);
   keepAlive();
-  const tok = P.auxTok = {};
-  return Promise.race([auxPrep(url, opt), sleep(ms)]).then(() => { if (P.auxTok !== tok || !P.aux || !(audio.loop || P.auxTail)) return undefined; return playAux(url); });
+  const tok = P.auxTok = {}, g0 = P.gen, e0 = P.ep, n0 = P.needChoice;
+  return Promise.race([auxPrep(url, opt), sleep(ms)]).then(() => { if (P.auxTok !== tok || !P.aux || !(audio.loop || P.auxTail) || P.gen !== g0 || P.ep !== e0 || P.needChoice !== n0) return undefined; return playAux(url); });
 }
 const chimedNow = () => P.aux && P.auxTail && P.auxEar && Date.now() - (P.auxEarAt || 0) < 1500;   // the chime was part of the question's track
 function keepAlive() {
@@ -2203,7 +2217,7 @@ async function startHandsFree() {
   const ss = getSess(P.id), ep = P.ep; if (!ss || !ep) return;
   hfStop(true);
   HF.key = (ss.sid || 'x') + ':' + ep.n;
-  const key = HF.key;
+  const key = HF.key, run = HF.run = {};   // started again (the question is replayed): the earlier run stops at its next step
   HF.phase = 'ask'; HF.ask = ''; paintHF();
   P.want = false; P.needChoice = true;
   let d = null;
@@ -2211,10 +2225,10 @@ async function startHandsFree() {
   try { d = await Promise.race([ss.sid ? fetchCue(ss.sid, ep.n) : null, sleep(8000).then(() => null)]); } catch (e) { d = null; }
   if (d && d.url && AUX_OK && !MOCK && !auxNow(d.url)) { try { await Promise.race([auxPrep(d.url, { bed: 'lo', ear: true }), sleep(5000)]); } catch (e) { /* the short clip then */ } }
   clearTimeout(quietT);
-  if (HF.key !== key || !P.needChoice) return;
+  if (HF.key !== key || HF.run !== run || !P.needChoice) return;
   if (d && d.text) { HF.ask = d.text; paintHF(); }
   if (d && d.url) await playAux(d.url);  // the narrator asks (on the story's own audio element)
-  if (HF.key !== key || !P.needChoice || HF.phase !== 'ask') return;
+  if (HF.key !== key || HF.run !== run || !P.needChoice || HF.phase !== 'ask') return;
   hfListen();
 }
 /** Lock screen at a choice point (11-09): the page can't hear levels, so instead of recording the whole 6.5 s window,
