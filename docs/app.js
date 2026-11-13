@@ -4532,7 +4532,11 @@ function renderDetailPane() {
         </div></div>
       <div class="about-block"><h4>Genres</h4><div class="tags" style="justify-content:flex-start">${(s.genres || []).map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div></div>`;
     quoteMark();
-    if (!MOCK) cast.filter((c) => c.quote && c.key).slice(0, slowNet() ? 2 : 12).forEach((c) => quoteGet(s.id, c.key));   // every line on this page is fetched now (small files next to the page): a tap plays at once
+    if (!MOCK) {   // every line on this page is fetched now (small files next to the page): a tap plays at once. Slow link: one after the other, in the order they are listed
+      const rows = cast.filter((c) => c.quote && c.key).slice(0, 12);
+      if (slowNet()) rows.reduce((p, c) => p.then(() => quoteGet(s.id, c.key)), Promise.resolve());
+      else rows.forEach((c) => quoteGet(s.id, c.key));
+    }
   } else {
     const others = weave(SERIES.filter((x) => x.id !== s.id).sort((a, b) => sharedGenres(b, s) - sharedGenres(a, s)));
     box.innerHTML = `<div class="mlt-grid">${others.map((x) => card(x)).join('')}</div>`;
