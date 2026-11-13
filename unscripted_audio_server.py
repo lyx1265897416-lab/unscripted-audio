@@ -259,7 +259,7 @@ def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
     sd = (VOICES.get(series) or {}).get(who, {}).get('seed') if who != 'NARR' else None
     if sd:   # 11-13 这个角色有她定好的专属音色（咪）：第 1 集、实时集、通话、试听都走这一个，不管调用方要哪个引擎
         model = 'bytedance/seed-speech-tts-2.0'
-        params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', text).strip(), voice=sd['voice'], pitch=sd.get('pitch', 0), speed=sd.get('speed', 1.0), language=lang,
+        params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', text).strip(), voice=sd['voice'], pitch=sd.get(f'pitch_{lang}', sd.get('pitch', 0)), speed=sd.get('speed', 1.0), language=lang,
                       sample_rate=48000, output_format='mp3', voice_instruction=sd.get(f'instr_{lang}') or sd.get('instr_en') or '')
     err = None
     for attempt in range(3):
@@ -276,7 +276,7 @@ def tts(series, who, text, lang, engine='v4', pool=None, prio=0, started=None):
     raise RuntimeError(f'tts failed: {str(err)[:200]}')
 
 
-def tts_hedged(series, who, text, lang, n, engine='v4', pool=None, prio=0):
+def tts_hedged(series, who, text, lang, n, engine='v4', pool=None, prio=0, info=None):
     """同一句发 n 条，谁先好用谁"""
     done = threading.Event(); box = {}; errs = []; started = threading.Event()
 
@@ -298,6 +298,7 @@ def tts_hedged(series, who, text, lang, n, engine='v4', pool=None, prio=0):
     # 11-13 (4) 补发从“这一句拿到通道”起算：还在排队的句子不再往队里加第二、第三路（原来排队 9 秒就补发，越堵越补）
     t_q = time.time()
     while not started.is_set() and not done.is_set() and time.time() - t_q < 60: started.wait(0.2)
+    if info is not None: info['q'] = round(time.time() - t_q, 1)   # 等通道等了多久
     if not done.wait(9):
         threading.Thread(target=late, args=(engine,), daemon=True).start()
         if not done.wait(7):
@@ -871,12 +872,18 @@ def run_episode(job, sess, user_msg, spec=None, her=None, gate=None):
         try:
             if gate and not gate['tts'].is_set() and not gate['tts'].wait(26): ep['lines'][i]['url'] = ''; return   # 预写的：文字还可能变，先不花配音；一直没放行就不配
             eng = 'flash' if not spec else sess.get('tts', 'v4')
-            if not spec and i >= 3: first_ev.wait(4)  # 11-10：二十多句同时提交会在 Waku 排队、把第一句也拖到 10 秒；第 4 句起等第一句配好（最多 4 秒）再提交  # 11-09 她说完现写的那集：整集用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒），句句赶在播放前配好
+            slow_voice = bool((VOICES.get(series) or {}).get(who, {}).get('seed')) if who != 'NARR' else False   # 11-13 咪的专属音色一句约 4 秒（旁白 1–3 秒）：不等第一句、排队时靠前两句
+            if not spec and i >= 3 and not slow_voice: first_ev.wait(4)  # 11-10：二十多句同时提交会在 Waku 排队、把第一句也拖到 10 秒；第 4 句起等第一句配好（最多 4 秒）再提交  # 11-09 她说完现写的那集：整集用低延迟配音（同一批声线，约 3.4 秒 vs 5–7 秒），句句赶在播放前配好
             if job.get('_cancel'): ep['lines'][i]['url'] = ''; return
             # 她说完现写的那集：前三句走专用配音通道（不跟后台预写、过渡句排队；11-09 实测排队时第一句要 7–8 秒，单独 3–4 秒）
             # 11-10 卡顿：后台在预写下一集的两个分支（30 多句配音），正在播的这集第 4 句起跟它们排同一个队就会断——整集都走专用通道，第 4–6 句也两路
-            u = tts_hedged(series, who, text, lang, (2 if spec else 3) if first else (3 if (i == 1 and not spec) else 2 if (i < 6 and not spec) or (spec and i == SPEC_LINES) else 1), eng,
-                           pool=CALL_POOL if (not spec or job.get('_committed')) else None, prio=i)  # 她已经选了这条预写分支：剩下的句子也走专用通道；prio：先要播的句子先拿通道
+            # 11-13 (7) 咪的专属音色一句 4–13 秒：原来和别的句子一样一次发两三路、都占专用通道，把旁白挤在后面排队（整集配完从 15 秒拖到 37 秒）。
+            # 现在她的句子只发一路（开头第一句两路）、走公共通道，旁白照旧走专用通道
+            hn = (2 if first else 1) if slow_voice else ((2 if spec else 3) if first else (3 if (i == 1 and not spec) else 2 if (i < 6 and not spec) or (spec and i == SPEC_LINES) else 1))
+            inf = {}; job['t'][f's{i}'] = round(time.time() - t0, 1)   # 这一句从第几秒开始配
+            u = tts_hedged(series, who, text, lang, hn, eng,
+                           pool=None if slow_voice else (CALL_POOL if (not spec or job.get('_committed')) else None), prio=i - (2 if slow_voice else 0), info=inf)
+            job['t'][f'q{i}'] = inf.get('q', 0)
             ep['lines'][i]['url'] = u
             if first: first_ev.set()
             threading.Thread(target=cache_line, args=(u,), daemon=True).start()

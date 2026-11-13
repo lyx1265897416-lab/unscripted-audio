@@ -149,10 +149,11 @@
     "voice": "mindy_en_es_id_pt_zh",
     "pitch": 4,
     "speed": 0.92,
-    "instr_en": "Perform a fictional tiny preschool-age kitten character, sounding much younger than a teen or adult: very small, innocent, naturally childlike light head resonance, soft rounded vowels, short childlike phrasing. Clear intelligible American English. Natural intimate dialogue, not narration or an advertisement. Avoid mature chest resonance, husky whisper, shrill squeaking, cartoon falsetto, robotic effects, singing, meowing, music or added words. Sound about four years old, warm, milky-soft. ",
-    "instr_zh": "Perform a fictional tiny preschool-age kitten character, sounding much younger than a teen or adult: very small, innocent, naturally childlike light head resonance, soft rounded vowels, short childlike phrasing. Clear intelligible Mandarin Chinese. Natural intimate dialogue, not narration or an advertisement. Avoid mature chest resonance, husky whisper, shrill squeaking, cartoon falsetto, robotic effects, singing, meowing, music or added words. Sound about four years old, warm, milky-soft. "
+    "instr_en": "Perform a fictional tiny preschool-age kitten character, sounding much younger than a teen or adult: very small, innocent, naturally childlike light head resonance. Say every word clearly and separately, with crisp consonants and fully pronounced word endings, like a small child carefully saying each word; bright, clear, easy-to-understand American English. Natural intimate dialogue, not narration or an advertisement. Avoid mumbling, slurring, swallowed syllables, mature chest resonance, husky whisper, shrill squeaking, cartoon falsetto, robotic effects, singing, meowing, music or added words. Sound about four years old, warm and bright. ",
+    "instr_zh": "Perform a fictional tiny preschool-age kitten character, sounding much younger than a teen or adult: very small, innocent, naturally childlike light head resonance, soft rounded vowels, short childlike phrasing. Clear intelligible Mandarin Chinese. Natural intimate dialogue, not narration or an advertisement. Avoid mature chest resonance, husky whisper, shrill squeaking, cartoon falsetto, robotic effects, singing, meowing, music or added words. Sound about four years old, warm, milky-soft. ",
+    "pitch_en": 3
    },
-   "_seed说明": "11-13 她要求：咪用她剧集里定好的音色（咪替我上班 / 情景喜剧同款：seed-speech-tts-2.0 的 mindy 声线、音高 +4、语速 0.92、四岁左右的幼童声），第 1 集、实时集、通话、介绍页试听都用这一个。"
+   "_seed说明": "11-13 她要求：咪用她剧集里定好的音色（咪替我上班 / 情景喜剧同款：seed-speech-tts-2.0 的 mindy 声线、音高 +4、语速 0.92、四岁左右的幼童声），第 1 集、实时集、通话、介绍页试听都用这一个。 11-13 (2) 英文原参数咬字含糊（本机识别只对 65–74% 的词，常吞掉句首）：英文改成音高 +3、指令里要求逐字咬清楚（识别 81–91%，基频仍在 356–372 Hz）；中文不变（音高 +4，识别全对）。"
   },
   "Store Clerk": {
    "zh": "tOuLUAIdXShmWH7PEUrU",

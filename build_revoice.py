@@ -11,12 +11,32 @@ ROOT = Path(__file__).resolve().parent; CACHE = ROOT / 'cache' / 'ep1'
 VOICES = json.load(open(ROOT / 'data' / 'voices.json'))
 
 def say(sd, text, lang, out):
-    params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', text).strip(), voice=sd['voice'], pitch=sd.get('pitch', 0), speed=sd.get('speed', 1.0), language=lang,
+    params = dict(text=re.sub(r'\[[^\]]*\]\s*', '', text).strip(), voice=sd['voice'], pitch=sd.get(f'pitch_{lang}', sd.get('pitch', 0)), speed=sd.get('speed', 1.0), language=lang,
                   sample_rate=48000, output_format='mp3', voice_instruction=sd.get(f'instr_{lang}') or sd.get('instr_en') or '')
     for k in range(3):
         r = subprocess.run(['waku', 'gen', 'run', 'bytedance/seed-speech-tts-2.0', '--capability', 'multimodal.generate.audio', '--params', json.dumps(params, ensure_ascii=False), '--wait', '--out', str(out)], capture_output=True, text=True, timeout=180)
         if out.exists() and out.stat().st_size > 3000: return True
     print('FAILED', text, r.stderr[-200:]); return False
+
+TAKES = int(sys.argv[sys.argv.index('--takes') + 1]) if '--takes' in sys.argv else 1
+def clarity(path, text, lang):
+    """这一遍配音有多少词能被本机识别按顺序认出来（0–1）；角色名 Mii 认成 me 也算对"""
+    import urllib.request as U
+    try:
+        r = json.loads(U.build_opener(U.ProxyHandler({})).open(U.Request('http://127.0.0.1:8917/asr', data=open(path, 'rb').read(), headers={'Content-Type': 'audio/mpeg', 'X-Lang': lang, 'X-Partial': '1'}), timeout=30).read())
+    except Exception: return 0.5
+    if lang == 'zh':
+        z = lambda t: re.sub(r'[^\u4e00-\u9fffA-Za-z]', '', t or '').replace('绵', '咪').replace('米', '咪').replace('眯', '咪')
+        ref, hyp = z(text), z(r.get('text')); j = 0; hit = 0
+        for ch in ref:
+            k = hyp.find(ch, j)
+            if k >= 0: j = k + 1; hit += 1
+        return hit / max(1, len(ref))
+    n = lambda t: re.sub(r"[^a-z' ]", ' ', (t or '').lower().replace('mii', 'me').replace('mee', 'me')).split()
+    ref, hyp = n(text), n(r.get('text')); j = 0; hit = 0
+    for w in ref:
+        if w in hyp[j:]: j = hyp.index(w, j) + 1; hit += 1
+    return hit / max(1, len(ref))
 
 def run(sid, who, lang):
     sd = VOICES[sid][who]['seed']; ej = CACHE / f'{sid}.{lang}.json'; parts = CACHE / f'{sid}.{lang}.parts'
@@ -28,8 +48,19 @@ def run(sid, who, lang):
     def one(i):
         p = parts / f'{i:03d}.mp3'; new = parts / f'{i:03d}.new.mp3'
         if not (old / p.name).exists(): shutil.copy(p, old / p.name)
-        if say(sd, cues[i]['text'], lang, new): new.replace(p); return i
-        return None
+        # --takes N：每句配 N 遍，用本机识别挑咬字最清楚的一遍（幼童声偶尔吞掉句首的词）
+        best = None
+        for k in range(TAKES):
+            t = parts / f'{i:03d}.take{k}.mp3'
+            if not say(sd, cues[i]['text'], lang, t): continue
+            sc = clarity(t, cues[i]['text'], lang) if TAKES > 1 else 1.0
+            if best is None or sc > best[0]: best = (sc, t)
+            if sc >= 0.99: break
+        if not best: return None
+        best[1].replace(p)
+        for t in parts.glob(f'{i:03d}.take*.mp3'): t.unlink()
+        print('  line', i, 'clarity', round(best[0], 2), cues[i]['text'][:40], flush=True)
+        return i
     with cf.ThreadPoolExecutor(4) as ex: done = [x for x in ex.map(one, idx)]
     if None in done: raise SystemExit('some lines failed')
     t = 0.8
