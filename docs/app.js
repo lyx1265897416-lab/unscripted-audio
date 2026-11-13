@@ -797,7 +797,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), get PS() { return PS; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), openUnlockSheet: (id, n) => openUnlockSheet(id, n, () => {}), showIncoming: (id, who, sid) => showIncoming(id, who, sid), callersOf: (id) => callersOf(byId(id)).map((c) => c.key), get S() { return S; }, get ms() { const m = navigator.mediaSession && navigator.mediaSession.metadata; return m ? { title: m.title, artist: m.artist, album: m.album } : null; }, get PS() { return PS; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -1009,16 +1009,31 @@ function logHistory(id, ep) {
   save();
 }
 
-/* Media Session */
+/* Media Session — what the lock screen shows.
+ * 11-13 the card used to say "Ep N · title" whatever was going on. Hands-free listening is mostly a locked phone, so it now
+ * says where she is: playing an episode / her turn to answer (with the question) / her episode being written / on a call. */
+let msKey = '';
 function setMediaSession() {
-  if (!('mediaSession' in navigator) || !P.ep) return;
-  const s = byId(P.id); if (!s) return;
+  if (!('mediaSession' in navigator)) return;
+  const onCall = callActive() && C;
+  const s = byId((onCall && C.id) || P.id); if (!s) return;
+  let title, artist;
+  if (onCall) {
+    const nm = shortName(C.caller) || C.who || '';
+    title = C.phase === 'incoming' ? tz(`${nm} is calling`, `${nm} 来电`) : !C.t0 ? tz(`Calling ${nm}…`, `正在呼叫 ${nm}…`) : tz(`On call · ${nm}`, `通话中 · ${nm}`);
+    artist = s.title;
+  } else if (!P.ep) return;
+  else if (P.gen) { title = tz('Writing your episode…', '正在为你写这一集…'); artist = s.title; }
+  else if (P.needChoice) {
+    title = modeOf() === 'voice' ? tz('Your move · say your answer', '轮到你了 · 直接说出你的回答') : modeOf() === 'auto' ? tz('The story carries on…', '故事自己往下走…') : tz('Your move', '轮到你了');
+    artist = cleanText(P.ep.prompt || '') || s.title;
+  } else { title = tz(`Ep ${P.ep.n} · ${P.ep.title || ''}`, `第 ${P.ep.n} 集 · ${P.ep.title || ''}`); artist = s.title; }
+  const key = title + '|' + artist + '|' + s.id;
+  if (key === msKey) return;
+  msKey = key;
   try {
     const art = new URL(coverOf(s), location.href).toString();
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: `Ep ${P.ep.n} · ${P.ep.title || ''}`, artist: s.title, album: BRAND,
-      artwork: [{ src: art, sizes: '720x1280', type: 'image/jpeg' }],
-    });
+    navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album: BRAND, artwork: [{ src: art, sizes: '720x1280', type: 'image/jpeg' }] });
   } catch (e) { /* ignore */ }
 }
 if ('mediaSession' in navigator) {
@@ -3198,6 +3213,7 @@ function stopCallMic() { if (callRecog) { const r = callRecog; callRecog = null;
 
 /* ---------- call screens ---------- */
 function hideCall() {
+  setTimeout(setMediaSession, 0);   // lock-screen card goes back to what the story is doing
   const el = $('#call');
   el.classList.remove('on');
   setTimeout(() => { if (!C) { el.hidden = true; el.innerHTML = ''; el.dataset.key = ''; } }, 320);
@@ -3254,6 +3270,7 @@ function updateCallTimer() {
   if (C.phase === 'talking' || C.phase === 'your-turn' || C.phase === 'thinking') st.textContent = fmtTime((Date.now() - C.t0) / 1000);
 }
 function renderCallUI(force) {
+  setMediaSession();
   const call = C; const el = $('#call');
   if (!call || el.hidden || call.phase === 'ended') return;
   const name = shortName(call.caller) || call.who;
@@ -4520,6 +4537,7 @@ setInterval(() => { const pl = $('#player'); if (pl && pl.dataset.built && P.id)
 audio.addEventListener('seeking', () => { VS.fastUntil = Date.now() + 1500; if (P.ep && !P.aux && playerOpen) renderVisual(); });
 let lastSubKey = '';
 function updatePlayerUI(force) {
+  setMediaSession();
   renderMiniLight();
   const el = $('#player'); if (!el.dataset.built) return;
   const s = byId(P.id); if (!s) return;
