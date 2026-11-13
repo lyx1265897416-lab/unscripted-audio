@@ -212,8 +212,8 @@ def tiny_answer(text):
     return len(z) <= 3 if re.search(r'[\u4e00-\u9fff]', z) else len(re.findall(r"[A-Za-z']+", text or '')) <= 2
 
 
-def transcribe(path, hint, ctx='', fast=False, choice=False):
-    r = _transcribe(path, hint, ctx, fast)
+def transcribe(path, hint, ctx='', fast=False, choice=False, eng=False):
+    r = _transcribe(path, hint, ctx, fast, eng)
     txt0 = (r.get('text') or '').strip()
     # 已经像字母回答（含“选地/选臂/上臂”这类同音字，中转按同音字认）就不再等 MLX（11-09 MLX 偶尔 2–4 秒，锁屏时拖到超时）
     if (choice and MLX and txt0 and tiny_answer(txt0) and not LETTERISH.search(txt0.lower())
@@ -229,9 +229,15 @@ def transcribe(path, hint, ctx='', fast=False, choice=False):
     return r
 
 
-def _transcribe(path, hint, ctx='', fast=False):
+def _transcribe(path, hint, ctx='', fast=False, eng=False):
     with LOCK:
         t = time.time(); sv = None
+        if eng and PK:   # 11-13 边说边认的中间结果、上一遍已经是英文：直接用英文模型，不先判语言（每遍快 0.1–0.2 秒）；最终那一遍照常
+            try:
+                text = transcribe_pk(_pcm16k(path))
+                if JUNK.search(text): text = ''
+                return {'text': text, 'lang': 'en', 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'parakeet'}
+            except Exception as e: print('parakeet failed', repr(e)[:160], flush=True)
         if SV:
             try:
                 text, lang = transcribe_sv(path, hint)
@@ -315,7 +321,7 @@ class H(BaseHTTPRequestHandler):
             if g is None:
                 r = {'text': '', 'lang': hint or 'zh', 'gate': why, 'ms': int((time.time() - t0) * 1000)}
             else:
-                r = transcribe(g, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1')
+                r = transcribe(g, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1', eng=self.headers.get('X-Eng') == '1' and self.headers.get('X-Partial') == '1')
                 r['gate'] = why; r['ms'] = int((time.time() - t0) * 1000)
             if self.headers.get('X-Partial') != '1': keep_sample(p, data, r)   # 边说边认的中间结果不留样本
         except Exception as e:

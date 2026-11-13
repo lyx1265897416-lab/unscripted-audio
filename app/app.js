@@ -830,7 +830,7 @@ const mixJobOf = (ss, ep) => (ss && ss.job && ss.job.n === ep.n ? ss.job.id : ''
 function mixMake(meta, blob) {
   const starts = []; let t = 0;
   meta.durs.forEach((d) => { starts.push(t); if (d > 0) t += d + meta.gap; });
-  return { from: meta.from, to: meta.to, durs: meta.durs, gap: meta.gap, end: !!meta.end, starts, len: t, url: blob ? URL.createObjectURL(blob) : '' };
+  return { from: meta.from, to: meta.to, durs: meta.durs, tm: meta.tm || [], gap: meta.gap, end: !!meta.end, starts, len: t, url: blob ? URL.createObjectURL(blob) : '' };
 }
 /** one piece from the relay: lines [from, …) — it answers once `min` lines are voiced (or `wait` s have passed and at least one is). */
 async function mixGet(sid, n, job, from, min, max, wait, ah) {
@@ -881,6 +881,20 @@ function mixUse(ss, ep) {
   const w = MIXWARM.get(mixJobOf(ss, ep));
   if (w && w.c) { MIX.chunks.push(w.c); MIXWARM.delete(mixJobOf(ss, ep)); }
 }
+/* 11-13 (5) "the words run a little behind the voice": a line used to change only on the player's own time event (4 a second),
+ * then slide in over 0.65 s, and inside a line the highlight was spread evenly over the characters, pauses or not.
+ * Now the lyrics are driven by a 60 ms tick, the line changes LY_LEAD ahead of its first word, the slide is short, and the
+ * highlight follows a timetable the relay measures from the audio (`tm`: by second t, fraction f of the line is spoken —
+ * speech start / end and the pauses at commas and full stops). */
+const LY_LEAD = 0.12;
+/** fraction of a line spoken by second t of it, from the relay's timetable [[f, t], …] */
+function tmFrac(tm, t) {
+  if (t <= tm[0][1]) return tm[0][0];
+  for (let i = 1; i < tm.length; i++) {
+    if (t <= tm[i][1]) { const a = tm[i - 1], b = tm[i]; return b[1] > a[1] ? a[0] + (b[0] - a[0]) * ((t - a[1]) / (b[1] - a[1])) : b[0]; }
+  }
+  return 1;
+}
 const mixSecsAhead = () => {   // seconds of story already on the phone from the playhead on
   const c = P.clip; if (!c) return 0;
   let t = Math.max(0, c.len - (audio.currentTime || 0)), to = c.to;
@@ -921,6 +935,7 @@ function mixAdvance() {
     const at = c.starts[P.idx - c.from] || 0;
     P.waiting = false; P.blobWait = null;
     c.durs.forEach((d, j) => { if (d) ep.durs[c.from + j] = d; });
+    ep.tm = ep.tm || {}; (c.tm || []).forEach((m, j) => { if (m && m.length > 1) ep.tm[c.from + j] = m; });
     P.lineStart = 0; for (let i = 0; i < P.idx; i++) P.lineStart += ep.durs[i] || 0;
     if (P.clip === c && P.cur === c.url && !P.aux && !audio.error && audio.readyState > 0) { try { audio.currentTime = at + 0.01; } catch (e) { /* ignore */ } }
     else { P.clip = c; loadSrc(c.url, at > 0.05 ? at : 0); }
@@ -958,7 +973,7 @@ function mixTick() {
   if (!c || !ep || P.aux || P.waiting || P.cur !== c.url) return;
   if (!MIX.inflight.size && Date.now() - (MIX.lookAt || 0) > 1000) { MIX.lookAt = Date.now(); const ss = getSess(P.id); if (ss) mixAhead(ss, ep); }
   const t = audio.currentTime || 0; let j = -1;
-  for (let x = 0; x < c.starts.length; x++) if (c.durs[x] > 0 && (j < 0 || c.starts[x] <= t + 0.03)) j = x;
+  for (let x = 0; x < c.starts.length; x++) if (c.durs[x] > 0 && (j < 0 || c.starts[x] <= t + LY_LEAD)) j = x;
   if (j < 0 || c.from + j === P.idx) return;
   P.idx = c.from + j;
   P.lineStart = 0; for (let i = 0; i < P.idx; i++) P.lineStart += (ep.durs && ep.durs[i]) || 0;
@@ -5073,7 +5088,7 @@ function lyricState() {
     cur = li >= 0 ? at[li] : -1;
     if (!P.jobDone && !P.needChoice) { const w = add({ k: 'sys', text: 'writing next lines…' }); if (cur < 0) cur = w; }
   } else {
-    const cues = ep.cues || [], base = it.length, t = audio.currentTime || 0;
+    const cues = ep.cues || [], base = it.length, t = (audio.currentTime || 0) + (P.aux ? 0 : LY_LEAD);
     cues.forEach((c, i) => add({ k: 'line', who: c.who, text: cleanText(c.text), i }));
     if (!cues.length) cur = add({ k: 'line', who: 'NARR', text: s ? s.hook : '', i: -1 });
     else {
@@ -5170,8 +5185,13 @@ function lyProgress() {
   const o = LY.it[LY.cur], ep = P.ep; if (!o || o.k !== 'line' || !ep) return 0;
   if (P.needChoice || P.gen) return 1;
   if (P.aux) return 0;
-  if (ep.kind === 'live') return !P.waiting && lineD() ? clamp((lineT() / lineD()) * 1.04, 0, 1) : 0;
+  if (ep.kind === 'live') {
+    if (P.waiting || !lineD()) return 0;
+    const tm = ep.tm && ep.tm[P.idx];
+    return tm && o.i === P.idx ? clamp(tmFrac(tm, lineT() + LY_LEAD), 0, 1) : clamp((lineT() / lineD()) * 1.04, 0, 1);
+  }
   const c = (ep.cues || [])[o.i]; if (!c) return 0;
+  if (c.tm && c.tm.length > 1) return clamp(tmFrac(c.tm, (audio.currentTime || 0) - c.s + LY_LEAD), 0, 1);
   return clamp((((audio.currentTime || 0) - c.s) / Math.max(0.4, c.e - c.s)) * 1.08, 0, 1);
 }
 function karaoke() {
@@ -5193,9 +5213,17 @@ function lySeek(j) {
 if (NARRA) {
   setInterval(() => {
     if (!playerOpen) return;
+    if (isPlaying() && !P.aux && !P.waiting && P.ep && !P.needChoice && !P.gen && P.scrubF == null) {
+      if (P.ep.kind === 'live') mixTick();   // which line of the piece is being spoken (it repaints when the line changes)
+      else {   // one file with cue times: has the line under the playhead changed?
+        const cues = P.ep.cues || [], t = (audio.currentTime || 0) + LY_LEAD; let k = LY.ci >= 0 && LY.ci < cues.length ? LY.ci : 0;
+        if (cues.length) { while (k + 1 < cues.length && cues[k + 1].s <= t) k++; while (k > 0 && cues[k].s > t) k--; }
+        if (k !== LY.ci) { LY.ci = k; renderLyrics(); }
+      }
+    }
     if (LY.tok && isPlaying()) karaoke();
     if (Date.now() - LY.placed > 1500) placeLyrics();   // fonts / the address bar change heights after the first paint
-  }, 110);
+  }, 60);
   window.addEventListener('resize', () => placeLyrics());
 }
 /** narra header: the series title; scrolls slowly when it doesn't fit */

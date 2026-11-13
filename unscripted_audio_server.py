@@ -39,6 +39,10 @@ def vis_card(sid):
 
 def ep1_with_visuals(ep, series, lang):
     """第 1 集按逐句字幕时间配画面（build_ep1_visuals.py 的逐句映射），相邻同一片段合并成一段"""
+    if ep and ep.get('cues'):
+        try: tm = ep1_tm(series, lang)
+        except Exception: tm = None
+        if tm and len(tm) == len(ep['cues']): ep = dict(ep, cues=[dict(c, tm=t) if t else c for c, t in zip(ep['cues'], tm)])
     f = DATA / 'ep1_visuals' / f'{series}.{lang}.json'
     if not ep or not f.exists(): return ep
     m = {x['line']: x['clip'] for x in json.load(open(f))}; tl = []
@@ -1743,6 +1747,129 @@ def ear_feed(c, data, ctype, end=False, lo=700.0):
     return None
 
 
+# ---------- 11-13 (5) 台词逐词高亮跟着声音走（speech_marks）----------
+# 原来一句话里的高亮按字数平均分：三四句的长旁白，句号、逗号处的停顿不算，高亮会比声音快或慢半秒到一秒。
+# 现在量出每句配音的开口 / 收声和句中停顿，把停顿和标点对上，给手机一张“到第几秒说到第几个字”的表（tm）。
+
+PUN1 = set(',，、;；:：—–')
+PUN2 = set('.。!！?？…')
+
+def speech_marks(pcm, text, sr=44100):
+    import audioop
+    """一句配音里“说到第几个字”的时间表：[[f, t], …]，到第 t 秒（从这段音频开头算）说完了全句的 f（0–1，按非空白字符数）。
+    做法：20 ms 一帧量音量，找出开口 / 收声和句中 ≥0.18 秒的停顿，把停顿和文字里的标点按顺序对上（逗号、句号处的停顿），
+    标点之间按“说话时间”（扣掉停顿）均匀分。没有可用的停顿就只有开口、收声两个点。"""
+    hop = int(sr * 0.02) * 2
+    e = [audioop.rms(pcm[i:i + hop], 2) for i in range(0, len(pcm) - hop + 1, hop)]
+    if len(e) < 10: return None
+    se = sorted(e); pk = se[int(len(e) * 0.95)]; fl = se[int(len(e) * 0.08)]
+    thr = max(fl * 2.2, pk * 0.07, 60.0)
+    v = [x > thr for x in e]
+    if True not in v: return None
+    on = v.index(True); off = len(v) - v[::-1].index(True)
+    pauses = []; i = on
+    while i < off:
+        if not v[i]:
+            j = i
+            while j < off and not v[j]: j += 1
+            if j - i >= 9: pauses.append((i * 0.02, j * 0.02))
+            i = j
+        else: i += 1
+    t_on, t_off = on * 0.02, off * 0.02
+    clean = re.sub(r'\[[^\]]*\]\s*', '', text or '')
+    N = len(re.sub(r'\s+', '', clean))
+    if N < 2: return [[0, round(t_on, 2)], [1, round(t_off, 2)]]
+    bounds = []; n = 0
+    for ch in clean:
+        if ch.isspace(): continue
+        n += 1
+        st = 2 if ch in PUN2 else 1 if ch in PUN1 else 0
+        if st and n < N:
+            if bounds and bounds[-1][0] == n - 1 and bounds[-1][2]: bounds[-1] = (n, max(bounds[-1][1], st), True)   # “…”“?!” 连着的标点算一处
+            else: bounds.append((n, st, True))
+    bounds = [(c / N, s) for c, s, _ in bounds if c < N]
+    speech = (t_off - t_on) - sum(b - a for a, b in pauses)
+    if not pauses or not bounds or speech <= 0.3: return [[0, round(t_on, 2)], [1, round(t_off, 2)]]
+    # 每个停顿之前已经说了多久（扣掉更早的停顿）
+    sp = []; acc = 0.0
+    for a, b in pauses: sp.append((a - t_on) - acc); acc += b - a
+    tol = max(0.7, 0.2 * speech)
+    B, K = len(bounds), len(pauses); NEG = -1e9
+    best = [[0.0] * (K + 1) for _ in range(B + 1)]; pick = [[0] * (K + 1) for _ in range(B + 1)]
+    for b in range(1, B + 1):
+        for k in range(1, K + 1):
+            f, st = bounds[b - 1]; d = abs(sp[k - 1] - f * speech)
+            m = best[b - 1][k - 1] + st * min(pauses[k - 1][1] - pauses[k - 1][0], 0.7) + 0.3 - 1.2 * d if d <= tol else NEG
+            opts = [(best[b - 1][k], 1), (best[b][k - 1], 2), (m, 3)]
+            best[b][k], pick[b][k] = max(opts)
+    match = {}; b, k = B, K
+    while b > 0 and k > 0:
+        p = pick[b][k]
+        if p == 3: match[k - 1] = b - 1; b -= 1; k -= 1
+        elif p == 1: b -= 1
+        else: k -= 1
+    # 锚点：对上的停顿 = 该标点处的字数；没对上的停顿按所在区间的说话时间比例停住
+    pts = [(0.0, t_on, t_on)] + [(bounds[match[k]][0], pauses[k][0], pauses[k][1]) for k in sorted(match)] + [(1.0, t_off, t_off)]
+    out = []
+    for x in range(len(pts) - 1):
+        f0, _, t0 = pts[x]; f1, t1, _ = pts[x + 1]
+        inner = [(a, b_) for kk, (a, b_) in enumerate(pauses) if kk not in match and a >= t0 and b_ <= t1]
+        seg = (t1 - t0) - sum(b_ - a for a, b_ in inner)
+        out.append([f0, t0]); used = 0.0; prev = t0
+        for a, b_ in inner:
+            used += a - prev; prev = b_
+            f = f0 + (f1 - f0) * (used / seg if seg > 0 else 0)
+            out.append([f, a]); out.append([f, b_])
+        out.append([f1, t1])
+    out.append([1.0, t_off])
+    res = []
+    for f, t in out:
+        f, t = round(f, 3), round(t, 2)
+        if res and res[-1] == [f, t]: continue
+        res.append([f, t])
+    return res
+
+
+_TMC = {}
+def line_tm(u, pcm, text):
+    key = (u, len(text or ''))
+    if key in _TMC: return _TMC[key]
+    try: m = speech_marks(pcm, text, MIX_SR) or []
+    except Exception: m = []
+    if len(_TMC) > 600: _TMC.pop(next(iter(_TMC)))
+    _TMC[key] = m
+    return m
+
+
+def ep1_tm(series, lang, make=False):
+    """第 1 集每句的 tm（按整集成品音频里各句的区间量）。算一次存盘；make=False 时没有现成的就返回 None（后台线程会补）"""
+    src = APP / 'ep1' / f'{series}.{lang}.mp3'; c = ep1_cached(series, lang)
+    if not c or not src.is_file(): return None
+    f = CACHE / 'ep1' / f'{series}.{lang}.tm.json'; sig = [int(src.stat().st_mtime), len(c.get('cues') or [])]
+    if f.exists():
+        try:
+            d = json.load(open(f))
+            if d.get('sig') == sig: return d['tm']
+        except Exception: pass
+    if not make: return None
+    pcm = _decode_pcm(src); out = []
+    for cu in c.get('cues') or []:
+        seg = pcm[int(cu['s'] * MIX_SR) * 2:int(cu['e'] * MIX_SR) * 2]
+        try: out.append(speech_marks(seg, cu.get('text'), MIX_SR) or [])
+        except Exception: out.append([])
+    json.dump({'sig': sig, 'tm': out}, open(f, 'w'))
+    return out
+
+
+def _ep1_tm_all():
+    time.sleep(20)
+    for sid in list(BASE):
+        for lang in ('en', 'zh'):
+            try: ep1_tm(sid, lang, make=True)
+            except Exception as e: print('ep1 tm', sid, lang, repr(e)[:100], flush=True)
+            time.sleep(0.3)
+
+
 # ---------- 11-13 整段混音（/api/mix）：实时写的集不再让手机逐句取音频 ----------
 # 真机慢网 + 锁屏：一集 12–15 句各取一次（每句 128 kbps、各自过一次隧道），和背景图抢带宽，两分钟的一集里有 30–40 秒在等；
 # 锁屏卡片上还是一句一句几秒钟的小片段。现在中转把连续的几句配音 + 配乐 + 音效混成一段 64 kbps 的 MP3（十几到几十秒一段），
@@ -1843,6 +1970,7 @@ def mix_chunk(sess, ep, job, start, mn, mx, wait=22.0, ah=None, kb=0.0):
     for i in range(start, k):
         l = ls[i]; b = box[i]
         meta['durs'].append(round(len(b) / 2 / MIX_SR, 3))
+        meta.setdefault('tm', []).append(line_tm(l.get('url'), b, l.get('text')) if b else [])
         if not b: continue
         marks.append((pos, l.get('sfx')))
         parts.append(b); parts.append(gap); pos += len(b) + len(gap)
@@ -2073,6 +2201,21 @@ def ws_send(wf, lock, text, op_=1):
         wf.write(head + b); wf.flush()
 
 
+_ASR_WARM = [0.0]
+def asr_warm(lang='en'):
+    """11-13 (5) 识别模型隔几分钟不用就“凉”了，下一次第一遍要近 3 秒——她开口后答案框里 3 秒没字。
+    旁白快要提问时（取提问、开麦）先拿一句现成的话跑一遍，把模型热起来。20 秒内只跑一次。"""
+    if time.time() - _ASR_WARM[0] < 20: return
+    _ASR_WARM[0] = time.time()
+    def go():
+        for lg in ([lang] if lang == 'zh' else ['en', 'zh']):
+            try:
+                f = APP / f'ack.{lg}.mp3'
+                U.build_opener(U.ProxyHandler({})).open(U.Request('http://127.0.0.1:8917/asr', data=f.read_bytes(), headers={'Content-Type': 'audio/mpeg', 'X-Lang': lg, 'X-Partial': '1'}), timeout=15).read()
+            except Exception as e: print('asr warm', repr(e)[:80], flush=True)
+    threading.Thread(target=go, daemon=True).start()
+
+
 def asr_stream(h, q):
     """h: 请求处理器（已确认是 WebSocket 升级）。q: 查询参数"""
     g = lambda k, d='': q.get(k, [d])[0]
@@ -2083,6 +2226,7 @@ def asr_stream(h, q):
     try: h.connection.settimeout(25)
     except Exception: pass
     sess = get_sess(g('sid')); lang = g('lang') or (sess or {}).get('lang', '')
+    asr_warm(lang or 'en')
     hint = ''
     if sess:
         ch = (sess['eps'][-1].get('choices') or [])[:2]
@@ -2095,7 +2239,8 @@ def asr_stream(h, q):
         b = io.BytesIO()
         with wave.open(b, 'wb') as w: w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(pcm)
         req = U.Request('http://127.0.0.1:8917/asr', data=b.getvalue(), headers={'Content-Type': 'audio/wav', 'X-Lang': lang, 'X-Hint': quote(hint[:300]),
-                                                                              'X-Choice': '1' if final and sess else '0', 'X-Partial': '0' if final else '1'})
+                                                                              'X-Choice': '1' if final and sess else '0', 'X-Partial': '0' if final else '1',
+                                                                              'X-Eng': '1' if (not final and st.get('eng')) else '0'})   # 上一遍已经是英文：中间结果跳过先判语言那一步，快 0.1–0.2 秒
         return json.loads(op.open(req, timeout=20).read())
 
     def quiet_cut(seg):
@@ -2151,6 +2296,11 @@ def asr_stream(h, q):
                 else:
                     r = recog(bytes(buf[cut:n]), final and not head) if n - cut >= 3200 else {'text': ''}
             except Exception as e: r = {'text': '', 'error': repr(e)[:80]}
+            if not r.get('reuse'):
+                st['eng'] = str(r.get('engine') or '').startswith('parakeet')
+                # 只听到零点几秒声音时认出来的多半是错字（“Don't double-check”）：不到 0.6 秒的中间结果不显示
+                mk = re.match(r'kept (\d+)/', str(r.get('gate') or ''))
+                if not final and mk and int(mk.group(1)) < 600 and not head: r = dict(r, text='')
             text = last if r.get('reuse') else join(head, (r.get('text') or '').strip())
             try:
                 if final:
@@ -2265,6 +2415,7 @@ class H(BaseHTTPRequestHandler):
                 if sid not in BASE or who not in VOICES[sid]: return self._send(404, {'error': 'no caller'})
                 try: return self._send(200, call_fillers(sid, who, lang))
                 except Exception as e: return self._send(500, {'error': str(e)[:200]})
+            if u.path == '/api/cue': asr_warm(lang)
             if u.path == '/api/cue':  # 闭眼听模式：集尾旁白把选择点念给她听（第一次约 5–8 秒，前端提前 45 秒取）
                 sess = get_sess(g('sid'))
                 if not sess: return self._send(404, {'error': 'session expired'})
@@ -2560,4 +2711,5 @@ class H(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     print(f'unscripted audio on {PORT}', flush=True)
     for _l in ('zh', 'en'): threading.Thread(target=generic_bridges, args=(_l,), daemon=True).start()
+    threading.Thread(target=_ep1_tm_all, daemon=True).start()   # 第 1 集各句的逐词时间表：后台算一次存盘
     ThreadingHTTPServer(('127.0.0.1', PORT), H).serve_forever()
