@@ -1807,6 +1807,62 @@ def mix_chunk(sess, ep, job, start, mn, mx, wait=22.0):
     return (r.stdout if r.returncode == 0 else b''), meta
 
 
+# ---------- 11-13 (2) 选择点的短句接上配乐（/api/aux）：锁屏卡片上不再有几秒钟的小片段 ----------
+# 旁白提问、开麦提示音、“听到了”、过场旁白原来各是一个 1–5 秒的文件，锁屏卡片上就是一串几秒的倒计时，中间垫的环境声几乎听不见。
+# 现在中转把这些短句转成和混音段同一种格式（44.1k 单声道 64k、无文件头），另给每部剧一段配乐垫段；
+# 手机把“短句 + 垫段”首尾相接成一条二三十秒的音轨：话说完配乐接着走，直到下一段剧情到。
+AUX_BED = {'lo': (0.2, 20.0), 'hi': (0.6, 30.0)}   # lo：听她说话时垫着（很轻，不干扰收音）；hi：等下一集时的过场（听得见）。（音量, 秒）
+_AUXC = {}
+
+
+def _mp3(pcm):
+    r = subprocess.run([FF, '-v', 'error', '-f', 's16le', '-ar', str(MIX_SR), '-ac', '1', '-i', '-', '-c:a', 'libmp3lame', '-b:a', '64k', '-write_xing', '0', '-id3v2_version', '0', '-f', 'mp3', '-'],
+                       input=pcm, capture_output=True, timeout=60)
+    return r.stdout if r.returncode == 0 else b''
+
+
+def _aux_keep(key, val):
+    with _MIXLOCK:
+        if len(_AUXC) > 240: _AUXC.pop(next(iter(_AUXC)))
+        _AUXC[key] = val
+    return val
+
+
+def aux_bed(series, kind):
+    """这部剧的一段配乐垫段（首尾淡入淡出，可以循环）"""
+    import audioop
+    key = ('bed', series, kind)
+    if key in _AUXC: return _AUXC[key]
+    gain, secs = AUX_BED[kind]
+    src = asset_pcm(f'bgm/{series}.mp3')
+    if not src: src = asset_pcm('bed.mp3'); gain = 1.0 if kind == 'hi' else 0.6
+    if not src: return b''
+    need = int(secs * MIX_SR) * 2; buf = bytearray()
+    while len(buf) < need: buf += src[:need - len(buf)]
+    b = audioop.mul(bytes(buf), 2, gain)
+    b = _fade(_fade(b, int(0.9 * MIX_SR), False), int(0.9 * MIX_SR), True)
+    out = _mp3(b)
+    return _aux_keep(key, out) if out else b''
+
+
+def aux_talk(u, ear):
+    """一句短的（旁白提问 / 过场 / 应答）转成统一格式；ear：后面接开麦提示音。返回 (mp3, meta)，meta.talk = 说话部分到第几秒为止"""
+    key = ('talk', u, bool(ear))
+    if key in _AUXC: return _AUXC[key]
+    if re.fullmatch(r'[\w.-]+\.mp3', u or ''): b = asset_pcm(u)
+    else: b = line_pcm(u)
+    if not b: return b'', None
+    sil = lambda s: b'\0' * (int(s * MIX_SR) * 2)
+    pcm = b
+    if ear:
+        e = asset_pcm('ear.mp3')
+        if e: pcm += sil(0.22) + e
+    pcm += sil(0.12)
+    out = _mp3(pcm)
+    if not out: return b'', None
+    return _aux_keep(key, (out, {'talk': round(len(pcm) / 2 / MIX_SR, 3), 'ear': bool(ear)}))
+
+
 BC_ZH = set('嗯 嗯嗯 嗯哼 哦 噢 啊 嗨 喂 好 好的 对 对啊 对对 是 是啊 哈 哈哈 嘿 嗯呢 行 唔 呃'.split())
 BC_EN = set('hi hey hello mm mhm mmhmm hmm yeah yep yes ok okay uh um huh oh ah right sure aha'.split())
 def backchannel(text, lang):
@@ -2174,6 +2230,19 @@ class H(BaseHTTPRequestHandler):
                 self.send_header('X-Mix', json.dumps(meta)); self.send_header('Access-Control-Expose-Headers', 'X-Mix')
                 self.send_header('Cache-Control', 'no-store'); self.send_header('Access-Control-Allow-Origin', '*'); self.end_headers()
                 if b: self.wfile.write(b)
+                return
+            if u.path == '/api/aux':  # 11-13 (2) 选择点的短句（转成统一格式）/ 一部剧的配乐垫段：手机把两者接成一条长音轨
+                try:
+                    if g('bed'):
+                        if g('series') not in BASE or g('bed') not in AUX_BED: return self._send(404, {'error': 'no bed'})
+                        b, meta = aux_bed(g('series'), g('bed')), {'bed': g('bed'), 'len': AUX_BED[g('bed')][1]}
+                    else: b, meta = aux_talk(g('u'), g('ear') == '1')
+                except Exception as e: traceback.print_exc(); return self._send(500, {'error': 'aux failed: ' + repr(e)[:120]})
+                if not b: return self._send(404, {'error': 'no audio'})
+                self.send_response(200); self.send_header('Content-Type', 'audio/mpeg'); self.send_header('Content-Length', str(len(b)))
+                self.send_header('X-Aux', json.dumps(meta)); self.send_header('Access-Control-Expose-Headers', 'X-Aux')
+                self.send_header('Cache-Control', 'public, max-age=86400'); self.send_header('Access-Control-Allow-Origin', '*'); self.end_headers()
+                self.wfile.write(b)
                 return
             if u.path == '/api/a':  # 一句配音（本机缓存，带跨域头），手机取成 blob 提前放在本地
                 f = cache_line(g('u'))

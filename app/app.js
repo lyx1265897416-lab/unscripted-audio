@@ -779,7 +779,7 @@ function fetchLocalBlob(u) {
 }
 const srcFor = (u) => blobNow(u) || absUrl(u);
 function loadSrc(url, at) {
-  P.aux = false; P.auxEnd = null; audio.loop = false; audio.volume = 1;  // swap straight from the bed/question to the story (no pause: keeps the lock screen alive)
+  P.aux = false; P.auxEnd = null; P.auxTail = false; P.auxTalk = 0; audio.loop = false; audio.volume = 1;  // swap straight from the bed/question to the story (no pause: keeps the lock screen alive)
   P.cur = url;
   audio.src = srcFor(url);
   setAudioRate();
@@ -799,7 +799,7 @@ function doPlay() {
   updatePlayerUI();
 }
 function doPause() { if (WD.n >= 2) WD.stuck = true; P.want = false; P.pausedAt = Date.now(); audio.pause(); updatePlayerUI(); }
-if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), openUnlockSheet: (id, n) => openUnlockSheet(id, n, () => {}), showIncoming: (id, who, sid) => showIncoming(id, who, sid), callersOf: (id) => callersOf(byId(id)).map((c) => c.key), get S() { return S; }, get ms() { const m = navigator.mediaSession && navigator.mediaSession.metadata; return m ? { title: m.title, artist: m.artist, album: m.album } : null; }, get PS() { return PS; }, get MIX() { return MIX; }, skip: (x) => skip(x), lySeek: (j) => lySeek(j), get LY() { return LY; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom() };  // ?debug=1: inspect player state from the console
+if (Q.has('debug')) window.__ua = { get P() { return P; }, audio, get C() { return C; }, get EAR() { return EAR; }, earFrame: (x) => earFrame(x), get callAudio() { return callAudio; }, get WD() { return WD; }, get SND() { return SND; }, get actx() { return actx; }, stillPlan: (s, ep) => stillPlan(s, ep), byId: (id) => byId(id), recordAnswer: (o) => recordAnswer(o), micLevel: () => micLevel(), openUnlockSheet: (id, n) => openUnlockSheet(id, n, () => {}), showIncoming: (id, who, sid) => showIncoming(id, who, sid), callersOf: (id) => callersOf(byId(id)).map((c) => c.key), get S() { return S; }, get ms() { const m = navigator.mediaSession && navigator.mediaSession.metadata; return m ? { title: m.title, artist: m.artist, album: m.album } : null; }, get PS() { return PS; }, get MIX() { return MIX; }, skip: (x) => skip(x), lySeek: (j) => lySeek(j), get LY() { return LY; }, get NET() { return NET; }, slowNet: () => slowNet(), audioRoom: () => audioRoom(), get AUXL() { return AUXL; }, get BEDS() { return BEDS; }, get HF() { return HF; } };  // ?debug=1: inspect player state from the console
 function togglePlay() {
   primeMic(); setTimeout(micHold, 0);
   if ((P.gen && !P.ep) || (P.loading && !P.ep)) { toast(tz(P.gen ? 'Writing your next episode — it starts on its own' : 'Starting Episode 1…', P.gen ? '正在写下一集，好了会自动播放' : '第 1 集马上开始…')); return; }
@@ -927,7 +927,8 @@ function mixAdvance() {
     w.p.then((c) => { if (c && MIX.key === ss.sid + ':' + e0.n && !MIX.chunks.some((x) => x.from === 0)) { MIX.chunks.push(c); MIX.chunks.sort((x, y) => x.from - y.from); MIXWARM.delete(mixJobOf(ss, e0)); } if (P.ep === e0 && P.waiting && P.want) liveAdvance(); });
     return;
   }
-  mixFetch(ss, ep, P.idx, 1, MIX.chunks.length ? 8 : 3, 0.3).then((x) => {
+  const dry = P.idx > 0 && !P.jobDone;   // ran dry in mid-episode (the voices are not ready yet): music for a moment, then a real stretch — not one line at a time
+  mixFetch(ss, ep, P.idx, dry ? Math.max(1, Math.min(3, lines.length - P.idx)) : 1, MIX.chunks.length ? 8 : 3, dry ? 3.5 : 0.3).then((x) => {
     if (P.ep !== e0 || !P.waiting) return;
     if (x && x.to > x.from) { MIX.empty = 0; if (P.want) liveAdvance(); return; }
     // the line is voiced but the relay could not get its audio into a piece twice in a row (≈25 s): play this episode line by line
@@ -1027,7 +1028,12 @@ function preloadNext() {
 }
 
 audio.addEventListener('ended', () => {
-  if (P.aux) { const f = P.auxEnd; P.auxEnd = null; if (f) f(); return; }
+  if (P.aux) {
+    const f = P.auxEnd; P.auxEnd = null;
+    if (f) f();
+    else if (P.auxTail) { P.auxTail = false; if (P.needChoice || P.gen || P.waiting) keepAlive(); }   // the music after a sentence ran out: the loop takes over
+    return;
+  }
   if (!P.cur || audio.src.startsWith('data:')) return;
   if (!P.ep) return;
   if (P.ep.kind === 'live') {
@@ -1060,6 +1066,7 @@ const SPEC = { key: '', at: 0, n: 0, map: {}, warm: [] };
 function maybeSpecs(force) {
   const ss = P.id && getSess(P.id); const ep = P.ep;
   if (!ss || !ss.sid || !ep || ep.ending || ss.eps[ss.eps.length - 1] !== ep) return;
+  if (!P.aux && (audio.currentTime > 6 || P.idx > 1) && audioRoom()) bedWarm();   // the series' music for the waits, once the story itself is well under way
   if (modeOf() === 'voice' && (ep.choices || []).length && (ep.kind !== 'live' || P.jobDone) && !CUE[ss.sid + ':' + ep.n]) fetchCue(ss.sid, ep.n);  // the narrator's question is ready long before the end (11-09)
   const key = ss.sid + ':' + (ep.n + 1);
   if (SPEC.key === key && Object.keys(SPEC.map).length >= Math.min(2, (ep.choices || []).length)) return;
@@ -1100,7 +1107,16 @@ audio.addEventListener('error', () => {
 
 /* Watchdog (11-09): "playing" but the clock hasn't moved for 4 s (stalled load, iOS audio-session hiccup) → reload the same
  * audio at the same spot; the second time, try the other copy of Episode 1 (storage) if there is one. */
-const WD = { t: -1, n: 0, tries: 0 };
+const WD = { t: -1, n: 0, tries: 0, prog: 0, buf: -1 };
+/* 11-13 (2) on a slow link "stuck at 0:00 for 2 s" was simply the first bytes still coming: the reload threw them away and asked
+ * again, every 2 s (the second time from the other copy on Google storage) — Episode 1 took 12–15 s to start. Bytes arriving
+ * (a progress event, or more of the file buffered) now count as alive: only a download that has gone quiet is rebuilt. */
+audio.addEventListener('progress', () => { WD.prog = Date.now(); });
+const wdAlive = () => {
+  let end = 0; try { const b = audio.buffered; if (b.length) end = b.end(b.length - 1); } catch (e) { /* ignore */ }
+  if (end > WD.buf + 0.01) { WD.buf = end; WD.prog = Date.now(); }
+  return Date.now() - WD.prog < 6000;
+};
 function reloadCurrent(why) {
   if (!P.cur) return;
   const ep = P.ep, t = audio.currentTime || 0, keep = P.cur;
@@ -1108,12 +1124,17 @@ function reloadCurrent(why) {
   const url = WD.tries >= 2 && ep && ep.kind !== 'live' && ep.audio_cdn && keep === ep.audio ? ep.audio_cdn : keep;
   if (WD.tries === 1 && why !== 'tap') toast(tz('Connection hiccup — reloading the audio…', '网络卡了一下，正在重新加载…'));
   loadSrc(url, t > 0.5 ? t : 0); P.cur = keep;
+  WD.prog = Date.now(); WD.buf = -1;   // the fresh download gets its own 6 s
   if (P.want) { const p = audio.play(); if (p && p.catch) p.catch(() => {}); }
 }
 setInterval(() => {
   const on = P.want && P.cur && !P.aux && !P.waiting && !audio.paused && !audio.src.startsWith('data:');
-  if (!on) { WD.n = 0; WD.t = -1; return; }
-  if (Math.abs(audio.currentTime - WD.t) < 0.05) { if (++WD.n >= (audio.currentTime < 0.05 ? 2 : 4)) reloadCurrent(); }   // stuck at 0:00 → rebuild after 2 s
+  if (!on) { WD.n = 0; WD.t = -1; WD.src = ''; return; }
+  if (WD.src !== audio.src) { WD.src = audio.src; WD.prog = Date.now(); WD.buf = -1; WD.n = 0; }   // a new source starts with a clean slate
+  if (Math.abs(audio.currentTime - WD.t) < 0.05) {
+    if (audio.readyState < 3 && !audio.error && wdAlive()) { WD.n = 0; return; }   // still downloading (slow link): leave it alone
+    if (++WD.n >= (audio.currentTime < 0.05 ? 2 : 4)) reloadCurrent();   // stuck at 0:00 with nothing arriving → rebuild after 2 s
+  }
   else { WD.n = 0; WD.t = audio.currentTime; if (audio.currentTime > 1) WD.tries = 0; }
 }, 1000);
 
@@ -1185,8 +1206,9 @@ function setMediaSession() {
   if (key === msKey) return;
   msKey = key;
   try {
-    const art = new URL(coverOf(s), location.href).toString();
-    navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album: BRAND, artwork: [{ src: art, sizes: '720x1280', type: 'image/jpeg' }] });
+    const small = slowNet() || !netKnown();
+    const art = new URL(small ? thumbOf(s) : coverOf(s), location.href).toString();
+    navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album: BRAND, artwork: [{ src: art, sizes: small ? '360x640' : '720x1280', type: 'image/jpeg' }] });
   } catch (e) { /* ignore */ }
 }
 if ('mediaSession' in navigator) {
@@ -1236,8 +1258,28 @@ function recordStart(id) {
   save();
 }
 
+/* 11-13 (2) slow link: the moment she taps Play, pictures that are still coming down elsewhere on the page (other series' covers
+ * on the home page, the big cover of the detail page) let go of the link until the story is audible; then they come back. */
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+const HELD = [];
+function holdImages() {
+  if (!(slowNet() || !netKnown()) || HELD.length) return;
+  document.querySelectorAll('img').forEach((im) => {
+    const src = im.getAttribute('src');
+    if (!src || im.complete || /^(data|blob):/.test(src) || im.closest('#player') || im.closest('#mini')) return;
+    HELD.push([im, src]); im.setAttribute('src', BLANK);
+  });
+  document.querySelectorAll('.dt-bg').forEach((el) => { if (el.style.backgroundImage) { HELD.push([el, el.style.backgroundImage, 1]); el.style.backgroundImage = 'none'; } });
+  const t0 = Date.now();
+  const back = () => {
+    if (!(audio.currentTime > 2 && audio.readyState >= 3) && Date.now() - t0 < 25000 && P.want) { setTimeout(back, 500); return; }
+    HELD.splice(0).forEach(([el, v, bg]) => { if (!el.isConnected) return; if (bg) el.style.backgroundImage = v; else if (el.getAttribute('src') === BLANK) el.setAttribute('src', v); });
+  };
+  setTimeout(back, 1500);
+}
 async function newSession(id) {
   const s = byId(id); if (!s) return;
+  holdImages();
   primeAudio(); primeMic(); setTimeout(micHold, 0);
   cancelGen();
   audio.pause();
@@ -1575,7 +1617,7 @@ const BR = { n: 0, url: '', played: false, ackDone: true, t0: 0 };
 function noteBridge(sid, n, b) {
   if (!b || !b.url) return;
   BRIDGES[sid + ':' + n] = b;
-  if (blobable(b.url)) fetchBlob(b.url);
+  if (AUX_OK && !MOCK) whenRoom(() => auxPrep(b.url, { bed: 'hi' })); else if (blobable(b.url)) fetchBlob(b.url);
 }
 const auxTalking = () => P.aux && !audio.loop && !!P.auxEnd && !audio.paused;   // the ack / bridge is being spoken
 /* the lead's half-line after the bridge ("You want to know that…" / "…I heard you."), only when her episode still isn't ready */
@@ -1584,7 +1626,7 @@ let BEAT_KEY = '';
 function noteBeats(sid, n, b) {
   if (!b || !b.q || !b.s) return;
   BEATS[sid + ':' + n] = b; BEAT_KEY = sid + ':' + n;
-  [...b.q, ...b.s].forEach((x) => { if (x.url && blobable(x.url)) fetchBlob(x.url); });
+  [...b.q, ...b.s].forEach((x) => { if (!x.url) return; if (AUX_OK && !MOCK) whenRoom(() => auxPrep(x.url, { bed: 'hi' })); else if (blobable(x.url)) fetchBlob(x.url); });
 }
 const isQuestion = (t) => /[?？]|吗|呢|什么|为什么|怎么|谁|哪|几时|是不是|有没有|能不能|会不会|^(who|what|why|how|when|where|is|are|do|does|did|can|could|will|would|should)\b/i.test((t || '').trim());
 function afterBridge() {
@@ -1620,7 +1662,10 @@ function fetchCue(sid, n) {
   if (!CUE[k]) {
     CUE[k] = API.cue(sid, n).then((d) => {
       if (d && d.bridge) noteBridge(sid, n, d.bridge);
-      if (d && d.url) { if (blobable(d.url)) fetchBlob(d.url); else try { const a = new Audio(); a.preload = 'auto'; a.src = absUrl(d.url); a.load(); } catch (e) { /* ignore */ } }
+      if (d && d.url) {
+        if (AUX_OK && !MOCK) whenRoom(() => { auxPrep(d.url, { bed: 'lo', ear: true }); auxPrep(`ack.${LANG}.mp3`, { bed: 'hi' }); });   // question + chime + soft music as one track; "Okay — your way" + music
+        else if (blobable(d.url)) fetchBlob(d.url); else try { const a = new Audio(); a.preload = 'auto'; a.src = absUrl(d.url); a.load(); } catch (e) { /* ignore */ }
+      }
       return d;
     }).catch(() => { delete CUE[k]; return null; });
   }
@@ -1850,19 +1895,101 @@ function recordAnswer({ wait = 5000, max = 15000, manual = false, onState, onPar
 
 /* ---------- main-audio helpers: the narrator's question and a quiet ambient bed play on the SAME <audio> element as the story,
  * so the lock-screen media session never stops between episodes (a separate element can't start while the phone is locked). */
-function playAux(url, { loop = false, volume = 1 } = {}) {
+function playAux(url, { loop = false, volume = 1, kind = '' } = {}) {
   return new Promise((res) => {
+    const L = !loop && auxNow(url);   // the long version (this sentence + the series' music after it), when it is on the phone
     P.aux = true; P.auxEnd = loop ? null : res;
+    P.auxTalk = L ? L.talk : 0; P.auxTail = false; P.auxKind = L ? L.bed : kind; P.auxEar = !!(L && L.ear);
     audio.loop = loop; audio.volume = volume;
-    audio.src = srcFor(url);
+    audio.src = L ? L.src : srcFor(url);
     audio.playbackRate = loop ? 1 : (S.speed || 1);   // 11-11 the narrator's question / bridge keep the speed she chose (the quiet bed loop stays at 1x); the 5 s wait is real time either way
     const p = audio.play();
     if (p && p.catch) p.catch(() => { if (P.auxEnd === res) { P.auxEnd = null; res(); } });
     if (loop) res();
   });
 }
-function keepAlive() { if (!P.aux || !audio.loop) playAux('bed.mp3', { loop: true, volume: 0.6 }); }
-function stopAux() { if (P.aux) { P.aux = false; P.auxEnd = null; audio.loop = false; audio.volume = 1; try { audio.pause(); } catch (e) { /* ignore */ } } }
+/* =========================================================================
+ * 11-13 (2) No short clips on the lock screen at a choice point.
+ * The narrator's question, the "your turn" chime, "Okay — your way", the bridge: each was its own 1–5 s file, so the lock-screen
+ * card showed a row of few-second countdowns, with a near-silent ambient loop in between. Now each of them is joined on the
+ * phone to a stretch of the series' own music (the relay hands out both in one format, /api/aux): one track of 20–35 s —
+ * the sentence, then music until the next part of the story arrives. "Spoken part over" is a point on that track's clock
+ * (P.auxTalk) instead of the end of a file; the music after it is the tail (P.auxTail). Waiting for her answer the music is
+ * very soft ('lo'), waiting for her episode it is clearly there ('hi'). Not on the phone in time → the short clip, as before.
+ * ========================================================================= */
+const AUX_OK = Q.get('aux') !== '0';
+const AUXL = new Map();   // series|clip → { p, obj: { src, talk, ear, bed } }
+const BEDS = new Map();   // series:kind → { p, buf, url }
+function bedGet(sid, kind) {
+  if (!AUX_OK || MOCK || !sid) return Promise.resolve(null);
+  const key = sid + ':' + kind; let r = BEDS.get(key);
+  if (r) return r.p;
+  r = { buf: null, url: '' }; BEDS.set(key, r);
+  r.p = (async () => {
+    for (let a = 0; a < 2 && !r.buf; a++) {
+      try {
+        const res = await apiFetch(() => { const u = new URL(apiUrl('api/aux')); u.searchParams.set('k', TOKEN); u.searchParams.set('series', sid); u.searchParams.set('bed', kind); return u.toString(); }, {}, 30000);
+        if (res.status === 404) break;
+        if (res.ok) { const b = await res.arrayBuffer(); if (b.byteLength > 2000) { r.buf = b; r.url = URL.createObjectURL(new Blob([b], { type: 'audio/mpeg' })); } }
+      } catch (e) { /* once more */ }
+    }
+    if (!r.buf) setTimeout(() => { if (BEDS.get(key) === r) BEDS.delete(key); }, 20000);
+    return r.buf;
+  })();
+  return r.p;
+}
+const bedNow = (sid, kind) => { const r = BEDS.get(sid + ':' + kind); return (r && r.url) || ''; };
+function bedWarm() { if (P.id) { bedGet(P.id, 'hi'); bedGet(P.id, 'lo'); } }
+/** have the long version of a short clip made: `bed` = which music follows it, `ear` = the "your turn" chime right after the words */
+function auxPrep(url, { bed = 'hi', ear = false } = {}) {
+  const sid = P.id;
+  if (!AUX_OK || MOCK || !url || !sid) return Promise.resolve(null);
+  const key = sid + '|' + url; let r = AUXL.get(key);
+  if (r) return r.p;
+  r = { obj: null }; AUXL.set(key, r);
+  r.p = (async () => {
+    try {
+      const [res, bedB] = await Promise.all([
+        apiFetch(() => { const u = new URL(apiUrl('api/aux')); u.searchParams.set('k', TOKEN); u.searchParams.set('u', url); if (ear) u.searchParams.set('ear', '1'); return u.toString(); }, {}, 25000),
+        bedGet(sid, bed)]);
+      const meta = res.ok ? JSON.parse(res.headers.get('X-Aux') || 'null') : null;
+      if (!meta || !(meta.talk > 0) || !bedB) throw new Error('no aux');
+      const a = await res.arrayBuffer();
+      r.obj = { src: URL.createObjectURL(new Blob([a, bedB], { type: 'audio/mpeg' })), talk: meta.talk, ear: !!meta.ear, bed };
+    } catch (e) {
+      AUXL.delete(key);
+      if (blobable(url)) fetchBlob(url);   // no long version (older relay, link down): the clip itself, as before
+    }
+    return r.obj;
+  })();
+  if (AUXL.size > 18) for (const [k, v] of AUXL) { if (AUXL.size <= 12) break; if (v.obj && audio.src !== v.obj.src) { URL.revokeObjectURL(v.obj.src); AUXL.delete(k); } }
+  return r.p;
+}
+/** on a slow link these wait until the story has audio in hand (they are for the end of the episode, the story is for now) */
+function whenRoom(fn) {
+  const t0 = Date.now();
+  const w = () => { if (!slowNet() || P.needChoice || P.aux || P.gen || audioRoom() || Date.now() - t0 > 45000) fn(); else setTimeout(w, 1500); };
+  w();
+}
+const auxNow = (url) => { const r = P.id && AUXL.get(P.id + '|' + url); return (r && r.obj) || null; };
+/** the spoken part of a long track is over: whoever waited for the sentence goes on, the music carries the wait */
+function auxTick() {
+  if (!P.aux || !P.auxTalk || P.auxTail || audio.loop || (audio.currentTime || 0) < P.auxTalk) return;
+  P.auxTail = true;
+  try { audio.playbackRate = 1; } catch (e) { /* ignore */ }
+  if (P.auxEar) P.auxEarAt = Date.now();
+  const f = P.auxEnd; P.auxEnd = null; if (f) f();
+}
+audio.addEventListener('timeupdate', auxTick);
+setInterval(auxTick, 120);
+const chimedNow = () => P.aux && P.auxTail && P.auxEar && Date.now() - (P.auxEarAt || 0) < 1500;   // the chime was part of the question's track
+function keepAlive() {
+  const kind = P.needChoice ? 'lo' : 'hi', b = bedNow(P.id, kind);
+  if (P.aux && (audio.loop || (P.auxTail && !audio.ended)) && (P.auxKind === kind || (!b && P.auxKind === 'old'))) return;   // the right music is already playing
+  if (b) playAux(b, { loop: true, volume: 1, kind });
+  else if (!P.aux || !audio.loop) playAux('bed.mp3', { loop: true, volume: 0.6, kind: 'old' });
+}
+function stopAux() { if (P.aux) { P.aux = false; P.auxEnd = null; P.auxTail = false; P.auxTalk = 0; audio.loop = false; audio.volume = 1; try { audio.pause(); } catch (e) { /* ignore */ } } }
 function bedStart() { keepAlive(); }
 function bedStop() { stopAux(); }
 
@@ -1980,7 +2107,10 @@ async function startHandsFree() {
   HF.phase = 'ask'; HF.ask = ''; paintHF();
   P.want = false; P.needChoice = true;
   let d = null;
+  const quietT = setTimeout(() => { if (HF.key === key && P.needChoice && HF.phase === 'ask' && !auxTalking()) keepAlive(); }, 350);   // the question is not here yet: music, not silence (a silent locked phone gets put to sleep)
   try { d = await Promise.race([ss.sid ? fetchCue(ss.sid, ep.n) : null, sleep(4000).then(() => null)]); } catch (e) { d = null; }
+  if (d && d.url && AUX_OK && !auxNow(d.url)) { try { await Promise.race([auxPrep(d.url, { bed: 'lo', ear: true }), sleep(1500)]); } catch (e) { /* the short clip then */ } }
+  clearTimeout(quietT);
   if (HF.key !== key || !P.needChoice) return;
   if (d && d.text) { HF.ask = d.text; paintHF(); }
   if (d && d.url) await playAux(d.url);  // the narrator asks (on the story's own audio element)
@@ -2050,7 +2180,7 @@ function hfListen() {
       if (HF.key !== key || !P.needChoice || HF.go !== my) return;
       HF.phase = 'listen'; HF.heard = ''; askText(''); paintHF();
       // 11-13 the lock screen has no picture: a short chime (on the story's own <audio>, WebAudio is asleep) says "your turn — I'm listening"
-      playAux('ear.mp3').then(() => { if (HF.key !== key || !P.needChoice || HF.phase !== 'listen' || HF.go !== my) return; keepAlive(); hfListenLocked(key); });
+      (chimedNow() ? Promise.resolve() : playAux('ear.mp3')).then(() => { if (HF.key !== key || !P.needChoice || HF.phase !== 'listen' || HF.go !== my) return; keepAlive(); hfListenLocked(key); });
     };
     if (st === 'live' || st === 'muted') { go(); return; }
     // iOS ended the mic while the phone was locked (or it was never opened): one try to reopen it, then the story carries on rather than hang
@@ -2064,9 +2194,10 @@ function hfListen() {
   diag('listen', { path: 'live', ep: P.ep && P.ep.n });
   stopAutoCountdown();
   if (HF.rec) { HF.rec.cancel(); HF.rec = null; }
+  const chimed = chimedNow();
   keepAlive();
   HF.phase = 'listen'; HF.heard = ''; askText(''); paintHF();
-  earcon('open');
+  if (!chimed) earcon('open');
   const key = HF.key;
   startAutoCountdown(WAIT, 'Listening · the story continues in', true);
   const h = HF.rec = recordAnswer({
@@ -2519,7 +2650,7 @@ function openEndingSheet() {
   const s = byId(P.id);
   openSheet(`
     <div class="ul-head">
-      <div class="ul-art"><img src="${esc(coverOf(s))}" alt=""></div>
+      <div class="ul-art"><img src="${esc(thumbOf(s))}" alt=""></div>
       <h3>The end — for this path</h3>
       <p>Your choices led here. Start again and the story will be written differently.</p>
     </div>
@@ -2545,7 +2676,7 @@ function openUnlockSheet(id, n, onDone, opts = {}) {
     return `
     <div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="ul-head" style="margin-top:-30px">
-      <div class="ul-art ${isCall ? 'round' : ''}"><img src="${esc(isCall ? callerAv(s, caller && caller.key) : coverOf(s))}" alt=""><div class="lk">${ic(isCall ? 'phone' : 'lock', 'lg')}</div></div>
+      <div class="ul-art ${isCall ? 'round' : ''}"><img src="${esc(isCall ? callerAv(s, caller && caller.key) : thumbOf(s))}" alt=""><div class="lk">${ic(isCall ? 'phone' : 'lock', 'lg')}</div></div>
       <h3>${isCall ? `Call ${esc(shortName(caller))}` : `Unlock Episode ${n}`}</h3>
       <p>${isCall ? `${esc(s.title)} · your first call was free` : `${esc(s.title)} · written live from your choice`}</p>
     </div>
@@ -4195,7 +4326,7 @@ async function loadDetail(id, force) {
 function hideDetail() { $('#detail').classList.remove('on'); }
 function renderDetail() {
   const s = byId(detailId); if (!s) return;
-  setTimeout(() => { if (detailId === s.id && isDetailOpen()) { warmRings(); prepareCall(s.id); } }, 1200);
+  setTimeout(() => { if (detailId === s.id && isDetailOpen() && netKnown() && !slowNet()) { warmRings(); prepareCall(s.id); } }, 1200);   // slow link: not before Play — the first bytes of the story come first
   const d = aboutOf(s);
   const ss = getSess(s.id);
   const pr = S.progress[skey(s.id)];
@@ -4209,7 +4340,7 @@ function renderDetail() {
   page.style.setProperty('--accent', s.accent || '#FF8448');
   page.innerHTML = `
     <div class="dt-hero">
-      <div class="dt-bg" style="background-image:url('${esc(coverOf(s))}')"></div>
+      <div class="dt-bg" style="background-image:url('${esc(slowNet() || !netKnown() ? thumbOf(s) : coverOf(s))}')"></div>
       <div class="dt-top">
         <button class="icon-btn" data-act="back" aria-label="Back">${ic('back')}</button>
         <span class="dt-top-r">
@@ -4218,7 +4349,7 @@ function renderDetail() {
         </span>
       </div>
       <div class="dt-main">
-        <div class="dt-cover"><img src="${esc(slowNet() ? coverOf(s) : bigCover(s))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'"></div>
+        <div class="dt-cover"><img src="${esc(slowNet() || !netKnown() ? thumbOf(s) : bigCover(s))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'"></div>
         <h1 class="dt-title">${esc(s.title)}</h1>
         <p class="dt-lead">${esc(s.lead)}</p>
         <div class="stats">
@@ -4335,7 +4466,7 @@ function renderMini() {
   else sub = `<span>Ep ${P.ep.n} · ${esc(P.ep.title || '')}</span>`;
   m.innerHTML = `
     <button class="open" data-act="open-player" aria-label="Open player">
-      <img src="${esc(coverOf(s))}" alt="">
+      <img src="${esc(thumbOf(s))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
       <span class="mt"><b>${esc(s.title)}</b>${sub}</span>
     </button>
     <button class="pp" data-act="${P.needChoice ? 'open-choice' : 'toggle'}" aria-label="${isPlaying() ? 'Pause' : 'Play'}">${ic(P.needChoice ? 'spark' : isPlaying() ? 'pause' : 'play')}</button>
@@ -4628,7 +4759,7 @@ function warmStills(s) {
     im.onload = () => fin(true); im.onerror = () => fin(false); im.src = absUrl(u);
   };
   const going = audio.currentTime > 0.3 || audio.readyState >= 3 || audioRoom();   // until the audio has started, only the picture on screen
-  ids.slice(0, going ? 99 : 1).forEach((id) => { const p = stillOf(s, id); if (PS.busy < (slow ? 2 : 3) && p.low && p.low !== p.hi) get(p.low, false); });
+  ids.slice(0, going ? 99 : (slow || !netKnown() ? 0 : 1)).forEach((id) => { const p = stillOf(s, id); if (PS.busy < (slow ? 2 : 3) && p.low && p.low !== p.hi) get(p.low, false); });
   const room = audioRoom();
   if (!slow) { ids.slice(0, 5).forEach((id, k) => { if (PS.hiBusy < 2 && (room || k === 0)) get(stillOf(s, id).hi, true); }); return; }
   if (!room || PS.hiBusy >= 1 || PS.busy >= 2) return;
@@ -4766,14 +4897,14 @@ function updatePlayerUI(force) {
       gen.dataset.k = key;
       if (P.upNext) {
         const off = 160 - (160 * (5 - P.upNext.left)) / 5;
-        gen.innerHTML = `<span class="ring count"><svg viewBox="0 0 58 58"><circle class="trk" cx="29" cy="29" r="25.5"/><circle class="arc" cx="29" cy="29" r="25.5" style="stroke-dashoffset:${off}"/></svg><img src="${esc(coverOf(s))}" alt=""></span>
+        gen.innerHTML = `<span class="ring count"><svg viewBox="0 0 58 58"><circle class="trk" cx="29" cy="29" r="25.5"/><circle class="arc" cx="29" cy="29" r="25.5" style="stroke-dashoffset:${off}"/></svg><img src="${esc(thumbOf(s))}" alt=""></span>
           <span class="gt"><small>UP NEXT IN ${P.upNext.left}</small><b>Ep ${P.upNext.ep.n} · ${esc(P.upNext.ep.title || '')}</b>
           <span class="gbtns"><button class="btn btn-grad btn-sm" data-act="upnext-now">Play now</button><button class="btn btn-ghost btn-sm" data-act="upnext-cancel">Cancel</button></span></span>`;
       } else {
         const n = P.gen ? P.gen.n : 1;
         const status = P.gen ? ({ writing: 'Writing your episode…', voicing: 'Voicing the first lines…', done: 'Starting…' }[P.gen.status] || 'Writing your episode…') : (P.loadStatus === 'voicing' ? 'Voicing Episode 1…' : 'Preparing Episode 1…');
         const said = P.gen ? (P.gen.via === 'auto' ? 'The story carries on by itself…' : P.gen.via === 'silence' || !P.gen.text ? 'You stayed silent.' : `You said “${P.gen.text}”`) : 'First listen — this takes a few seconds';
-        gen.innerHTML = `<span class="ring"><svg viewBox="0 0 58 58"><circle class="trk" cx="29" cy="29" r="25.5"/><circle class="arc" cx="29" cy="29" r="25.5"/></svg><img src="${esc(coverOf(s))}" alt=""></span>
+        gen.innerHTML = `<span class="ring"><svg viewBox="0 0 58 58"><circle class="trk" cx="29" cy="29" r="25.5"/><circle class="arc" cx="29" cy="29" r="25.5"/></svg><img src="${esc(thumbOf(s))}" alt=""></span>
           <span class="gt"><small>EPISODE ${n}${P.gen ? ' · WRITTEN LIVE' : ''}</small><b>${status}</b>${waveBars(22)}<span class="said">${esc(said)}</span></span>`;
       }
     }
@@ -5097,7 +5228,7 @@ function closePlayer() {
 function showPlayerUI() {
   if (!P.id) { location.replace('#/home'); return; }
   playerOpen = true;
-  { const pid = P.id; setTimeout(() => { if (playerOpen && P.id === pid) { warmRings(); prepareCall(pid); } }, 8000); }
+  { const pid = P.id, t0 = Date.now(); const w = () => { if (!playerOpen || P.id !== pid) return; if (P.loading || (P.want && !P.aux && !audioRoom() && Date.now() - t0 < 60000)) { setTimeout(w, 3000); return; } warmRings(); prepareCall(pid); }; setTimeout(w, 8000); }   // ring tones and his first lines: once the story has audio in hand
   renderPlayer();
   const el = $('#player');
   el.classList.add('on'); el.setAttribute('aria-hidden', 'false');
@@ -5379,7 +5510,7 @@ function renderOnboard() {
     body = `
       <div class="ob-body">
         <div class="logo" style="justify-content:center;margin-top:8px">${LOGO}<span class="logo-word">${NARRA ? 'narra' : 'unscripted'}<em>.</em></span></div>
-        <div class="ob-collage">${pick.map((s) => `<img src="${esc(coverOf(s))}" alt="">`).join('')}</div>
+        <div class="ob-collage">${pick.map((s) => `<img src="${esc(thumbOf(s))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">`).join('')}</div>
         <h1 class="ob-title">Stories that <em>listen back.</em></h1>
         <p class="ob-sub">Audio series where every episode ends with your choice — and the next one is written and voiced live, just for you.</p>
       </div>
