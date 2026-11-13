@@ -913,6 +913,7 @@ def finish_episode(job, sess):
         if i not in job['_started']:
             job['_started'].add(i); th = threading.Thread(target=job['_synth'], args=(i, who, raw), daemon=True); th.start(); ths.append(th)
     job['status'] = 'voicing'
+    threading.Thread(target=pre_cue, args=(sess, ep), daemon=True).start()   # 集尾提问和剩下几句的配音同时做
     [x.join(timeout=150) for x in ths]
     if job.get('_mth'): job['_mth'].join(timeout=20)
     for l in ep['lines']:
@@ -1305,11 +1306,14 @@ def cue_text(sess, ep, n):
 
 def make_cue(sess, n):
     """第 n 集结尾的提问配音（旁白声）。第 1 集按剧/语言存盘复用，实时集存在会话里。"""
+    sess['_voice'] = True   # 这一局在用闭眼听：之后每一集文字一写完就先把提问做好（pre_cue）
     ep = next((e for e in sess['eps'] if e['n'] == n), None)
     if not ep: return None
     key = (sess['sid'], n)
-    if key in CUE_OK: return dict(CUE_OK[key], bridge=sel_bridge(sess, n, False))
-    bth = threading.Thread(target=ep_bridge, args=(sess, n), daemon=True); bth.start()  # 过渡句和提问同时做
+    bth = threading.Thread(target=ep_bridge, args=(sess, n), daemon=True); bth.start()  # 过渡句和提问同时做（做过了立刻返回）
+    ev = _CUE_EV.get(key)
+    if ev and key not in CUE_OK: ev.wait(15)   # pre_cue 正在做这一句：等它，不重复配音
+    if key in CUE_OK: bth.join(2); return dict(CUE_OK[key], bridge=sel_bridge(sess, n, False))
     f = CACHE / 'cue' / f'{sess["series"]}.{sess["lang"]}.json' if n == 1 else None
     if f and f.exists():
         CUE_OK[key] = json.load(open(f)); bth.join(3); return dict(CUE_OK[key], bridge=sel_bridge(sess, n, False))
@@ -1320,6 +1324,28 @@ def make_cue(sess, n):
     if f: f.parent.mkdir(parents=True, exist_ok=True); json.dump(d, open(f, 'w'), ensure_ascii=False)
     bth.join(2)  # 一般和提问一起好；没好就先给通用句，她回答时再定
     return dict(d, bridge=sel_bridge(sess, n, False))
+
+
+_CUE_EV = {}
+
+
+def pre_cue(sess, ep):
+    """11-13 (3) 实时集的文字一写完（后面几句还在配音）就把集尾提问做好，并转成手机要的长音轨格式。
+    原来等整集配完手机才来要，提问要 5–8 秒：集尾剩的音频不够长时，选择点上先是一段没有提问的等待。"""
+    key = (sess['sid'], ep['n'])
+    if key in CUE_OK or key in _CUE_EV or not sess.get('_voice') or ep.get('ending') or not ep.get('choices'): return
+    ev = _CUE_EV[key] = threading.Event()
+    try:
+        t = cue_text(sess, ep, ep['n'] + 1)
+        u = tts_hedged(sess['series'], 'NARR', t, sess['lang'], 2, sess.get('tts', 'v4'))
+        if u:
+            CUE_OK[key] = {'url': u, 'text': t, 'n': ep['n']}
+            try: aux_talk(u, True)
+            except Exception: pass
+    except Exception:
+        traceback.print_exc()
+    finally:
+        ev.set()
 
 
 def commit_ep_spec(sess, text):
