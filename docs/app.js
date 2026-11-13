@@ -4532,11 +4532,7 @@ function renderDetailPane() {
         </div></div>
       <div class="about-block"><h4>Genres</h4><div class="tags" style="justify-content:flex-start">${(s.genres || []).map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div></div>`;
     quoteMark();
-    if (cast.length && cast.some((c) => c.quote) && !MOCK) {   // the relay voices this series' lines now (once, kept after that); the lead's is fetched ahead: a tap plays at once
-      const wk = s.id + '|' + LANG;
-      if (!QA.warm.has(wk)) { QA.warm.add(wk); apiFetch(() => { const u = new URL(apiUrl('api/quote')); u.searchParams.set('k', TOKEN); u.searchParams.set('series', s.id); u.searchParams.set('lang', LANG); u.searchParams.set('warm', '1'); return u.toString(); }, {}, 15000).catch(() => {}); }
-      if (cast[0].quote && !slowNet()) quoteGet(s.id, cast[0].key);
-    }
+    if (!MOCK) cast.filter((c) => c.quote && c.key).slice(0, slowNet() ? 2 : 12).forEach((c) => quoteGet(s.id, c.key));   // every line on this page is fetched now (small files next to the page): a tap plays at once
   } else {
     const others = weave(SERIES.filter((x) => x.id !== s.id).sort((a, b) => sharedGenres(b, s) - sharedGenres(a, s)));
     box.innerHTML = `<div class="mlt-grid">${others.map((x) => card(x)).join('')}</div>`;
@@ -4545,15 +4541,21 @@ function renderDetailPane() {
 /* 11-13 (6) "tap a character to hear them": each cast row carries one line that sounds like them (data/quotes.json on the relay),
  * voiced by the same voice they have in the episodes (/api/quote: made once, then kept). It plays on its own small player;
  * the story, if it is playing, steps aside. Tap again to stop. */
-const QA = { a: null, k: '', st: '', blobs: new Map(), warm: new Set() };
+/* 11-13 (9) "it spins for ages before it plays — these lines are fixed, a tap must play at once": every line is now voiced ahead
+ * of time and published next to the page (quote/<series>.<character>.<lang>.mp3, build_quote_audio.py). The page fetches the
+ * lines of the series she is looking at as soon as the cast is on screen; a tap plays from memory. Only a line that has no
+ * file yet (a new series) still goes to the relay. */
+const QA = { a: null, k: '', st: '', blobs: new Map(), ready: new Map() };
 const quoteKey = (sid, key) => sid + '|' + key + '|' + LANG;
+const quoteFile = (sid, key) => `quote/${sid}.${String(key).replace(/ /g, '')}.${LANG}.mp3`;
 function quoteGet(sid, key) {
   const k = quoteKey(sid, key);
   if (MOCK || !sid || !key) return Promise.resolve('');
   if (!QA.blobs.has(k)) {
-    QA.blobs.set(k, apiFetch(() => { const u = new URL(apiUrl('api/quote')); u.searchParams.set('k', TOKEN); u.searchParams.set('series', sid); u.searchParams.set('who', key); u.searchParams.set('lang', LANG); return u.toString(); }, {}, 40000)
-      .then((r) => (r.ok ? r.blob() : null)).then((b) => (b && b.size > 1500 ? URL.createObjectURL(b.type ? b : new Blob([b], { type: 'audio/mpeg' })) : ''))
-      .catch(() => '').then((u) => { if (!u) QA.blobs.delete(k); return u; }));
+    const good = (b) => (b && b.size > 1500 ? b : null);
+    QA.blobs.set(k, fetch(quoteFile(sid, key)).then((r) => (r.ok ? r.blob() : null)).then(good).catch(() => null)
+      .then((b) => b || apiFetch(() => { const u = new URL(apiUrl('api/quote')); u.searchParams.set('k', TOKEN); u.searchParams.set('series', sid); u.searchParams.set('who', key); u.searchParams.set('lang', LANG); return u.toString(); }, {}, 40000).then((r) => (r.ok ? r.blob() : null)).then(good).catch(() => null))
+      .then((b) => { const u = b ? URL.createObjectURL(b.type && /audio/.test(b.type) ? b : new Blob([b], { type: 'audio/mpeg' })) : ''; if (u) QA.ready.set(k, u); else QA.blobs.delete(k); return u; }));
   }
   return QA.blobs.get(k);
 }
@@ -4572,6 +4574,13 @@ function quotePlay(sid, key) {
   const a = QA.a || (QA.a = new Audio());
   a.onended = () => { if (QA.k === k && QA.st === 'play') quoteStop(); };
   a.onerror = () => { if (QA.k === k && QA.st === 'play') quoteStop(); };
+  const now = QA.ready.get(k);
+  if (now) {   // already in memory (fetched when the cast came on screen): plays inside this tap, nothing to wait for
+    QA.k = k; QA.st = 'play'; quoteMark();
+    a.src = now;
+    const p = a.play(); if (p && p.catch) p.catch(() => { if (QA.k === k) quoteStop(); });
+    return;
+  }
   QA.k = k; QA.st = 'load'; quoteMark();
   // inside the tap: start the element now (iOS only lets a tap start sound), the real line follows as soon as it is here
   try { a.src = SILENT; const p0 = a.play(); if (p0 && p0.catch) p0.catch(() => {}); } catch (e) { /* ignore */ }

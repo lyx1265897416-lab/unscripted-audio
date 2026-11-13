@@ -2224,11 +2224,17 @@ def cast_of(sid, lang):
         key = ch['name'].split()[0] if ch['name'].split()[0] in VOICES[sid] else ch['name']
         av = f'avatars/cast/{sid}.{key.replace(" ", "")}.jpg'   # 11-11 介绍页演员表每人一张头像
         cast.append({'name': ch['name'] if lang == 'en' else (ch.get('name_zh') or ch['name']), 'role': ch.get(f'role_{lang}') or ch.get('role_zh', ''),
-                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en'), 'key': key, 'quote': ((QUOTES.get(sid) or {}).get(key) or {}).get(lang),
+                     'voice': v.get('zh_name') if lang == 'zh' else v.get('en'), 'key': key, 'quote': ((QUOTES.get(sid) or {}).get(key) or {}).get(lang), 'qa': quote_static(sid, key, lang),
                      'avatar': f'{av}?v={int((APP / av).stat().st_mtime) % 1000000}' if (APP / av).exists() else None})   # ?v=：同名文件换了图（11-11 换成角色包主图），手机不拿旧缓存
     cast.append({'name': 'Narrator' if lang == 'en' else '旁白', 'role': 'Narrator' if lang == 'en' else '旁白', 'voice': VOICES['NARR']['zh_name'] if lang == 'zh' else VOICES['NARR']['en'], 'narr': True,
-                 'key': 'NARR', 'quote': ((QUOTES.get(sid) or {}).get('NARR') or {}).get(lang)})
+                 'key': 'NARR', 'quote': ((QUOTES.get(sid) or {}).get('NARR') or {}).get(lang), 'qa': quote_static(sid, 'NARR', lang)})
     return cast
+
+
+def quote_static(sid, key, lang):
+    """11-13 (9) 这句台词预先配好的静态文件（build_quote_audio.py → app/quote/，跟页面一起在 Pages 上）：有就给地址，手机直接播，不经中转、不现配"""
+    rel = f'quote/{sid}.{key.replace(" ", "")}.{lang}.mp3'; f = APP / rel
+    return f'{rel}?v={int(f.stat().st_mtime) % 1000000}' if f.exists() and f.stat().st_size > 2000 else None
 
 
 # ---------- 11-13 (6) 介绍页角色的一句话，点一下试听（/api/quote）----------
