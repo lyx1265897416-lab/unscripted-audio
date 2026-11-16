@@ -627,21 +627,6 @@ const GENRE_TILE = {
   Werewolf: '#6B4E16', Billionaire: '#2F4A3A', Romance: '#8A2E3B', Fantasy: '#2D3F7A',
   Mystery: '#3B3550', Thriller: '#4A2A2A', 'Reality show': '#7A4A1C', Cozy: '#6E5532', Adventure: '#5A4A1E', Academy: '#3A4A6E',
 };
-/* 11-15 v2 genre tiles: "colours should fit the content — romance pink and so on — and be clean, not greyish; more see-through".
- * One clear hue per genre, spread round the wheel so no two neighbours look alike; [deeper tone under the name, lighter tone
- * that melts into the cover]. */
-const GENRE_TILE2 = {
-  Werewolf: ['#D9861F', '#FFB648'],        // amber — the wolves' eyes, moonlight on fur
-  Billionaire: ['#0F9A6C', '#35D39A'],     // emerald — money, tailoring
-  Romance: ['#EC4C88', '#FF8DB8'],         // pink
-  Fantasy: ['#7C4DEB', '#B08CFF'],         // violet — magic
-  Adventure: ['#0C9DB0', '#3DD3E0'],       // teal — sea and sky
-  Academy: ['#2F76EC', '#6AAEFF'],         // blue — uniforms, daylight
-  Mystery: ['#4A4DD6', '#8286FA'],         // indigo — night
-  Thriller: ['#CF2F42', '#FF6670'],        // crimson
-  'Reality show': ['#F4683F', '#FFA277'],  // coral — sun, beach, stage lights
-  Cozy: ['#58B24A', '#9BE27F'],            // fresh green — soft and healing
-};
 /** how well a series fits the tastes she picked in onboarding (first pick weighs most) + what she's been listening to */
 function prefScore(s) {
   let n = 0;
@@ -4295,7 +4280,7 @@ function renderExploreResults() {
         const s = SERIES.find((x) => matchGenre(x, g) && usedTile.indexOf(x) < 0) || SERIES.find((x) => matchGenre(x, g)) || SERIES[0];
         usedTile.push(s);
         const count = SERIES.filter((x) => matchGenre(x, g)).length;
-        return `<button class="genre-tile" style="--tile:${V2 && GENRE_TILE2[g] ? `${GENRE_TILE2[g][0]};--tile2:${GENRE_TILE2[g][1]}` : GENRE_TILE[g] || '#333'}${V2 && s ? `;--bg:url(${esc(thumbOf(s))})` : ''}" data-act="ex-genre" data-g="${esc(g)}"><span>${esc(g)}</span><small>${count} series</small>${s ? `<img src="${esc(V2 ? thumbOf(s) : coverOf(s))}" alt="" loading="lazy">` : ''}</button>`;
+        return `<button class="genre-tile" style="--tile:${GENRE_TILE[g] || '#333'}${V2 && s ? `;--bg:url(${esc(thumbOf(s))})` : ''}" data-act="ex-genre" data-g="${esc(g)}"><span>${esc(g)}</span><small>${count} series</small>${s ? `<img src="${esc(V2 ? thumbOf(s) : coverOf(s))}" alt="" loading="lazy">` : ''}</button>`;
       }).join('')}</div>
       <h3 class="sec-h">All series</h3>
       <div class="res-list">${SERIES.map(resRow).join('')}</div>`;
