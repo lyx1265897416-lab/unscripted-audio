@@ -1359,3 +1359,9 @@ h1, h2, h3, h4, p { margin: 0; }
 .v4 .me4-tab.on { color: var(--text); }
 .v4 .me4-tab em { font-style: normal; font-family: var(--fb); font-size: 12px; font-weight: 700; color: var(--dim); margin-left: 5px; }
 .v4 .me4-tabs .page-edit { margin-left: auto; color: var(--b); font-weight: 700; padding: 0; }
+/* 11-16 v4 (2): coin history folds; Me without the gear (the name row opens the settings) */
+.v4 .ledger-more { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 44px; margin-top: 4px; color: var(--muted); font-size: 13px; font-weight: 600; border-top: 1px solid var(--line); }
+.v4 .ledger-more .ic { width: 16px; height: 16px; transition: transform .2s; }
+.v4 .ledger-more.open .ic { transform: rotate(180deg); }
+.v4 .me4-top .me-id b { vertical-align: middle; }
+.v4 .me4-top .me-id > .ic { vertical-align: middle; color: var(--dim); margin-left: 2px; }

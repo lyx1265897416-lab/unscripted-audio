@@ -4672,6 +4672,7 @@ function rwRow(o) {
     <div class="rw-act"><em>+${o.reward} ${coinIc('sm')}</em>${o.claimed ? `<span class="claimed">${ic('check', 'xs')} ${tz('Claimed', '已领取')}</span>` : o.ok ? `<button class="btn btn-grad btn-sm" data-act="${o.claimAct}" data-k="${o.k}">${tz('Claim', '领取')}</button>` : `<button class="btn btn-ghost btn-sm" data-act="rw-go" data-to="${o.go}">${tz('Go', '去完成')}</button>`}</div>
   </div>`;
 }
+let ledgerOpen = false;   // 11-16 v4 "the coin history doesn't have to be all open by default — give it a button to expand and collapse"
 let rwTab = 'daily';   // 11-16 "put the daily tasks and the new-listener rewards in one card, two tabs, daily first"
 function renderRewardsV3() {
   ensureToday();
@@ -4705,8 +4706,9 @@ function renderRewardsV3() {
     </section>
     <section class="panel">
       <div class="panel-h"><h3>Coin history</h3><span>${S.ledger.length} records</span></div>
-      ${S.ledger.length ? S.ledger.slice(0, 30).map((h) => `
+      ${S.ledger.length ? S.ledger.slice(0, V4 && !ledgerOpen ? 3 : 30).map((h) => `
         <div class="hist-row"><span>${esc(h.l)}<small>${new Date(h.t).toLocaleString(LANG === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></span><b class="${h.d >= 0 ? 'plus' : 'minus'}">${h.d >= 0 ? '+' : ''}${h.d}</b></div>`).join('') : '<div class="empty" style="padding:16px">No coin activity yet.</div>'}
+      ${V4 && S.ledger.length > 3 ? `<button class="ledger-more ${ledgerOpen ? 'open' : ''}" data-act="ledger-toggle" aria-expanded="${ledgerOpen}">${ledgerOpen ? tz('Show less', '收起') : tz(`Show all ${Math.min(30, S.ledger.length)}`, `展开全部 ${Math.min(30, S.ledger.length)} 条`)}${ic('down', 'sm')}</button>` : ''}
     </section>`;
 }
 function claimOb(k) {
@@ -4730,8 +4732,8 @@ const histItems = () => S.hist.filter((h) => h.k && h.k.endsWith(`:${LANG}`) && 
 /** v4 Me: who she is and the settings gear, her wallet (coins + free listening), then her shelf — Listening, Saved, History */
 function renderMeV4() {
   const el = $('#v-me'); if (!el) return;
-  if (['listening', 'saved', 'history'].indexOf(libTab) < 0) libTab = 'listening';
-  const cont = continueItems(), saved = S.saved.map(byId).filter(Boolean), hist = histItems();
+  if (libTab !== 'saved') libTab = 'listening';   // 11-16 she dropped History here: it repeated Listening
+  const cont = continueItems(), saved = S.saved.map(byId).filter(Boolean);
   const left = freeLeft(), used = Math.min(FREE_LISTEN, S.freeSec || 0);
   const card = (s, pr, act, rmAttrs) => `<div class="lib-card">
       <button class="open" data-act="${act}" data-id="${esc(s.id)}" ${libEdit ? 'disabled' : ''}>
@@ -4747,26 +4749,16 @@ function renderMeV4() {
     n = cont.length;
     body = n ? `<div class="lib-grid">${cont.map((pr) => card(byId(pr.id), pr, 'continue', `data-act="lib-rm" data-k="${esc(skey(pr.id))}"`)).join('')}</div>`
       : `<div class="empty">${ic('headphones')}Nothing in progress yet.<br>${tz('Start any series — your first 30 minutes are free.', '随便挑一部开始吧 —— 前 30 分钟全部免费。')}</div>`;
-  } else if (libTab === 'saved') {
+  } else {
     n = saved.length;
     body = n ? `<div class="lib-grid">${saved.map((x) => card(x, S.progress[skey(x.id)], 'open', `data-act="unsave" data-id="${esc(x.id)}"`)).join('')}</div>`
       : `<div class="empty">${ic('starO')}${tz('Tap the star on any series page to save it here.', '在任意剧集页点右上角的星标，就会收藏到这里。')}</div>`;
-  } else {
-    n = hist.length;
-    body = n ? hist.map((h) => { const x = byId(h.id); return `<div class="lib-row">
-        <button class="open" data-act="hist-play" data-id="${esc(x.id)}" data-n="${h.n}">
-          <span class="cv">${thumbImg(x)}</span>
-          <span class="lt"><b>${esc(x.title)}</b><span>Ep ${h.n} · ${esc(h.title || '')}</span><span>${timeAgo(h.at)}</span></span>
-        </button>
-        ${libEdit ? `<button class="rm danger" data-act="hist-rm" data-at="${h.at}" aria-label="Remove">${ic('trash', 'sm')}</button>` : ''}
-      </div>`; }).join('') : `<div class="empty">${ic('clock')}Your listening history shows up here.</div>`;
   }
   if (!n) libEdit = false;
   el.innerHTML = `
     <div class="me4-top">
       <button class="pf-av" data-act="profile" aria-label="${tz('Settings', '设置')}">${esc((S.name || '?').slice(0, 1).toUpperCase())}</button>
-      <button class="me-id" data-act="profile"><b>${esc(S.name || tz('Listener', '听众'))}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)} · ${MODES[modeOf()].name}</p></button>
-      <button class="icon-btn" data-act="profile" aria-label="${tz('Settings', '设置')}">${ic('gear')}</button>
+      <button class="me-id" data-act="profile"><b>${esc(S.name || tz('Listener', '听众'))}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}${ic('chevR', 'sm')}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)} · ${MODES[modeOf()].name}</p></button>
     </div>
     <section class="wallet4">
       <button class="w4-h" data-act="store"><span>${tz('My wallet', '我的钱包')}</span>${ic('chevR', 'sm')}</button>
@@ -4779,7 +4771,7 @@ function renderMeV4() {
       <p class="w4-note">${S.vip ? tz('VIP — everything is free', 'VIP —— 全部免费') : left ? tz('Your first 30 minutes are free for everything. After that Ep 1–3 stay free, later episodes are 10 coins.', '前 30 分钟所有内容免费；用完后每部前 3 集仍免费，之后每集 10 金币。') : tz('Free minutes used up · Ep 1–3 stay free on every series, later episodes are 10 coins.', '免费时长已用完 · 每部前 3 集仍免费，之后每集 10 金币。')}</p>
     </section>
     <div class="me4-tabs">
-      ${[['listening', tz('Listening', '在听'), cont.length], ['saved', tz('Saved', '收藏'), saved.length], ['history', tz('History', '历史'), hist.length]].map(([k, l, c]) => `<button class="me4-tab ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}${c ? `<em>${c}</em>` : ''}</button>`).join('')}
+      ${[['listening', tz('Listening', '在听'), cont.length], ['saved', tz('Saved', '收藏'), saved.length]].map(([k, l, c]) => `<button class="me4-tab ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}${c ? `<em>${c}</em>` : ''}</button>`).join('')}
       ${n ? `<button class="link-btn page-edit" data-act="lib-edit">${libEdit ? tz('Done', '完成') : tz('Edit', '编辑')}</button>` : ''}
     </div>
     ${body}`;
@@ -5910,6 +5902,7 @@ function showTab(tab) {
   else if (tab === 'me') renderMe();
   if (tab !== 'library' && !(V4 && tab === 'me')) libEdit = false;
   if (tab !== 'me') meEdit = false;
+  if (tab !== 'rewards') ledgerOpen = false;
 }
 function go(to) {
   if (V3 && to === 'explore') { homeFind(true); return; }
@@ -5959,6 +5952,7 @@ document.addEventListener('click', (e) => {
     case 'me-edit': meEdit = !meEdit; renderMe(); break;
     case 'rw-go': rewardGo(el.dataset.to); break;
     case 'rw-tab': rwTab = el.dataset.t; renderRewards(); break;
+    case 'ledger-toggle': { ledgerOpen = !ledgerOpen; const v = $('#v-rewards'), y = v ? v.scrollTop : 0; renderRewards(); if (v) v.scrollTop = y; break; }
     case 'ob-claim': claimOb(el.dataset.k); break;
     case 'free-reset': S.freeSec = 0; save(); if (curTab === 'me') renderMe(); toast(tz('Free listening reset to 30 min', '免费收听已重置为 30 分钟')); break;
     case 'free-end': S.freeSec = FREE_LISTEN; freeEnded(); break;
