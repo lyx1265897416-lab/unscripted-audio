@@ -1206,6 +1206,3 @@ h1, h2, h3, h4, p { margin: 0; }
 .v2 .dt-main .tags { gap: 0; margin-top: 8px; }
 .v2 .dt-main .tag { background: none; padding: 0; color: var(--muted); font-weight: 500; font-size: 12.5px; }
 .v2 .dt-main .tag + .tag::before { content: '·'; margin: 0 7px; opacity: .6; }
-/* rewards · a task that is not done yet shows its progress only; the button appears when there is something to claim */
-.v2 .task .btn:disabled { display: none; }
-.v2 .task .tbar { max-width: none; }
