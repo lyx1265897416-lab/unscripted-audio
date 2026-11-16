@@ -373,7 +373,7 @@ const RealAPI = {
   },
   series() { return this.get('api/series', null, true); },
   seriesDetail(id) { return this.get('api/series/' + encodeURIComponent(id), null, true); },
-  play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, me: S.me || '', tts: TTS }); },
+  play({ series, name }) { return this.post('api/play', { series, lang: LANG, name, tts: TTS }); },
   next({ sid, text, via }) { return this.post('api/next', { sid, text, via }); },
   job(id, have, nl) { return this.get('api/job', have == null ? { id } : (nl == null ? { id, wait: 8, have } : { id, wait: 8, have, nl }), false); },  // have: long-poll until a new line is voiced; nl: …or one more line is written (11-12: the text shows first)
   async callChunk(cid, blob, q) { return this.callSay(cid, blob, q, 'api/call/chunk'); },
@@ -395,10 +395,10 @@ const RealAPI = {
     return r.json();
   },
   fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
-  callStart({ series, who, sid, direction, ckey }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, me: S.me || '', tts: TTS, ckey }); },
+  callStart({ series, who, sid, direction, ckey }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, tts: TTS, ckey }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
   callEnd({ cid, seconds }) { return this.post('api/call/end', { cid, seconds }); },
-  callPrepare({ series, who, sid }) { return this.post('api/call/prepare', { series, lang: LANG, name: S.name || '', who, sid: sid || null, me: S.me || '', tts: TTS }); },
+  callPrepare({ series, who, sid }) { return this.post('api/call/prepare', { series, lang: LANG, name: S.name || '', who, sid: sid || null, tts: TTS }); },
 };
 
 const MockAPI = {
@@ -2983,11 +2983,6 @@ function openEpisodesSheet() {
 }
 
 const profileFields = () => `
-    <label class="field-l" for="pf-name">What characters call you</label>
-    <form class="field" data-form="name"><input id="pf-name" maxlength="24" value="${esc(S.name)}" placeholder="Your name" autocomplete="given-name"><button class="btn btn-ghost" type="submit">Save</button></form>
-    <label class="field-l" for="pf-me">Your story self <small>who you want to become, the life you want, how you want to be loved</small></label>
-    <form class="field me" data-form="me"><textarea id="pf-me" maxlength="400" rows="3" placeholder="${LANG === 'zh' ? '比如：我在海边开了一家花店。我想被毫不犹豫地选择，被温柔又笃定地爱着。' : 'e.g. I run my own flower shop. I want to be chosen without hesitation, and loved gently but surely.'}">${esc(S.me || '')}</textarea><button class="btn btn-ghost" type="submit">Save</button></form>
-    <div class="me-chips">${(LANG === 'zh' ? ['我想被坚定地选择。', '我是在上海开工作室的设计师。', '我想被好好地宠着、护着。', '我比自己以为的更勇敢。'] : ['I want to be chosen, firmly.', 'I\u2019m a successful designer in New York.', 'I want to feel safe and adored.', 'I\u2019m braver than I think.']).map((t) => `<button class="chip" data-act="me-chip" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>
     <span class="field-l">How you listen</span>
     <button class="opt mode-row" data-act="mode-sheet"><span class="ol">${ic(MODES[modeOf()].icon)} ${MODES[modeOf()].name} · ${MODES[modeOf()].short}</span>${ic('chevR', 'sm')}</button>
     <span class="field-l">Story language</span>
@@ -4654,13 +4649,11 @@ function homeFind(focus) {
 
 /* ---- Rewards (v3) ---- */
 const OB_TASKS = [
-  { k: 'name', en: 'Tell them your name', zh: '告诉他们你的名字', den: 'Characters say it in the story', dzh: '角色会在故事里叫你的名字', reward: 10, go: 'me', done: () => !!S.name },
   { k: 'ep', en: 'Finish your first episode', zh: '听完第一集', den: 'Any Episode 1, to its choice', dzh: '任意一部的第 1 集，听到选择点', reward: 20, go: 'home', done: () => (S.ob.ep || 0) >= 1 || S.hist.some((h) => h.n >= 2) },
   { k: 'choice', en: 'Make your first choice', zh: '做出第一个选择', den: 'Tap an option, type, or say your own', dzh: '点选项、打字，或者自己说', reward: 10, go: 'home', done: () => (S.ob.choice || 0) >= 1 || S.hist.some((h) => h.n >= 2) },
   { k: 'voice', en: 'Answer out loud once', zh: '用语音回答一次', den: 'Say your answer instead of tapping', dzh: '不点选项，直接开口说', reward: 20, go: 'mode', done: () => (S.ob.voice || 0) >= 1 },
   { k: 'save', en: 'Save a series to your Library', zh: '收藏一部剧', den: 'Tap the star on any series page', dzh: '在任意剧集页点右上角的星标', reward: 10, go: 'home', done: () => S.saved.length > 0 },
   { k: 'call', en: 'Call a lead', zh: '给主角打一通电话', den: 'Your first call is free', dzh: '第一通电话免费', reward: 20, go: 'home', done: () => (S.ob.call || 0) >= 1 || callsFor().length > 0 },
-  { k: 'me', en: 'Write your story self', zh: '写下你的故事人设', get den() { return NOCALL ? 'Episodes are written around you' : 'Episodes and calls are written around you'; }, get dzh() { return NOCALL ? '之后的剧情都会围绕你来写' : '之后的剧情和通话都会围绕你来写'; }, reward: 15, go: 'me', done: () => !!S.me },
   { k: 'streak', en: 'Check in 3 days in a row', zh: '连续签到 3 天', den: '', dzh: '', reward: 30, go: 'checkin', done: () => Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0) >= 3, prog: () => `${Math.min(3, Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0))}/3` },
 ];
 const tasksNow = () => TASKS.filter((t) => !(NOCALL && t.k === 'call'));
