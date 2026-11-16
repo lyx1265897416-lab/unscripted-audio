@@ -62,3 +62,12 @@ data/stills_hd/
 
 # 介绍页角色的一句话（build_quotes.py 生成，含按世界卡改写的内容）：只留本机
 data/quotes.json
+
+# BL 三部（11-16，按 Anamana 三部短剧的节拍改编）：世界卡和第 1 集剧本只留本机
+data/world/evander.json
+data/world/cade.json
+data/world/caius.json
+data/ep1/evander.*
+data/ep1/cade.*
+data/ep1/caius.*
+data/bl/
