@@ -52,6 +52,7 @@ const UIQ = V2 ? 'v2' : NARRA ? 'narra' : 'classic';
 const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
 if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
 if (V2) document.documentElement.classList.add('v2');
+if (V2 && Q.get('tile') === 'b') document.documentElement.classList.add('tile-b');   // the other look of the genre tiles, for comparing
 if (Q.has('k') || !Q.has('ui')) {
   if (Q.has('k')) { store.set('ua.k', Q.get('k')); Q.delete('k'); }
   if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'v2') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI
@@ -4279,7 +4280,7 @@ function renderExploreResults() {
         const s = SERIES.find((x) => matchGenre(x, g) && usedTile.indexOf(x) < 0) || SERIES.find((x) => matchGenre(x, g)) || SERIES[0];
         usedTile.push(s);
         const count = SERIES.filter((x) => matchGenre(x, g)).length;
-        return `<button class="genre-tile" style="--tile:${GENRE_TILE[g] || '#333'}" data-act="ex-genre" data-g="${esc(g)}"><span>${esc(g)}</span><small>${count} series</small>${s ? `<img src="${esc(V2 ? thumbOf(s) : coverOf(s))}" alt="" loading="lazy">` : ''}</button>`;
+        return `<button class="genre-tile" style="--tile:${GENRE_TILE[g] || '#333'}${V2 && s ? `;--bg:url(${esc(thumbOf(s))})` : ''}" data-act="ex-genre" data-g="${esc(g)}"><span>${esc(g)}</span><small>${count} series</small>${s ? `<img src="${esc(V2 ? thumbOf(s) : coverOf(s))}" alt="" loading="lazy">` : ''}</button>`;
       }).join('')}</div>
       <h3 class="sec-h">All series</h3>
       <div class="res-list">${SERIES.map(resRow).join('')}</div>`;
