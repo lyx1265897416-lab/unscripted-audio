@@ -565,10 +565,12 @@ h1, h2, h3, h4, p { margin: 0; }
 .pl-ctrl .icon-btn .ic { width: 30px; height: 30px; }
 .pl-ctrl .icon-btn.edge .ic { width: 26px; height: 26px; }
 .pl-ctrl .icon-btn:disabled { opacity: .3; }
-.big-play { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #1A0B06; box-shadow: 0 12px 30px rgba(255, 98, 72, .4); transition: transform .12s; }
+.big-play { position: relative; width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #1A0B06; box-shadow: 0 12px 30px rgba(255, 98, 72, .4); transition: transform .12s; }
 .big-play:active { transform: scale(.95); }
 .big-play .ic { width: 32px; height: 32px; }
-.big-play.busy::before { content: ""; position: absolute; width: 82px; height: 82px; border-radius: 50%; border: 2.5px solid transparent; border-top-color: var(--b); animation: spin .9s linear infinite; }
+/* 11-15 the loading ring sat down and to the right of the button on iPhone: it had a fixed 82 px size and no anchor, so Safari put its corner on the
+   button's corner (and the button is 64 px on small screens). It is now tied to the button itself: 5 px outside it all round, whatever its size. */
+.big-play.busy::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2.5px solid transparent; border-top-color: var(--b); animation: spin .9s linear infinite; pointer-events: none; }
 .pl-tools { flex: none; display: flex; justify-content: space-around; margin-top: 10px; }
 .tool { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; font-weight: 600; min-width: 64px; min-height: 48px; justify-content: center; font-variant-numeric: tabular-nums; }
 .tool .ic { width: 22px; height: 22px; }
