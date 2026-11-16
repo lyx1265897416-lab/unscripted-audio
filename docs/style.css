@@ -1174,31 +1174,38 @@ h1, h2, h3, h4, p { margin: 0; }
 
 
 /* =========================================================================
- * 11-15 ?ui=lite — the pared-down narra (see LITE in app.js). Only rules that take things away or lay out the one home list.
+ * 11-15 ?ui=v2 — narra, each screen tidied (see V2 in app.js). Same tabs, pages and functions; layout only.
  * ========================================================================= */
-.lite { --tab-h: 0px; }
-.lite .tabbar { display: none; }
-/* home: one list */
-.lite .lt-lead { margin: 2px 18px 6px; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.lite .lt-sec { padding: 10px 14px 0; }
-.lite .lt-sec h3 { margin: 10px 4px 8px; font-family: var(--fd); font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
-.lite .lt-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border-radius: 18px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background .15s ease; }
-.lite .lt-card:active { background: rgba(255, 255, 255, .06); }
-.lite .lt-card .cv { flex: none; width: 66px; height: 88px; border-radius: 12px; overflow: hidden; background: var(--s3); }
-.lite .lt-card .cv img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.lite .lt-card .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.lite .lt-card .tx b { font-family: var(--fd); font-size: 16.5px; font-weight: 800; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lite .lt-card .tx em { font-style: normal; color: var(--b); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lite .lt-card .tx span { color: var(--muted); font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.lite .lt-play { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #1A0B06; box-shadow: 0 6px 16px rgba(255, 98, 72, .28); }
-.lite .lt-play .ic { width: 18px; height: 18px; }
-/* welcome: one screen */
-.lite .lt-ob { justify-content: center; gap: 4px; }
-.lite .lt-ob .ob-name { margin-top: 22px; }
-/* series page: no save / share, no stats, no tags, no tabs, no genres block */
-.lite .dt-top-r, .lite .dt-main .stats, .lite .dt-main .tags, .lite .call-note, .lite .hist-btn, .lite #detail .tabs, .lite .ab-genres { display: none; }
-.lite .dt-main .dt-lead { margin-bottom: 14px; }
-/* player: back 10 / play / forward 10, and the listening mode — nothing else */
-.lite .pl-ctrl .icon-btn.edge, .lite #pl-share, .lite #pl-speed, .lite #pl-sleep, .lite .pl-tools [data-act="pl-eps"] { display: none; }
-.lite .pl-ctrl { justify-content: center; gap: 34px; }
-.lite .pl-tools { justify-content: center; }
+/* home · hero: lead's name and role under the title; the tag string beside the button is gone, the button stands alone */
+.v2 .hero-lead { margin: 2px 0 6px; color: var(--b); font-size: 12.5px; font-weight: 700; letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2 .hero-tags { display: none; }
+/* home · cards: titles keep two lines' height, so the rating line of every card in a row sits on one baseline */
+.v2 .card .t { min-height: 2.6em; }
+.v2 .card .m .ic { color: var(--b); }
+/* home · the coin banner: one slim strip after the shelves */
+.v2 .promo { padding: 10px 12px 10px 10px; gap: 10px; margin-top: 6px; }
+.v2 .promo::before { display: none; }
+.v2 .promo .pi { width: 34px; height: 34px; border-radius: 10px; }
+.v2 .promo b { font-size: 14px; }
+.v2 .promo .pt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; margin-top: 1px; }
+.v2 .promo .go { padding: 6px 11px; font-size: 12.5px; }
+/* explore · genre tiles half as tall: the full list starts on the first screen */
+.v2 .genre-grid { gap: 8px; }
+.v2 .genre-tile { min-height: 0; height: 62px; padding: 10px 12px; }
+.v2 .genre-tile span { font-size: 15px; }
+.v2 .genre-tile small { margin-top: 1px; font-size: 11px; }
+.v2 .genre-tile img { width: 44px; right: -6px; bottom: -16px; }
+/* explore · rows: name, who, hook, rating — one thing per line, nothing cut off mid-number */
+.v2 .res-row { align-items: flex-start; padding: 9px 0; }
+.v2 .res-row .rt span { color: var(--b); font-size: 12px; font-weight: 600; }
+.v2 .res-row .rt p { margin-top: 3px; -webkit-line-clamp: 1; color: var(--muted); }
+.v2 .res-row .rt .st { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--dim); font-weight: 500; font-variant-numeric: tabular-nums; }
+.v2 .res-row .rt .st .ic { width: 11px; height: 11px; color: var(--b); }
+/* series page · the tag chips become one quiet line under the numbers */
+.v2 .dt-main .stats { margin-top: 10px; }
+.v2 .dt-main .tags { gap: 0; margin-top: 8px; }
+.v2 .dt-main .tag { background: none; padding: 0; color: var(--muted); font-weight: 500; font-size: 12.5px; }
+.v2 .dt-main .tag + .tag::before { content: '·'; margin: 0 7px; opacity: .6; }
+/* rewards · a task that is not done yet shows its progress only; the button appears when there is something to claim */
+.v2 .task .btn:disabled { display: none; }
+.v2 .task .tbar { max-width: none; }
