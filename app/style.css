@@ -1171,3 +1171,34 @@ h1, h2, h3, h4, p { margin: 0; }
 .ll.ll-new { animation: llnew .45s ease both; }
 @keyframes llnew { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .ll.ll-new { animation: none; } }
+
+
+/* =========================================================================
+ * 11-15 ?ui=lite — the pared-down narra (see LITE in app.js). Only rules that take things away or lay out the one home list.
+ * ========================================================================= */
+.lite { --tab-h: 0px; }
+.lite .tabbar { display: none; }
+/* home: one list */
+.lite .lt-lead { margin: 2px 18px 6px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.lite .lt-sec { padding: 10px 14px 0; }
+.lite .lt-sec h3 { margin: 10px 4px 8px; font-family: var(--fd); font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.lite .lt-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border-radius: 18px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background .15s ease; }
+.lite .lt-card:active { background: rgba(255, 255, 255, .06); }
+.lite .lt-card .cv { flex: none; width: 66px; height: 88px; border-radius: 12px; overflow: hidden; background: var(--s3); }
+.lite .lt-card .cv img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lite .lt-card .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lite .lt-card .tx b { font-family: var(--fd); font-size: 16.5px; font-weight: 800; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lite .lt-card .tx em { font-style: normal; color: var(--b); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lite .lt-card .tx span { color: var(--muted); font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lite .lt-play { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #1A0B06; box-shadow: 0 6px 16px rgba(255, 98, 72, .28); }
+.lite .lt-play .ic { width: 18px; height: 18px; }
+/* welcome: one screen */
+.lite .lt-ob { justify-content: center; gap: 4px; }
+.lite .lt-ob .ob-name { margin-top: 22px; }
+/* series page: no save / share, no stats, no tags, no tabs, no genres block */
+.lite .dt-top-r, .lite .dt-main .stats, .lite .dt-main .tags, .lite .call-note, .lite .hist-btn, .lite #detail .tabs, .lite .ab-genres { display: none; }
+.lite .dt-main .dt-lead { margin-bottom: 14px; }
+/* player: back 10 / play / forward 10, and the listening mode — nothing else */
+.lite .pl-ctrl .icon-btn.edge, .lite #pl-share, .lite #pl-speed, .lite #pl-sleep, .lite .pl-tools [data-act="pl-eps"] { display: none; }
+.lite .pl-ctrl { justify-content: center; gap: 34px; }
+.lite .pl-tools { justify-content: center; }

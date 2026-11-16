@@ -44,11 +44,18 @@ let MOCK = Q.get('mock') === '1';
 /* 11-13 narra is the default now: a link without ui= (typed address, history suggestion, an old bookmark) used to fall back to the
  * classic UI, which on a phone looked like "the app didn't update". The classic UI stays reachable with ?ui=classic. */
 const NARRA = Q.get('ui') !== 'classic';
+/* 11-15 ?ui=lite — a pared-down narra to try the core loop on its own (pick a story → listen → answer → hear what happens):
+ * one home list instead of four tabs and six shelves, a one-field welcome, a series page without tabs or stats, a player with
+ * three transport buttons and one mode switch, no coins / unlocking / rewards. Same engine, same player, same choice point.
+ * It sits beside narra until she has compared the two; nothing of narra changes while LITE is off. */
+const LITE = Q.get('ui') === 'lite';
+const UIQ = LITE ? 'lite' : NARRA ? 'narra' : 'classic';
 const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
 if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
+if (LITE) document.documentElement.classList.add('lite');
 if (Q.has('k') || !Q.has('ui')) {
   if (Q.has('k')) { store.set('ua.k', Q.get('k')); Q.delete('k'); }
-  if (Q.get('ui') !== 'classic') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI
+  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'lite') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI
   const qs = Q.toString();
   history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
@@ -213,7 +220,7 @@ function addCoins(delta, label) {
 }
 const PRICE = 10;
 const FREE_EPS = 3;
-const isUnlocked = (id, n) => S.vip || n <= FREE_EPS || ((S.unlocks[id] || []).indexOf(n) >= 0);
+const isUnlocked = (id, n) => LITE || S.vip || n <= FREE_EPS || ((S.unlocks[id] || []).indexOf(n) >= 0);
 function markUnlocked(id, n) { (S.unlocks[id] = S.unlocks[id] || []).push(n); save(); }
 
 /* =========================================================================
@@ -538,6 +545,7 @@ const ICON = {
   library: '<rect x="3.5" y="4" width="4.5" height="16" rx="1"/><rect x="10" y="4" width="4.5" height="16" rx="1"/><path d="m16.6 5.4 3-.7 2.9 14.6-3 .7z"/>',
   rewards: '<rect x="3" y="8" width="18" height="4.5" rx="1"/><path d="M5 12.5V20h14v-7.5M12 8v12"/><path d="M12 8C10.5 5 6.5 4.3 6.5 6.5S10 8 12 8zm0 0c1.5-3 5.5-3.7 5.5-1.5S14 8 12 8z"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
+  dots: '<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>',
   play: '<path d="M8 5.6v12.8a1 1 0 0 0 1.53.85l10.2-6.4a1 1 0 0 0 0-1.7L9.53 4.75A1 1 0 0 0 8 5.6z" fill="currentColor" stroke="none"/>',
   pause: '<rect x="6.5" y="5" width="4" height="14" rx="1.3" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4" height="14" rx="1.3" fill="currentColor" stroke="none"/>',
   back10: '<path d="M4.5 12.5a8 8 0 1 0 2.7-6"/><path d="M4 3.5v4.5h4.5"/><text x="13" y="15.6" font-size="7.4" font-weight="800" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui, sans-serif">10</text>',
@@ -2489,7 +2497,7 @@ function openModeSheet() {
   openSheet(`
     <div class="sh-h"><div><h3>How do you want to listen?</h3><p>Switch any time. Calls with characters work in every mode.</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="mode-list">
-      ${Object.entries(MODES).map(([k, m]) => `<button class="mode-opt ${cur === k ? 'on' : ''}" data-act="set-mode" data-m="${k}" ${k === 'voice' && !VOICE_OK ? 'disabled' : ''}>
+      ${Object.entries(MODES).filter(([k]) => !LITE || k !== 'auto').map(([k, m]) => `<button class="mode-opt ${cur === k ? 'on' : ''}" data-act="set-mode" data-m="${k}" ${k === 'voice' && !VOICE_OK ? 'disabled' : ''}>
         <span class="mo-ic">${ic(m.icon)}</span><span class="mo-t"><b>${m.name}${k === 'voice' && !VOICE_OK ? ' · not supported in this browser' : ''}</b><small>${m.desc}</small></span>${cur === k ? ic('check') : ''}</button>`).join('')}
     </div>`, { kind: 'mode' });
 }
@@ -2891,10 +2899,23 @@ function openStore() {
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+/* lite: speed, sleep timer, the episode list and share live behind one "more" button — still there, off the main screen */
+function openMoreSheet() {
+  const row = (act, mark, name, val) => `<button class="mode-opt" data-act="${act}"><span class="mo-ic">${mark}</span><span class="mo-t"><b>${name}</b>${val != null ? `<small ${act === 'speed' ? 'id="mo-speed"' : ''}>${val}</small>` : ''}</span></button>`;
+  openSheet(`
+    <div class="sh-h"><div><h3>${tz('More', '更多')}</h3></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="mode-list">
+      ${row('speed', '<b style="font-size:13px">1x</b>', tz('Playback speed', '倍速'), (S.speed || 1) + 'x')}
+      ${row('sleep-sheet', ic('moon'), tz('Sleep timer', '定时关闭'), null)}
+      ${row('pl-eps', ic('list'), tz('Episodes', '剧集列表'), null)}
+      ${row('share', ic('share'), tz('Share', '分享'), null)}
+    </div>`, { kind: 'more' });
+}
 function cycleSpeed() {
   const i = SPEEDS.indexOf(S.speed);
   S.speed = SPEEDS[(i + 1) % SPEEDS.length];
   setAudioRate(); save(); updatePlayerUI();
+  { const x = $('#mo-speed'); if (x) x.textContent = S.speed + 'x'; }
   toast(`Speed ${S.speed}x`);
 }
 const SLEEPS = [['Off', 0], ['5 minutes', 5], ['15 minutes', 15], ['30 minutes', 30], ['1 hour', 60], ['End of episode', -1]];
@@ -3118,7 +3139,7 @@ const callerOf = (s, key) => callersOf(s).find((c) => c.key === key) || callersO
 /** each caller's own face (villa: Jace / Theo / Kai…); falls back to the series avatar */
 const callerAv = (s, key) => { const c = s && key ? callersOf(s).find((x) => x.key === key) : null; return (c && c.avatar) || avatarOf(s); };
 const shortName = (c) => String((c && (c.name || c.key)) || '').split(/\s*[·•]\s*/)[0].trim();
-const callCost = (id) => (S.vip || !(S.callsUsed || {})[id] ? 0 : CALL_PRICE);
+const callCost = (id) => (LITE || S.vip || !(S.callsUsed || {})[id] ? 0 : CALL_PRICE);
 
 /* 11-10 "connect faster": while she is on a series page / the caller list / the player, the relay already writes and
  * voices his first two lines for an outgoing call (POST /api/call/prepare); tapping Call then picks up in ~1 s.
@@ -4110,6 +4131,7 @@ function cycleTrSpeed() {
 const TABS = [['home', 'Home'], ['explore', 'Explore'], ['library', 'Library'], ['rewards', 'Rewards']];
 let curTab = 'home';
 function renderTabbar() {
+  if (LITE) { $('#tabbar').innerHTML = ''; return; }
   $('#tabbar').innerHTML = TABS.map(([k, l]) => `<button class="tab ${curTab === k ? 'on' : ''}" data-act="go" data-to="${k}" aria-label="${l}" ${curTab === k ? 'aria-current="page"' : ''}>${ic(k)}<span>${l}</span></button>`).join('');
 }
 function refreshCoins() {
@@ -4151,7 +4173,24 @@ function progressLabel(pr) {
 }
 
 let heroTimer = 0;
+function renderHomeLite() {
+  const el = $('#v-home');
+  const sorted = weave(byPref(SERIES)), cont = continueItems().slice(0, 2);
+  setTimeout(() => cont.forEach((x) => warmResume(x.id || (x.s && x.s.id))), 400);
+  const row = (s, sub, act, icon) => `
+    <div class="lt-card" data-act="${act}" data-id="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.title)}">
+      <span class="cv">${thumbImg(s)}</span>
+      <span class="tx"><b>${esc(s.title)}</b><em>${esc(s.lead || '')}</em><span>${sub}</span></span>
+      <button class="lt-play" data-act="${act === 'continue' ? 'continue' : 'play-series'}" data-id="${esc(s.id)}" aria-label="${tz('Play', '播放')}">${ic(icon)}</button>
+    </div>`;
+  el.innerHTML = `
+    <header class="topbar"><div class="logo">${LOGO}<span class="logo-word">narra<em>.</em></span></div></header>
+    <p class="lt-lead">${tz('Every episode ends on your choice. The next one is written and voiced live, just for you.', '每一集都停在你的选择上，下一集按你的回答实时写、实时配音。')}</p>
+    ${cont.length ? `<section class="lt-sec"><h3>${tz('Continue', '接着听')}</h3>${cont.map((pr) => { const s = byId(pr.id); return s ? row(s, esc(progressLabel(pr)), 'continue', pr.needChoice ? 'spark' : 'play') : ''; }).join('')}</section>` : ''}
+    <section class="lt-sec"><h3>${tz('Pick a story', '选一个故事')}</h3>${sorted.map((s) => row(s, esc(s.hook || ''), 'open', 'play')).join('')}</section>`;
+}
 function renderHome() {
+  if (LITE) { renderHomeLite(); return; }
   const el = $('#v-home');
   const sorted = weave(byPref(SERIES));  // her picked tastes first, earlier series and the new batch alternating  // her picked tastes first
   const heroes = sorted.slice(0, 5);
@@ -4513,6 +4552,7 @@ function renderDetail() {
 }
 function renderDetailPane() {
   const s = byId(detailId); const box = $('#dt-pane'); if (!s || !box) return;
+  if (LITE) detailTab = 'about';
   if (detailTab === 'episodes') {
     box.innerHTML = `<div class="ep-head"><span>Ep 1–${FREE_EPS} free · then ${PRICE} coins each</span><span>${S.vip ? 'VIP · all free' : ''}</span></div><div class="ep-list" id="dt-eps">${episodeRows(s)}</div>`;
   } else if (detailTab === 'about') {
@@ -4530,7 +4570,7 @@ function renderDetailPane() {
           <div><b>2</b><span>Pick an answer, type your own, or just say it out loud.</span></div>
           <div><b>3</b><span>The next episode is written and voiced live from what you chose${S.name ? `, and they’ll call you ${esc(S.name)}` : ''}.</span></div>
         </div></div>
-      <div class="about-block"><h4>Genres</h4><div class="tags" style="justify-content:flex-start">${(s.genres || []).map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div></div>`;
+      <div class="about-block ab-genres"><h4>Genres</h4><div class="tags" style="justify-content:flex-start">${(s.genres || []).map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div></div>`;
     quoteMark();
     if (!MOCK) {   // every line on this page is fetched now (small files next to the page): a tap plays at once. Slow link: one after the other, in the order they are listed
       const rows = cast.filter((c) => c.quote && c.key).slice(0, 12);
@@ -4701,6 +4741,7 @@ function renderPlayer() {
         <div class="pl-top-t tap" data-act="pl-detail" role="button" tabindex="0" aria-label="${tz('Series details', '查看剧集详情')}"><b id="pl-series" translate="no"></b><small><span id="pl-ep"></span>${ic('chevR', 'xs')}</small></div>
         <button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>
         <button class="icon-btn" data-act="share" id="pl-share" aria-label="Share">${ic('share')}</button>
+        ${LITE ? `<button class="icon-btn" data-act="pl-more" id="pl-more" aria-label="${tz('More', '更多')}">${ic('dots')}</button>` : ''}
       </header>
       <div class="pl-body">
         <div class="nr-gap"><span class="pl-badge" id="pl-badge" hidden></span></div>
@@ -5470,7 +5511,7 @@ function route() {
   baseHash = location.hash || '#/home';
   if (a === 'series' && b) { showDetail(decodeURIComponent(b)); return; }
   hideDetail();
-  const tab = TABS.some(([k]) => k === a) ? a : 'home';
+  const tab = !LITE && TABS.some(([k]) => k === a) ? a : 'home';
   showTab(tab);
 }
 function showTab(tab) {
@@ -5556,6 +5597,7 @@ document.addEventListener('click', (e) => {
     case 'silent': submitChoice('', 'silence'); break;
     case 'mic': toggleMic(el); break;
     case 'mode-sheet': openModeSheet(); break;
+    case 'pl-more': openMoreSheet(); break;
     case 'set-mode': setMode(el.dataset.m); break;
     case 'talk': openTalkSheet(); break;
     case 'talk-mic': if (VOICE_OK) { if (talkRec) talkRec.stop(); else talkListen(); } break;
@@ -5586,7 +5628,7 @@ document.addEventListener('click', (e) => {
     case 'call-silent': sendCallTurn('', 'silence'); break;
     case 'call-mute': toggleCallMute(); break;
     case 'open-safari': {
-      const u = location.origin + location.pathname + '?k=' + encodeURIComponent(TOKEN) + '&lang=' + LANG + (TTS !== 'v4' ? '&tts=' + TTS : '') + (NARRA ? '&ui=narra' : '&ui=classic');
+      const u = location.origin + location.pathname + '?k=' + encodeURIComponent(TOKEN) + '&lang=' + LANG + (TTS !== 'v4' ? '&tts=' + TTS : '') + '&ui=' + UIQ;
       const done = () => toast(tz('Link copied — open Safari and paste it', '链接已复制，打开 Safari 粘贴到地址栏'));
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(done).catch(() => window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u));
       else window.prompt(tz('Copy this link into Safari', '复制这个链接到 Safari 打开'), u);
@@ -5672,7 +5714,7 @@ function onEpisodeTap(id, n, kind) {
 
 async function shareSeries(id) {
   const s = byId(id); if (!s) return;
-  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1'); q.set('ui', NARRA ? 'narra' : 'classic'); if (REAL_ONLY) q.set('real', '1');
+  const q = new URLSearchParams(); q.set('lang', LANG); if (MOCK) q.set('mock', '1'); q.set('ui', UIQ); if (REAL_ONLY) q.set('real', '1');
   const url = `${location.origin}${location.pathname}?${q}#/series/${encodeURIComponent(id)}`;
   let ok = false;
   try {
@@ -5713,6 +5755,17 @@ let obStep = 0, obGenres = [];
 function renderOnboard() {
   const el = $('#onboard');
   el.hidden = false;
+  if (LITE) {
+    el.innerHTML = `
+      <form class="ob-body lt-ob" data-form="ob-name" autocomplete="off">
+        <div class="logo" style="justify-content:center">${LOGO}<span class="logo-word">narra<em>.</em></span></div>
+        <h1 class="ob-title">${tz('Stories that <em>listen back.</em>', '会<em>听你说话</em>的故事')}</h1>
+        <p class="ob-sub">${tz('Every episode ends on your choice. Say it, tap it or type it — the next episode is written and voiced live, just for you.', '每一集都停在你的选择上。说出来、点一下或打字都行，下一集按你的回答实时写、实时配音。')}</p>
+        <div class="ob-name"><input id="ob-name" maxlength="24" placeholder="${tz('What should they call you? (optional)', '他们怎么称呼你？（可不填）')}" value="${esc(S.name)}" autocomplete="given-name" enterkeyhint="go" aria-label="${tz('Your name', '你的名字')}"></div>
+      </form>
+      <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">${tz('Start listening', '开始听')}</button></div>`;
+    return;
+  }
   const pick = (NARRA ? ['magnus', 'rian', 'rafael'] : ['magnus', 'reborn', 'rian']).map(byId).filter(Boolean);
   const steps = `<div class="ob-steps">${[0, 1, 2].map((i) => `<i class="${i <= obStep ? 'on' : ''}"></i>`).join('')}</div>`;
   let body = '';
@@ -5763,6 +5816,12 @@ function grantWelcome() {
   return WELCOME - had;
 }
 function obNext(skip) {
+  if (LITE) {
+    const inp = $('#ob-name'); if (inp) S.name = inp.value.trim().slice(0, 24);
+    S.onboarded = true; S.welcome = WELCOME; save(true);
+    const el = $('#onboard'); el.hidden = true; el.innerHTML = '';
+    primeMic(); route(); return;
+  }
   if (obStep === 1 && !skip) { const inp = $('#ob-name'); if (inp) S.name = inp.value.trim().slice(0, 24); }
   if (obStep < 2) { obStep += 1; save(); renderOnboard(); return; }
   S.genres = obGenres.slice();
@@ -5820,7 +5879,7 @@ async function boot() {
   setTimeout(() => { if (!slowNet()) warmRings(); }, 2500);
   setTimeout(prefetchScripts, 1800);
   if (!S.onboarded) { renderOnboard(); showTab('home'); }
-  else { const top = grantWelcome(); if (top) setTimeout(() => toast(`${coinIc('sm')} +${top} coins · Welcome bonus`), 900); route(); primeMicOnEntry(); if (modeOf() === 'voice') fetchLocalBlob(`ack.${LANG}.mp3`); }
+  else { const top = LITE ? 0 : grantWelcome(); if (top) setTimeout(() => toast(`${coinIc('sm')} +${top} coins · Welcome bonus`), 900); route(); primeMicOnEntry(); if (modeOf() === 'voice') fetchLocalBlob(`ack.${LANG}.mp3`); }
   if (TTS !== 'v4') setTimeout(() => toast(LANG === 'zh' ? `配音测试：${TTS === 'turbo' ? 'Eleven v4 Turbo（低延迟）' : 'Eleven Turbo v2.5（实时）'} · 第 2 集起生效` : `Voice test: ${TTS === 'turbo' ? 'Eleven v4 Turbo (low latency)' : 'Eleven Turbo v2.5 (realtime)'} · from Episode 2`), 900);
   renderMini();
 }
