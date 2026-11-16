@@ -627,6 +627,9 @@ const GENRE_TILE = {
   Werewolf: '#6B4E16', Billionaire: '#2F4A3A', Romance: '#8A2E3B', Fantasy: '#2D3F7A',
   Mystery: '#3B3550', Thriller: '#4A2A2A', 'Reality show': '#7A4A1C', Cozy: '#6E5532', Adventure: '#5A4A1E', Academy: '#3A4A6E',
 };
+/* v2 genre tiles: which height of the cover sits in the tile (% from the top; 24 unless the faces are lower on that cover).
+ * 11-15 she marked four tiles whose picture sat too low — faces cut off at the bottom edge. */
+const TILE_Y = { Billionaire: 35, Romance: 42, Adventure: 39, Mystery: 40 };
 /** how well a series fits the tastes she picked in onboarding (first pick weighs most) + what she's been listening to */
 function prefScore(s) {
   let n = 0;
@@ -4280,7 +4283,7 @@ function renderExploreResults() {
         const s = SERIES.find((x) => matchGenre(x, g) && usedTile.indexOf(x) < 0) || SERIES.find((x) => matchGenre(x, g)) || SERIES[0];
         usedTile.push(s);
         const count = SERIES.filter((x) => matchGenre(x, g)).length;
-        return `<button class="genre-tile" style="--tile:${GENRE_TILE[g] || '#333'}${V2 && s ? `;--bg:url(${esc(thumbOf(s))})` : ''}" data-act="ex-genre" data-g="${esc(g)}"><span>${esc(g)}</span><small>${count} series</small>${s ? `<img src="${esc(V2 ? thumbOf(s) : coverOf(s))}" alt="" loading="lazy">` : ''}</button>`;
+        return `<button class="genre-tile" style="--tile:${GENRE_TILE[g] || '#333'}${V2 && s ? `;--bg:url(${esc(thumbOf(s))});--by:${TILE_Y[g] || 24}%` : ''}" data-act="ex-genre" data-g="${esc(g)}"><span>${esc(g)}</span><small>${count} series</small>${s ? `<img src="${esc(V2 ? thumbOf(s) : coverOf(s))}" alt="" loading="lazy">` : ''}</button>`;
       }).join('')}</div>
       <h3 class="sec-h">All series</h3>
       <div class="res-list">${SERIES.map(resRow).join('')}</div>`;

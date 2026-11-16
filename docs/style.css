@@ -1198,7 +1198,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .v2 .genre-tile span { font-size: 16px; }
 .v2 .genre-tile small { margin-top: 2px; font-size: 11.5px; opacity: .85; }
 .v2 .genre-tile img { display: none; }
-.v2 .genre-tile::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: 0; right: 0; left: 18%; background: var(--bg) center 24% / cover no-repeat; }
+.v2 .genre-tile::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: 0; right: 0; left: 18%; background: var(--bg) center var(--by, 24%) / cover no-repeat; }
 /* 11-15 (2) she found the bright palette too loud: the earlier, darker genre colours are back. The colour now covers less —
    solid only under the name, gone by the middle of the tile — so more of the cover shows. */
 .v2 .genre-tile::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(90deg, var(--tile) 0, var(--tile) 18%, color-mix(in srgb, var(--tile) 70%, transparent) 32%, color-mix(in srgb, var(--tile) 22%, transparent) 50%, transparent 66%); }
