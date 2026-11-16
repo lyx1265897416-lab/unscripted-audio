@@ -627,6 +627,10 @@ const GENRE_TILE = {
   Werewolf: '#6B4E16', Billionaire: '#2F4A3A', Romance: '#8A2E3B', Fantasy: '#2D3F7A',
   Mystery: '#3B3550', Thriller: '#4A2A2A', 'Reality show': '#7A4A1C', Cozy: '#6E5532', Adventure: '#5A4A1E', Academy: '#3A4A6E',
 };
+/* v2 home hero: which height of the cover fills the slide (% from the top). The title, lead and hook cover the lower half of
+ * the slide, so the faces have to sit in the upper half — at the old 22 % several covers had them under the text
+ * (11-15 she sent Not Pretending This Time: both faces behind the badge and the title). 40 unless listed. */
+const HERO_Y = { reborn: 80, hellqueen: 62, island: 52, rafael: 52, rowan: 46, onestat: 46, mythborne: 46, academia: 46, magnus: 30, kael: 32, milo: 32, mii: 30, crackhigh: 36, dorian: 36 };
 /* v2 genre tiles: which height of the cover sits in the tile (% from the top; 24 unless the faces are lower on that cover).
  * 11-15 she marked four tiles whose picture sat too low — faces cut off at the bottom edge. */
 const TILE_Y = { Billionaire: 35, Romance: 35, Adventure: 39, Mystery: 40 };
@@ -4187,7 +4191,7 @@ function renderHome() {
       <div class="hero-track" id="hero">
         ${heroes.map((s, i) => `
           <div class="hero-slide" data-act="open" data-id="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.title)}">
-            <img src="${esc(bigCover(s))}" alt="" ${i ? 'loading="lazy"' : ''} onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
+            <img src="${esc(bigCover(s))}" alt="" ${i ? 'loading="lazy"' : ''} ${V2 ? `style="object-position:center ${HERO_Y[s.id] || 40}%"` : ''} onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
             <div class="hero-info">
               <span class="hero-badge"><span class="dot"></span>Written live from your choices</span>
               <h2 class="hero-title">${esc(s.title)}</h2>
