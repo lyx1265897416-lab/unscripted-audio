@@ -1320,7 +1320,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .v3 .find-bar[hidden] { display: none; }
 .v3 .find-bar .search { flex: 1; min-width: 0; margin-right: 0; }
 .v3 .find-bar .link-btn { color: var(--b); font-weight: 700; flex: none; }
-.v3 #v-home.finding .tb-find { display: none; }
+/* 11-16 the top bar must not get shorter when the search opens: the icon keeps its place, only invisible */
+.v3 #v-home.finding .tb-find { visibility: hidden; pointer-events: none; }
 .v3 .tb-actions .tb-find { margin-right: -4px; }
 /* the save button is a star (same word as the Library's Saved tab) */
 .v3 .dt-top .icon-btn .ic:not(.sm) { width: 20px; height: 20px; }
@@ -1365,3 +1366,4 @@ h1, h2, h3, h4, p { margin: 0; }
 .v4 .ledger-more.open .ic { transform: rotate(180deg); }
 .v4 .me4-top .me-id b { vertical-align: middle; }
 .v4 .me4-top .me-id > .ic { vertical-align: middle; color: var(--dim); margin-left: 2px; }
+.v3 #v-home .find-bar .search { margin-top: 4px; }   /* the search box starts exactly where the hero does (68 px) */
