@@ -24,8 +24,14 @@ def pick_model():
     raise SystemExit('no multilingual faster-whisper model in ' + HUB)
 
 
-MODEL_PATH = pick_model()
-MODEL = WhisperModel(MODEL_PATH, device='cpu', compute_type='int8', cpu_threads=4)
+MODEL_PATH = None
+_MODEL = [None]
+def fallback_model():
+    """11-15 备用的 faster-whisper：SenseVoice / Parakeet / MLX 都用不了时才加载（原来启动就加载，白占一个多 G 内存）"""
+    global MODEL_PATH
+    if _MODEL[0] is None:
+        MODEL_PATH = pick_model(); _MODEL[0] = WhisperModel(MODEL_PATH, device='cpu', compute_type='int8', cpu_threads=4)
+    return _MODEL[0]
 LOCK = threading.Lock()
 # 11-09：Apple 芯片上优先用 MLX 版 whisper-large-v3-turbo（GPU，比 small 准得多，也快）；没装好就用 faster-whisper small
 MLX_REPO = os.environ.get('MLX_WHISPER', os.path.expanduser('~/.local/mlx-whisper-turbo'))  # config.json + weights.safetensors（curl 断点下载，HF 客户端走代理会卡住）
@@ -36,7 +42,7 @@ try:
         MLX = mlx_whisper
 except Exception as e:
     print('mlx unavailable', repr(e)[:120], flush=True)
-print(time.strftime('%m-%d %H:%M:%S'), 'asr ready', 'mlx ' + MLX_REPO if MLX else MODEL_PATH, flush=True)
+print(time.strftime('%m-%d %H:%M:%S'), 'asr ready', 'mlx ' + MLX_REPO if MLX else 'no mlx', flush=True)
 
 # whisper 在静音/噪声上常见的幻觉
 JUNK = re.compile(r'(谢谢观看|感谢观看|字幕由|请不吝点赞|订阅|明镜|thank(s| you) for watching|subtitles by|please subscribe|^\W*$)', re.I)
@@ -98,7 +104,7 @@ def _pcm16k(path):
 
 # 11-10 她说：别录进杂音/旁边其他人的声音。Silero 人声检测找出有人声的地方，再按 20 ms 帧的响度只留“离手机最近的那个人”：
 # 比她说话最响时（人声帧响度的 95 分位）小 16 dB 以上的帧静音掉（远处别人说话、电视、杂音）；整体最响都低于 -40 dBFS 就当没说话。
-GATE_REL, GATE_ABS = float(os.environ.get('GATE_REL', '16')), float(os.environ.get('GATE_ABS', '-40'))
+GATE_REL, GATE_ABS = float(os.environ.get('GATE_REL', '18')), float(os.environ.get('GATE_ABS', '-40'))
 try:
     from faster_whisper.vad import get_speech_timestamps, VadOptions
 except Exception as e:
@@ -119,14 +125,22 @@ def foreground(x):
     if not voiced.any(): return None, 'no speech'
     loud = float(np.percentile(e[voiced], 95))
     if loud < GATE_ABS: return None, f'too quiet {loud:.0f}dB'
-    keep = voiced & (e >= loud - GATE_REL)
-    k = np.convolve(keep.astype(float), np.ones(17), 'same') > 0   # 前后各留 160 ms，别把字头字尾切掉
-    keep = k & voiced
-    if keep.sum() * F < 0.25 * 16000: return None, f'fg too short ({keep.sum() * 20} ms)'
-    g = np.repeat(keep.astype(np.float32), F)
+    # 11-15 她说识别有错词、漏字：原来按 20 ms 一帧判断，比她最响时小 16 dB 的帧一律静音，一句话里的轻声字和句尾也被静音掉了
+    # （真人普通话 30 句：过门限错字率 8.7%，不过门限 4.4%，还有整句被吃掉的）。现在按“一段话”判断：这一段里最响的地方
+    # 也比她小 GATE_REL dB 以上，才算远处别人说话 / 电视，整段静音；她自己的每一段原样保留（轻声字、换气都在）。
+    keep = np.zeros(n, bool); drop = np.zeros(n, bool); kept = 0
+    for t in ts:
+        i, j = t['start'] // F, min(n, t['end'] // F + 1)
+        if j <= i: continue
+        if float(np.percentile(e[i:j], 90)) >= loud - GATE_REL: keep[i:j] = True; kept += j - i
+        else: drop[i:j] = True
+    if kept * F < 0.25 * 16000: return None, f'fg too short ({kept * 20} ms)'
+    idx = np.flatnonzero(keep); i0, i1 = max(0, idx[0] - 15), min(n, idx[-1] + 16)   # 她开口前 / 说完后各留 0.3 秒，更早更晚的不要
+    m = np.zeros(n, bool); m[i0:i1] = True; m &= ~drop
+    g = np.repeat(m.astype(np.float32), F)
     g = np.convolve(g, np.ones(160, dtype=np.float32) / 160, 'same')   # 10 ms 淡入淡出，不出咔哒声
     y = x[: n * F] * g
-    return y, f'kept {int(keep.sum()) * 20}/{int(voiced.sum()) * 20} ms voiced, loud {loud:.0f}dB'
+    return y, f'kept {int(kept) * 20}/{int(voiced.sum()) * 20} ms voiced, loud {loud:.0f}dB'
 
 
 def gate_file(path):
@@ -139,6 +153,34 @@ def gate_file(path):
     with wave.open(out, 'wb') as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes((np.clip(y, -1, 1) * 32767).astype(np.int16).tobytes())
     return out, why
+
+
+# 11-15 她说断句不对：SenseVoice 认出来的中文没有标点。加一个标点模型（CT-Transformer，int8 75 MB，一句 1–5 毫秒）。
+PUNCT = None
+try:
+    _pm = sorted(glob.glob(os.path.expanduser('~/.local/punct/sherpa-onnx-punct-ct-transformer-*/model.int8.onnx')))
+    if _pm:
+        PUNCT = sherpa_onnx.OfflinePunctuation(sherpa_onnx.OfflinePunctuationConfig(model=sherpa_onnx.OfflinePunctuationModelConfig(ct_transformer=_pm[-1], num_threads=2)))
+        print('punct ready', _pm[-1], flush=True)
+except Exception as e:
+    print('punct unavailable', repr(e)[:160], flush=True)
+_PUL = threading.Lock()
+
+
+def zh_punct(text, final=True):
+    """中文句子补标点。已经有标点的、很短的语气词不动；中间结果不带句尾的句号（她还没说完）"""
+    t = (text or '').strip()
+    if not PUNCT or not t or re.search(r'[，。！？、,.!?]', t) or not re.search(r'[\u4e00-\u9fff]', t): return t
+    if len(re.sub(r'\W', '', t)) <= 2: return t   # “嗯”“好的”“选A”
+    try:
+        with _PUL: r = PUNCT.add_punctuation(t)
+    except Exception as e:
+        print('punct failed', repr(e)[:100], flush=True); return t
+    r = re.sub(r'\s*([，。！？、])\s*', r'\1', r or t)
+    r = re.sub(r'(?<=[A-Za-z])(?=[\u4e00-\u9fff])|(?<=[\u4e00-\u9fff])(?=[A-Za-z])', '', r)
+    if re.sub(r'[，。！？、\s]', '', r) != re.sub(r'\s', '', t): return t   # 只许加标点，字不能变
+    if not final: r = re.sub(r'[。！？，、]+$', '', r)
+    return r
 
 
 import threading as _th
@@ -212,8 +254,35 @@ def tiny_answer(text):
     return len(z) <= 3 if re.search(r'[\u4e00-\u9fff]', z) else len(re.findall(r"[A-Za-z']+", text or '')) <= 2
 
 
-def transcribe(path, hint, ctx='', fast=False, choice=False, eng=False):
-    r = _transcribe(path, hint, ctx, fast, eng)
+def _plain(t): return re.sub(r"[^a-z0-9']+", ' ', (t or '').lower()).strip()
+
+
+def en_prompt(ctx):
+    """Whisper 的英文提示：角色名 + 听众名 + 两个选项（中转给的 X-Hint），写成正常的英文句子"""
+    c = (ctx or '').replace('，', ', ').replace('。', '. ').strip()
+    return c or None
+
+
+def transcribe(path, hint, ctx='', fast=False, choice=False, eng=False, final=True, engine=''):
+    r = _transcribe(path, hint, ctx, fast, eng, '' if engine == 'whisper' else engine)
+    if r.get('engine') == 'sensevoice' and r.get('text'):
+        r['text'] = zh_punct(r['text'], final)
+    # 11-15 英文“细认”（X-Engine: whisper，中转在她说完时要）：Parakeet 认不准口音重的词和角色名（同一句话 30 段录音错词率 12%，
+    # Mii 认成 Mia / may I，Kael 认成 Kiel）。带上角色名和两个选项当提示，再过一遍 Whisper turbo（同样 30 段 6%，角色名全对），约 2 秒。
+    # Whisper 的结果和 Parakeet 差得离谱（照着提示念、或者凭空多出一大段）就不用它。不占着识别锁：她接着说时中间结果照常出。
+    if engine == 'whisper' and MLX and r.get('engine') == 'parakeet' and r.get('text') and not tiny_answer(r['text']) and time.time() - _MLX_SLOW[0] > 60:
+        t = time.time()
+        try:
+            txt, _ = on_mlx(lambda: transcribe_mlx(path, 'en', en_prompt(ctx)), 4.0)
+            a, b = _plain(r['text']), _plain(txt)
+            import difflib
+            sim = difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0
+            if txt and not JUNK.search(txt) and sim >= 0.45 and len(b) <= 1.6 * len(a) + 8:
+                r = dict(r, text=txt, engine='whisper', fast_text=r['text'], deep_ms=int((time.time() - t) * 1000))
+            else: r = dict(r, deep_drop=txt[:80], deep_ms=int((time.time() - t) * 1000))
+        except Exception as e:
+            if isinstance(e, TimeoutError): _MLX_SLOW[0] = time.time()
+            print('deep pass failed', repr(e)[:120], flush=True)
     txt0 = (r.get('text') or '').strip()
     # 已经像字母回答（含“选地/选臂/上臂”这类同音字，中转按同音字认）就不再等 MLX（11-09 MLX 偶尔 2–4 秒，锁屏时拖到超时）
     if (choice and MLX and txt0 and tiny_answer(txt0) and not LETTERISH.search(txt0.lower())
@@ -229,7 +298,7 @@ def transcribe(path, hint, ctx='', fast=False, choice=False, eng=False):
     return r
 
 
-def _transcribe(path, hint, ctx='', fast=False, eng=False):
+def _transcribe(path, hint, ctx='', fast=False, eng=False, engine=''):
     with LOCK:
         t = time.time(); sv = None
         if eng and PK:   # 11-13 边说边认的中间结果、上一遍已经是英文：直接用英文模型，不先判语言（每遍快 0.1–0.2 秒）；最终那一遍照常
@@ -238,7 +307,7 @@ def _transcribe(path, hint, ctx='', fast=False, eng=False):
                 if JUNK.search(text): text = ''
                 return {'text': text, 'lang': 'en', 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'parakeet'}
             except Exception as e: print('parakeet failed', repr(e)[:160], flush=True)
-        if SV:
+        if SV and engine != 'whisperall':
             try:
                 text, lang = transcribe_sv(path, hint)
                 letters = re.sub(r'[^A-Za-z\u4e00-\u9fff]', '', text)
@@ -248,7 +317,7 @@ def _transcribe(path, hint, ctx='', fast=False, eng=False):
                     return {'text': text, 'lang': 'zh' if text else (hint or 'zh'), 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'sensevoice'}
                 hint = 'en'   # English: Whisper below is better at English (and keeps normal casing/punctuation)
                 sv = text
-                if PK:
+                if PK and engine != 'whisper':
                     try:
                         text = transcribe_pk(_pcm16k(path))
                         if JUNK.search(text): text = ''
@@ -265,6 +334,7 @@ def _transcribe(path, hint, ctx='', fast=False, eng=False):
                 print('mlx failed', repr(e)[:160], flush=True)
                 if sv: return {'text': sv, 'lang': 'en', 'prob': 1.0, 'ms': int((time.time() - t) * 1000), 'engine': 'sensevoice-en'}
         kw = dict(beam_size=1, vad_filter=True, vad_parameters={'min_silence_duration_ms': 400}, condition_on_previous_text=False, without_timestamps=True)
+        MODEL = fallback_model()
         segs, info = MODEL.transcribe(path, initial_prompt=PROMPT + (ctx or ''), **kw)  # 一遍：自动判断中/英，提示让中文出简体（11-08 实测约 1.8 秒）
         segs = list(segs)
         lang = info.language
@@ -300,7 +370,7 @@ class H(BaseHTTPRequestHandler):
         self.send_response(code); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b)
 
     def do_GET(self):
-        self._send(200, {'ok': True, 'model': 'sensevoice' if SV else ('mlx:' + MLX_REPO) if MLX else os.path.basename(os.path.dirname(os.path.dirname(MODEL_PATH)))})
+        self._send(200, {'ok': True, 'model': 'sensevoice' if SV else ('mlx:' + MLX_REPO) if MLX else 'faster-whisper', 'punct': bool(PUNCT), 'gate': 'segment'})
 
     def do_POST(self):
         n = int(self.headers.get('Content-Length') or 0)
@@ -321,9 +391,10 @@ class H(BaseHTTPRequestHandler):
             if g is None:
                 r = {'text': '', 'lang': hint or 'zh', 'gate': why, 'ms': int((time.time() - t0) * 1000)}
             else:
-                r = transcribe(g, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1', eng=self.headers.get('X-Eng') == '1' and self.headers.get('X-Partial') == '1')
+                r = transcribe(g, hint, ctx, fast=self.headers.get('X-Fast') == '1', choice=self.headers.get('X-Choice') == '1', eng=self.headers.get('X-Eng') == '1' and self.headers.get('X-Partial') == '1',
+                               final=self.headers.get('X-Partial') != '1' or self.headers.get('X-Final') == '1', engine=(self.headers.get('X-Engine') or '').strip())
                 r['gate'] = why; r['ms'] = int((time.time() - t0) * 1000)
-            if self.headers.get('X-Partial') != '1': keep_sample(p, data, r)   # 边说边认的中间结果不留样本
+            if self.headers.get('X-Partial') != '1' and self.headers.get('X-NoKeep') != '1': keep_sample(p, data, r)   # 边说边认的中间结果不留样本
         except Exception as e:
             r = {'text': '', 'error': repr(e)[:200]}
         finally:

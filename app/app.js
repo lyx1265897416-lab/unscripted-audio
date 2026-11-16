@@ -2623,6 +2623,7 @@ async function sendNext(id, text, via) {
     const res = await API.next({ sid: ss.sid, text: via === 'silence' ? '' : text, via });
     if (!res || !res.job) throw new Error('No job returned');
     if (res.bridge && res.bridge.url && BR.n === nextN && !BR.played && res.bridge.url !== BR.url) { BR.url = res.bridge.url; if (BR.ackDone) maybeBridge(); }   // the relay picked a different line (the bespoke one became ready)
+    if (res.heard && via === 'voice') fixSaid(nextN, res.heard);
     ss.job = { id: res.job, n: nextN, text, via }; save();
     if (res.job !== pj) {
       if (pj) { ss.eps = ss.eps.filter((e) => e.n !== nextN || e === P.ep); PRE = null; }   // the relay went another way (she named an option): drop the lines shown early
@@ -2646,7 +2647,19 @@ let PRE = null;
 function preFeed(pre) {
   if (!pre || !pre.n || !P.id) return;
   PRE = Object.assign(PRE && PRE.n === pre.n && PRE.id === P.id ? PRE : {}, pre, { id: P.id, at: Date.now() });
+  if (pre.heard) fixSaid(pre.n, pre.heard);
   preApply();
+}
+/* 11-15 "voice input still gets words, characters and sentence breaks wrong": the relay reads her answer against the scene,
+ * the cast and the two choices, repairs misheard words and names and punctuates it. That version replaces the raw
+ * recognition wherever her line shows (the lyrics' "You: …", the waiting screen, the stored answer). */
+function fixSaid(n, heard) {
+  const ss = P.id && getSess(P.id); heard = String(heard || '').trim();
+  if (!ss || !heard) return;
+  if (P.gen && P.gen.n === n && P.gen.via === 'voice') P.gen.text = heard;
+  if (ss.job && ss.job.n === n && ss.job.via === 'voice') ss.job.text = heard;
+  if (ss.chosen && ss.chosen[n - 1] != null && ss.chosen[n - 1] !== '') ss.chosen[n - 1] = heard;
+  HF.heard = heard; save(); updatePlayerUI();
 }
 function preApply() {
   const g = P.gen, ss = P.id && getSess(P.id);

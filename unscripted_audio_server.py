@@ -1215,9 +1215,14 @@ def understand(sess, text, timeout=2.4):
     tail = '\n'.join(f"{l['who']}: {l['text']}" for l in (ep.get('lines') or [])[-4:])
     pr = (f'有声互动剧的选择点。剧里的角色：{"、".join(names)}；听众名字：{sess.get("name") or "（未知）"}。\n'
           f'此刻的情境：{ep.get("prompt", "")}\n最后几句：\n{tail}\n\n两个选项：\nC1: {ch[0] if ch else ""}\nC2: {ch[1] if len(ch) > 1 else ""}\n\n'
-          f'听众用语音回答，语音识别结果（可能有同音错字、漏字、人名听错）：“{text}”\n\n'
-          '1. 结合情境、角色名和读音，把识别结果改成她最可能真正说的话（heard，保持她的原意和口吻，只改明显的识别错误；本来就通顺就原样保留）。'
-          '例如“谁一/学二”多半是“选一/选二”，人名按读音改成剧里的角色名。\n'
+          f'听众用语音回答（她可能说中文，也可能说英文），语音识别结果（可能有同音错字、漏字、人名听错、断句不对）：“{text}”\n\n'
+          '1. heard：把识别结果改成她最可能真正说的话，会原样显示给她看。规则：\n'
+          '- 只改识别错误，不改写、不润色、不补充她没说的内容，保持她的原话、口吻和语言（她说中文就写中文，说英文就写英文，中英混着说就照样混着写）。\n'
+          '- 读起来不通或和情境对不上的词，按读音换成发音相近、又符合此刻情境和选项用词的词（例如情境是“上不上车、回不回楼上”时，“先上午”多半是“先上楼”，“不上”后面可能漏了“车”）；'
+          '英文同理（the git → the gate，old bag → tool bag）。“谁一/学二”多半是“选一/选二”。\n'
+          '- 人名按读音改成剧里的角色名，并用上面给的写法（例如“马格鲁斯/麦格纳斯”→ Magnus，Mia / may I → Mii）。\n'
+          '- 补上正常的标点和断句（中文用全角 ，。？！；英文用正常的大小写和标点）。\n'
+          '- 本来就对的不要动；拿不准某个词就保留原样。\n'
           '2. 判断 kind：她用字母或序号指某个选项（A/B、第一个、第二个）→ C1 或 C2；她把某个选项的原话几乎逐字念了出来 → C1 或 C2；'
           '其余一律 FREE：只要她是用自己的话说的（哪怕意思和某个选项接近），或说了别的做法/问题/要求、或只说了“好/嗯”这类含糊的话，都是 FREE。拿不准就 FREE。\n'
           '3. intent：用一句话（' + ('中文' if lang == 'zh' else 'English') + '）说清她想做什么、想问谁什么、想让谁做什么；她话里的“你/他/她/那个电话/那件事”分别指剧里的哪个人、哪件事，要写明（FREE 时必填）。\n'
@@ -1312,6 +1317,14 @@ def same_words(a, b):
     return x == y or difflib.SequenceMatcher(None, x, y).ratio() >= 0.82
 
 
+def heard_ok(raw, heard):
+    """理解那一步改出来的话能不能显示给她：只许是“改错字 + 补标点”，长得离谱或面目全非（模型自己发挥了）就不显示"""
+    import difflib
+    a, b = _norm_said(raw), _norm_said(heard)
+    if not a or not b or len(b) > 1.8 * len(a) + 6 or len(b) < 0.5 * len(a): return False
+    return len(a) <= 8 or difflib.SequenceMatcher(None, a, b).ratio() >= 0.4
+
+
 def prepare_next(sess, text, via, gate=None):
     """她用语音/打字回了一句：先理解（改同音错字、判断是不是选项、概括她的意图，最多 2.6 秒），再按理解后的版本开写下一集。
     11-10：先按原话写时，编剧把“她问 Sienna 刚才那通电话是谁”写反成了“你的电话”——意图必须一起给编剧。返回 {'n','text','matched','free','her'}。"""
@@ -1321,6 +1334,7 @@ def prepare_next(sess, text, via, gate=None):
     if k is not None: out['matched'] = ch[k]; return out
     u = understand(sess, text, 2.0) if text and len(ch) >= 2 else None  # 长连接后通常 0.9–1.5 秒；最多等 2 秒，超时按原话写
     heard = ((u or {}).get('heard') or '').strip()
+    if via == 'voice' and heard and heard != text and heard_ok(text, heard): out['heard'] = heard[:400]   # 11-15 改好的话回给页面（输入框、歌词里显示它）
     # 11-11 她要求：严格按她说的写。原来模型觉得“意思差不多”就换成现成选项（她说“我就不走，今天就待在这了”，被换成选项
     # “我不上车，我要站在这儿亲眼看看下来的是什么人”，后面按选项写，她的话就没了）。现在只有她几乎逐字念了选项才算选项，其余一律按她的原话现写。
     if u and u['kind'] in ('C1', 'C2'):
@@ -2343,12 +2357,18 @@ def asr_stream(h, q):
     buf = bytearray(); lock = threading.Lock(); st = {'end': False, 'closed': False, 'done': 0}
     t0 = time.time()
 
-    def recog(pcm, final):
+    def recog(pcm, final, fin=False, deep=False):
+        """final：整句的最终那一遍（带选项字母复认、留样本）；fin：她已经说完（长句的最后一段也算，标点带句号）；
+        deep：英文细认——Parakeet 之后再过一遍带角色名和选项提示的 Whisper（约 2 秒，不留样本）"""
         b = io.BytesIO()
         with wave.open(b, 'wb') as w: w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(pcm)
+        st['pn'] = st.get('pn', 0) + 1
+        # 上一遍已经是英文：中间结果跳过先判语言那一步，快 0.1–0.2 秒；每三遍照常判一次（11-15：开头一个英文词之后改说中文，不能一直按英文认）
+        eng = (not final and not deep and st.get('eng') and st['pn'] % 3 != 0)
         req = U.Request('http://127.0.0.1:8917/asr', data=b.getvalue(), headers={'Content-Type': 'audio/wav', 'X-Lang': lang, 'X-Hint': quote(hint[:300]),
                                                                               'X-Choice': '1' if final and sess else '0', 'X-Partial': '0' if final else '1',
-                                                                              'X-Eng': '1' if (not final and st.get('eng')) else '0'})   # 上一遍已经是英文：中间结果跳过先判语言那一步，快 0.1–0.2 秒
+                                                                              'X-Final': '1' if (fin or final or deep) else '0', 'X-Engine': 'whisper' if deep else '',
+                                                                              'X-Eng': '1' if eng else '0'})
         return json.loads(op.open(req, timeout=20).read())
 
     def quiet_cut(seg):
@@ -2382,7 +2402,17 @@ def asr_stream(h, q):
 
     def join(head, t):
         if not head: return t
-        return head + ('' if re.search(r'[一-鿿，。！？]$', head) or not t else ' ') + t
+        if re.search(r'[一-鿿]$', head) and t: return head + '，' + t   # 中文长句按停顿切开的地方补一个逗号
+        return head + ('' if re.search(r'[，。！？]$', head) or not t else ' ') + t
+
+    dp = {'box': None}
+    def deep_start(pcm, n0):
+        box = {'n': n0, 'ev': threading.Event(), 'r': None}
+        def go():
+            try: box['r'] = recog(pcm, False, deep=True)
+            except Exception as e: print('deep recog', repr(e)[:80], flush=True)
+            box['ev'].set()
+        threading.Thread(target=go, daemon=True).start(); return box
 
     def worker():
         last = ''; cut = 0; head = ''; same = 0; judged = set(); chs = ((sess['eps'][-1].get('choices') or [])[:2]) if sess else []
@@ -2399,10 +2429,17 @@ def asr_stream(h, q):
                 while n - cut > 14 * 32000:
                     k = quiet_cut(bytes(buf[cut:cut + 12 * 32000 + 640]))
                     head = join(head, (recog(bytes(buf[cut:cut + k]), False).get('text') or '').strip()); cut += k
-                if final and last and len(_norm_said(last)) >= 6 and st.get('last_n', 0) and tail_quiet(n) >= (n - st['last_n']) / 32000 - 0.1:
-                    r = {'text': None, 'reuse': True}   # 上一遍之后只有安静：那一遍的文字就是最终结果（短回答 / 字母仍然重认，带选项提示）
-                else:
-                    r = recog(bytes(buf[cut:n]), final and not head) if n - cut >= 3200 else {'text': ''}
+                # 11-15 最终结果每次都重认一遍（原来“之后只有安静”就直接用上一遍的中间结果：没有句号、不留样本，英文还可能是跳过判语言认出来的）
+                tf = time.time()
+                r = recog(bytes(buf[cut:n]), final and not head, fin=final) if n - cut >= 3200 else {'text': ''}
+                if final and not head and str(r.get('engine') or '') == 'parakeet' and len((r.get('text') or '').split()) >= 3:
+                    # 英文：用细认的结果（她停下来时就已经开始认了；没有现成的就现在认）。最多等 2 秒，等不到用 Parakeet 的
+                    box = dp['box']
+                    if not (box and tail_quiet(n) >= (n - box['n']) / 32000 - 0.1): box = deep_start(bytes(buf[cut:n]), n)
+                    if box['ev'].wait(max(0.2, 2.0 - (time.time() - tf))):
+                        d = box['r'] or {}
+                        if d.get('engine') == 'whisper' and d.get('text'): r = dict(r, text=d['text'], fast_text=r.get('text'), engine='whisper', deep_ms=d.get('deep_ms'))
+                    r['deep_wait'] = round(time.time() - tf, 2)
             except Exception as e: r = {'text': '', 'error': repr(e)[:80]}
             if not r.get('reuse'):
                 st['eng'] = str(r.get('engine') or '').startswith('parakeet')
@@ -2422,12 +2459,14 @@ def asr_stream(h, q):
                         pre['gate']['tts'].set(); pre['gate']['ok'].set(); sess['_pre'] = pre
                     elif sp['pre']: spec_kill(sp['pre']); sp['pre'] = None
                     ws_send(h.wfile, lock, json.dumps({'final': text, 'lang': r.get('lang'), 'ms': r.get('ms'), 'keep': bool(pre)}, ensure_ascii=False))
-                    log('asr-stream', {'sid': g('sid'), 'final': text, 'sec': round(n / 32000, 1), 'asr_ms': r.get('ms'), 'spec': hit, 'head': round(time.time() - pre['t0'], 2) if hit else 0, 'at': time.strftime('%F %T')})
+                    log('asr-stream', {'sid': g('sid'), 'final': text, 'sec': round(n / 32000, 1), 'asr_ms': r.get('ms'), 'engine': r.get('engine'), 'fast': r.get('fast_text'), 'deep_wait': r.get('deep_wait'), 'gate': r.get('gate'),
+                                       'spec': hit, 'head': round(time.time() - pre['t0'], 2) if hit else 0, 'at': time.strftime('%F %T')})
                     if pre:   # 写出一句推一句（最多 10 秒，或手机那边关了连接）：手机上文字跟着出来，不用等配音
                         t_end = time.time() + 10; sent = -1
                         try:
                             pre['ev'].wait(4); res = pre.get('res') or {}
                             if res.get('matched') is not None: ws_send(h.wfile, lock, json.dumps({'pre': {'n': pre['n'], 'matched': res['matched']}}, ensure_ascii=False))
+                            elif res.get('heard'): ws_send(h.wfile, lock, json.dumps({'pre': {'n': pre['n'], 'heard': res['heard']}}, ensure_ascii=False))   # 改好的话：页面上她那句换成它
                             job = JOBS.get(res.get('free') or '')
                             while job and time.time() < t_end and not st['closed']:
                                 ls = ((job.get('ep') or {}).get('lines') or [])
@@ -2447,6 +2486,9 @@ def asr_stream(h, q):
                 elif text and text == last:
                     same += 1
                     e_now = eou_heur(text, lang, chs); q_now = tail_quiet(n)
+                    # 英文：她停了 0.3 秒就先开始细认（Whisper 约 2 秒），等她真的说完时结果多半已经好了
+                    if st.get('eng') and not head and q_now >= 0.3 and len(text.split()) >= 3 and (dp['box'] is None or dp['box']['n'] < n - int(q_now * 32000) - 3200):
+                        dp['box'] = deep_start(bytes(buf[cut:n]), n)
                     if can_spec and e_now != 'open' and len(_norm_said(text)) >= 2:
                         # 文字没再变、声音也停了 0.3 秒：先按这句理解 + 开写（只花快模型，不配音）
                         if not sp['pre'] and sp['n'] < 4 and q_now >= 0.3: sp['pre'] = spec_pre(sess, text); sp['n'] += 1; print('spec start', repr(text[-20:]), 'quiet', q_now, flush=True)
@@ -2688,7 +2730,7 @@ class H(BaseHTTPRequestHandler):
                 if sess:  # 选项原文 + 角色名当提示，识别更准（11-09）
                     ch = (sess['eps'][-1].get('choices') or [])[:2]
                     hint = '，'.join([k for k in VOICES[sess['series']] if not k.startswith('_')][:4] + [sess.get('name') or '']) + '。' + ' '.join(ch)
-                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0] or (sess or {}).get('lang', ''), 'X-Hint': quote(hint[:300]), 'X-Choice': '1' if sess and not part else '0', 'X-Partial': '1' if part else '0'})
+                req = U.Request('http://127.0.0.1:8917/asr', data=data, headers={'Content-Type': self.headers.get('Content-Type') or 'audio/webm', 'X-Lang': q.get('lang', [''])[0] or (sess or {}).get('lang', ''), 'X-Hint': quote(hint[:300]), 'X-Choice': '1' if sess and not part else '0', 'X-Partial': '1' if part else '0', 'X-Engine': '' if part else 'whisper'})   # 11-15 最终结果：英文再过一遍带剧情提示的 Whisper
                 r = json.loads(op.open(req, timeout=30).read())
                 if sess and not part and q.get('go', [''])[0] == '1' and (r.get('text') or '').strip():  # 选择点上的回答：马上开写下一集
                     threading.Thread(target=pre_next, args=(sess, r['text'].strip()[:400]), daemon=True).start()
@@ -2780,19 +2822,19 @@ class H(BaseHTTPRequestHandler):
             sess = get_sess(body.get('sid'))
             if not sess: return self._send(404, {'error': 'session expired'})
             text = (body.get('text') or '').strip()[:400]; via = body.get('via') or 'free'
-            n = len(sess['eps']) + 1; matched = None; free = None; her_u = None
+            n = len(sess['eps']) + 1; matched = None; free = None; her_u = None; heard_u = None
             pre = sess.get('_pre') if (sess.get('_pre') or {}).get('n') == n else None
             sess.pop('_pre', None)
             if pre:  # 识别时中转已经动手了（pre_next）：等它判断完（通常已经好了）
                 pre['ev'].wait(8); r = pre['res'] or {}
                 if text and (text == pre['text'] or text == r.get('matched')) and via in ('voice', 'free', 'option'):
-                    matched = r.get('matched'); free = r.get('free'); her_u = r.get('her')
+                    matched = r.get('matched'); free = r.get('free'); her_u = r.get('her'); heard_u = r.get('heard')
                     if via == 'option' and not matched: matched = text
                 elif r.get('free'): cancel_job(r['free'])
             if not pre or (free is None and matched is None):
                 if via in ('voice', 'free') and text:
                     r = prepare_next(sess, text, via)  # 先按原话开写，同时理解她的话（改错字、判断选项、按意图重写）
-                    matched, free, her_u = r['matched'], r['free'], r.get('her')
+                    matched, free, her_u = r['matched'], r['free'], r.get('her'); heard_u = r.get('heard')
             if via == 'auto':  # 闭眼听/被动收听：她没回应，故事自己往下走；有预先写好的就用第一个（默认走向），马上开播
                 ch = (sess['eps'][-1].get('choices') or [])
                 matched = ch[0] if ch and sess.get('spec') else None
@@ -2806,7 +2848,7 @@ class H(BaseHTTPRequestHandler):
             log(sess['sid'], {'her': text, 'understood': her_u, 'via': via, 'matched': matched, 'next': n, 'spec': bool(jid), 'early': bool(free), 'wishes': sess.get('wishes'), 'at': time.strftime('%F %T')})
             out = jid or free or start_job(run_episode, sess, next_msg(sess, her, br and br['text']), None, her)
             sess['wishes'] = []
-            return self._send(200, {'job': out, 'matched': matched, 'via': via, 'spec': bool(jid), 'bridge': br})
+            return self._send(200, {'job': out, 'matched': matched, 'via': via, 'spec': bool(jid), 'bridge': br, 'heard': heard_u if (via == 'voice' and not matched) else None})
         if u.path == '/api/diag':  # 11-13 手机端的语音状态（走哪条路、麦克风轨道被系统停掉/静音、开麦失败）记进会话日志
             sess = get_sess(body.get('sid'))
             if sess: log(sess['sid'], {'diag': str(body.get('ev') or '')[:40], 'd': {str(k)[:20]: str(v)[:80] for k, v in list((body.get('d') or {}).items())[:12]}, 'at': time.strftime('%F %T')})
