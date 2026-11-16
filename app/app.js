@@ -54,15 +54,21 @@ const V2 = NARRA && Q.get('ui') !== 'narra1';   // narra1 = the layout before 11
 /* 11-16 (later) she confirmed it: "replace the default". The redesign IS narra now (no ui=, ?ui=narra, old ?ui=v3 links).
  * The layout it replaced (four tabs Home · Explore · Library · Rewards) stays reachable with ?ui=narra2, only for looking back. */
 const V3 = V2 && Q.get('ui') !== 'narra2';
-const UIQ = !NARRA ? 'classic' : V3 ? 'narra' : V2 ? 'narra2' : 'narra1';
+/* 11-16 ?ui=v4 — "do subtraction on this version": no voice calls, only the core loop (listen to an opening → answer by
+ * voice, typing or tapping → the next part is written live, and on it goes); three tabs Home · Rewards · Me, the Library
+ * inside Me. For her to compare before it replaces anything; the default UI runs none of it. */
+const V4 = V3 && Q.get('ui') === 'v4';
+const NOCALL = V4;
+const UIQ = !NARRA ? 'classic' : V4 ? 'v4' : V3 ? 'narra' : V2 ? 'narra2' : 'narra1';
 const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
 if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
 if (V2) document.documentElement.classList.add('v2');
 if (V3) document.documentElement.classList.add('v3');
+if (V4) document.documentElement.classList.add('v4');
 if (V2 && Q.get('tile') === 'b') document.documentElement.classList.add('tile-b');   // the other look of the genre tiles, for comparing
 if (Q.has('k') || !Q.has('ui')) {
   if (Q.has('k')) { store.set('ua.k', Q.get('k')); Q.delete('k'); }
-  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'narra1' && Q.get('ui') !== 'narra2') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI (an old ?ui=v2 link becomes ?ui=narra)
+  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'narra1' && Q.get('ui') !== 'narra2' && Q.get('ui') !== 'v4') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI (an old ?ui=v2 link becomes ?ui=narra)
   const qs = Q.toString();
   history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
@@ -595,6 +601,7 @@ const ICON = {
   hourglass: '<path d="M6.5 3.5h11M6.5 20.5h11M7.5 3.5c0 4.5 4.5 5.5 4.5 8.5s-4.5 4-4.5 8.5M16.5 3.5c0 4.5-4.5 5.5-4.5 8.5s4.5 4 4.5 8.5"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
   me: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3.2v2.3M12 18.5v2.3M3.2 12h2.3M18.5 12h2.3M5.8 5.8l1.6 1.6M16.6 16.6l1.6 1.6M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6"/>',
   more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
   globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.4 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.4-3.5-8.5S9.6 5.9 12 3.5z"/>',
   wave: '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/>',
@@ -2525,7 +2532,7 @@ async function sendWish(text) {
 function openModeSheet() {
   const cur = modeOf();
   openSheet(`
-    <div class="sh-h"><div><h3>How do you want to listen?</h3><p>Switch any time. Calls with characters work in every mode.</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="sh-h"><div><h3>How do you want to listen?</h3><p>${NOCALL ? tz('Switch any time.', '随时可以切换。') : 'Switch any time. Calls with characters work in every mode.'}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="mode-list">
       ${Object.entries(MODES).map(([k, m]) => `<button class="mode-opt ${cur === k ? 'on' : ''}" data-act="set-mode" data-m="${k}" ${k === 'voice' && !VOICE_OK ? 'disabled' : ''}>
         <span class="mo-ic">${ic(m.icon)}</span><span class="mo-t"><b>${m.name}${k === 'voice' && !VOICE_OK ? ' · not supported in this browser' : ''}</b><small>${m.desc}</small></span>${cur === k ? ic('check') : ''}</button>`).join('')}
@@ -2999,7 +3006,9 @@ function openProfile() {
       <div class="pf-av">${esc((S.name || '?').slice(0, 1).toUpperCase())}</div>
       <div><b>${esc(S.name || 'Listener')}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${coinIc('sm')} <span class="coins-n">${S.coins}</span> coins · ${S.played.length} series started</p></div>
     </div>
-    ${profileFields()}`;
+    ${profileFields()}${V4 ? `
+    <span class="field-l">${tz('Free listening (test)', '免费收听（测试）')}</span>
+    <div class="segc"><button data-act="free-reset">${tz('Reset to 30 min', '重置为 30 分钟')}</button><button data-act="free-end">${tz('Use it up now', '立刻用完')}</button></div>` : ''}`;
   const entry = openSheet(body(), { kind: 'profile' });
   entry.refresh = () => { const v = ($('#pf-name', entry.el) || {}).value; entry.el.innerHTML = '<div class="grab"></div>' + body(); if (v != null) $('#pf-name', entry.el).value = v; };
 }
@@ -4165,7 +4174,8 @@ function cycleTrSpeed() {
 /* =========================================================================
  * 11. Rendering: shell, tabs, views
  * ========================================================================= */
-const TABS = V3 ? [['home', 'Home'], ['library', 'Library'], ['rewards', 'Rewards'], ['me', tz('Me', '我的')]]   // v3: Explore is inside Home, the profile is the fourth tab
+const TABS = V4 ? [['home', 'Home'], ['rewards', 'Rewards'], ['me', tz('Me', '我的')]]   // v4: the Library is inside Me
+  : V3 ? [['home', 'Home'], ['library', 'Library'], ['rewards', 'Rewards'], ['me', tz('Me', '我的')]]   // v3: Explore is inside Home, the profile is the fourth tab
   : [['home', 'Home'], ['explore', 'Explore'], ['library', 'Library'], ['rewards', 'Rewards']];
 let curTab = 'home';
 function renderTabbar() {
@@ -4353,6 +4363,7 @@ const resRow = (s) => `
 /* Library */
 let libTab = 'listening', libEdit = false;
 function renderLibrary() {
+  if (V4) { renderMe(); return; }   // v4: the Library is the lower half of Me
   const el = $('#v-library');
   let rows = '';
   if (V3 && libTab !== 'listening' && libTab !== 'saved') libTab = 'listening';   // v3: History and Calls live in Me
@@ -4649,9 +4660,11 @@ const OB_TASKS = [
   { k: 'voice', en: 'Answer out loud once', zh: '用语音回答一次', den: 'Say your answer instead of tapping', dzh: '不点选项，直接开口说', reward: 20, go: 'mode', done: () => (S.ob.voice || 0) >= 1 },
   { k: 'save', en: 'Save a series to your Library', zh: '收藏一部剧', den: 'Tap the star on any series page', dzh: '在任意剧集页点右上角的星标', reward: 10, go: 'home', done: () => S.saved.length > 0 },
   { k: 'call', en: 'Call a lead', zh: '给主角打一通电话', den: 'Your first call is free', dzh: '第一通电话免费', reward: 20, go: 'home', done: () => (S.ob.call || 0) >= 1 || callsFor().length > 0 },
-  { k: 'me', en: 'Write your story self', zh: '写下你的故事人设', den: 'Episodes and calls are written around you', dzh: '之后的剧情和通话都会围绕你来写', reward: 15, go: 'me', done: () => !!S.me },
+  { k: 'me', en: 'Write your story self', zh: '写下你的故事人设', get den() { return NOCALL ? 'Episodes are written around you' : 'Episodes and calls are written around you'; }, get dzh() { return NOCALL ? '之后的剧情都会围绕你来写' : '之后的剧情和通话都会围绕你来写'; }, reward: 15, go: 'me', done: () => !!S.me },
   { k: 'streak', en: 'Check in 3 days in a row', zh: '连续签到 3 天', den: '', dzh: '', reward: 30, go: 'checkin', done: () => Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0) >= 3, prog: () => `${Math.min(3, Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0))}/3` },
 ];
+const tasksNow = () => TASKS.filter((t) => !(NOCALL && t.k === 'call'));
+const obNow = () => OB_TASKS.filter((t) => !(NOCALL && t.k === 'call'));
 const TASK_ZH = { listen: '收听 5 分钟', newSeries: '听一部新剧', choices: '做 3 次选择', share: '分享一部剧', call: '给喜欢的角色打电话' };
 function rwRow(o) {
   return `<div class="rw-task ${o.claimed ? 'done' : ''}">
@@ -4665,12 +4678,12 @@ function renderRewardsV3() {
   if (!S.ob) S.ob = { claimed: {} }; if (!S.ob.claimed) S.ob.claimed = {};
   const el = $('#v-rewards'); const ci = checkinInfo();
   const total = CHECKIN.reduce((a, b) => a + b, 0), got = CHECKIN.slice(0, ci.streak).reduce((a, b) => a + b, 0);
-  const ob = OB_TASKS.map((t) => ({ t, ok: t.done(), claimed: !!S.ob.claimed[t.k] })).sort((a, b) => (a.claimed - b.claimed) || (b.ok - a.ok));
+  const ob = obNow().map((t) => ({ t, ok: t.done(), claimed: !!S.ob.claimed[t.k] })).sort((a, b) => (a.claimed - b.claimed) || (b.ok - a.ok));
   const obLeft = ob.filter((x) => !x.claimed).length;
-  const obReady = ob.some((x) => x.ok && !x.claimed), dailyReady = TASKS.some((t) => (S.tasks[t.k] || 0) >= t.goal && !S.tasks.claimed[t.k]);
+  const obReady = ob.some((x) => x.ok && !x.claimed), dailyReady = tasksNow().some((t) => (S.tasks[t.k] || 0) >= t.goal && !S.tasks.claimed[t.k]);
   el.innerHTML = `
     <div class="page-head"><h1 class="page-title">Rewards</h1><button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span>${ic('chevR', 'xs')}</button></div>
-    ${freeCard()}
+    ${V4 ? '' : freeCard()}
     <section class="rw-card rw-checkin">
       <div class="rw-h"><h3>${tz('Daily check-in', '每日签到')}</h3><span>${ci.today ? tz(`Day ${ci.streak} claimed · back tomorrow`, `第 ${ci.streak} 天已签 · 明天再来`) : tz(`7 days in a row = ${total} coins`, `连续签到 7 天共 ${total} 金币`)}</span></div>
       <div class="rw-prog"><b>${got}</b><span>/${total}</span><i class="rw-bar"><i style="width:${Math.round(100 * got / total)}%"></i></i></div>
@@ -4684,10 +4697,10 @@ function renderRewardsV3() {
       <div class="rw-tabs" role="tablist">
         <button class="rw-tab ${rwTab === 'daily' ? 'on' : ''}" data-act="rw-tab" data-t="daily" role="tab" aria-selected="${rwTab === 'daily'}">${tz('Daily tasks', '每日任务')}${dailyReady ? '<i class="dot"></i>' : ''}</button>
         <button class="rw-tab ${rwTab === 'new' ? 'on' : ''}" data-act="rw-tab" data-t="new" role="tab" aria-selected="${rwTab === 'new'}">${tz('New listener', '新手福利')}${obReady ? '<i class="dot"></i>' : ''}</button>
-        <span class="rw-tabs-note">${rwTab === 'daily' ? tz('Resets at midnight', '每天零点重置') : tz(`${OB_TASKS.length - obLeft}/${OB_TASKS.length} · once each`, `${OB_TASKS.length - obLeft}/${OB_TASKS.length} · 每项一次`)}</span>
+        <span class="rw-tabs-note">${rwTab === 'daily' ? tz('Resets at midnight', '每天零点重置') : tz(`${ob.length - obLeft}/${ob.length} · once each`, `${ob.length - obLeft}/${ob.length} · 每项一次`)}</span>
       </div>
       ${rwTab === 'daily'
-        ? TASKS.map((t) => { const v = S.tasks[t.k] || 0; return rwRow({ k: t.k, title: tz(t.label, TASK_ZH[t.k] || t.label), desc: t.fmt(v), reward: t.reward, ok: v >= t.goal, claimed: !!S.tasks.claimed[t.k], go: 'home', claimAct: 'claim' }); }).join('')
+        ? tasksNow().map((t) => { const v = S.tasks[t.k] || 0; return rwRow({ k: t.k, title: tz(t.label, TASK_ZH[t.k] || t.label), desc: t.fmt(v), reward: t.reward, ok: v >= t.goal, claimed: !!S.tasks.claimed[t.k], go: 'home', claimAct: 'claim' }); }).join('')
         : ob.map(({ t, ok, claimed }) => rwRow({ k: t.k, title: tz(t.en, t.zh), desc: [tz(t.den, t.dzh), t.prog ? t.prog() : ''].filter(Boolean).join(' · '), reward: t.reward, ok, claimed, go: t.go, claimAct: 'ob-claim' })).join('')}
     </section>
     <section class="panel">
@@ -4704,7 +4717,8 @@ function claimOb(k) {
   renderRewards();
 }
 function rewardGo(to) {
-  if (to === 'me') { meTab = 'profile'; go('me'); }
+  if (to === 'me' && V4) openProfile();
+  else if (to === 'me') { meTab = 'profile'; go('me'); }
   else if (to === 'mode') openModeSheet();
   else if (to === 'checkin') { const v = $('#v-rewards'); if (v) v.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); }
   else go('home');
@@ -4713,7 +4727,65 @@ function rewardGo(to) {
 /* ---- Me (v3): the profile as a page, with the call records and the listening history in it ---- */
 let meTab = 'profile', meEdit = false;
 const histItems = () => S.hist.filter((h) => h.k && h.k.endsWith(`:${LANG}`) && h.k.startsWith(`${MOCK ? 'm' : 'r'}:`) && byId(h.id));
+/** v4 Me: who she is and the settings gear, her wallet (coins + free listening), then her shelf — Listening, Saved, History */
+function renderMeV4() {
+  const el = $('#v-me'); if (!el) return;
+  if (['listening', 'saved', 'history'].indexOf(libTab) < 0) libTab = 'listening';
+  const cont = continueItems(), saved = S.saved.map(byId).filter(Boolean), hist = histItems();
+  const left = freeLeft(), used = Math.min(FREE_LISTEN, S.freeSec || 0);
+  const card = (s, pr, act, rmAttrs) => `<div class="lib-card">
+      <button class="open" data-act="${act}" data-id="${esc(s.id)}" ${libEdit ? 'disabled' : ''}>
+        <span class="cv">${thumbImg(s)}${pr && pr.needChoice ? `<i class="lc-flag">${tz('Your move', '轮到你了')}</i>` : ''}</span>
+        <b>${esc(s.title)}</b>
+        <span class="lc-m">${pr ? (pr.needChoice ? tz(`Ep ${pr.ep}`, `第 ${pr.ep} 集`) : tz(`Ep ${pr.ep} · ${Math.round((pr.pct || 0) * 100)}%`, `第 ${pr.ep} 集 · ${Math.round((pr.pct || 0) * 100)}%`)) : esc(s.lead || '')}</span>
+        ${pr ? `<span class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></span>` : ''}
+      </button>
+      ${libEdit ? `<button class="rm danger" ${rmAttrs} aria-label="Remove">${ic('close', 'sm')}</button>` : ''}
+    </div>`;
+  let body = '', n = 0;
+  if (libTab === 'listening') {
+    n = cont.length;
+    body = n ? `<div class="lib-grid">${cont.map((pr) => card(byId(pr.id), pr, 'continue', `data-act="lib-rm" data-k="${esc(skey(pr.id))}"`)).join('')}</div>`
+      : `<div class="empty">${ic('headphones')}Nothing in progress yet.<br>${tz('Start any series — your first 30 minutes are free.', '随便挑一部开始吧 —— 前 30 分钟全部免费。')}</div>`;
+  } else if (libTab === 'saved') {
+    n = saved.length;
+    body = n ? `<div class="lib-grid">${saved.map((x) => card(x, S.progress[skey(x.id)], 'open', `data-act="unsave" data-id="${esc(x.id)}"`)).join('')}</div>`
+      : `<div class="empty">${ic('starO')}${tz('Tap the star on any series page to save it here.', '在任意剧集页点右上角的星标，就会收藏到这里。')}</div>`;
+  } else {
+    n = hist.length;
+    body = n ? hist.map((h) => { const x = byId(h.id); return `<div class="lib-row">
+        <button class="open" data-act="hist-play" data-id="${esc(x.id)}" data-n="${h.n}">
+          <span class="cv">${thumbImg(x)}</span>
+          <span class="lt"><b>${esc(x.title)}</b><span>Ep ${h.n} · ${esc(h.title || '')}</span><span>${timeAgo(h.at)}</span></span>
+        </button>
+        ${libEdit ? `<button class="rm danger" data-act="hist-rm" data-at="${h.at}" aria-label="Remove">${ic('trash', 'sm')}</button>` : ''}
+      </div>`; }).join('') : `<div class="empty">${ic('clock')}Your listening history shows up here.</div>`;
+  }
+  if (!n) libEdit = false;
+  el.innerHTML = `
+    <div class="me4-top">
+      <button class="pf-av" data-act="profile" aria-label="${tz('Settings', '设置')}">${esc((S.name || '?').slice(0, 1).toUpperCase())}</button>
+      <button class="me-id" data-act="profile"><b>${esc(S.name || tz('Listener', '听众'))}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)} · ${MODES[modeOf()].name}</p></button>
+      <button class="icon-btn" data-act="profile" aria-label="${tz('Settings', '设置')}">${ic('gear')}</button>
+    </div>
+    <section class="wallet4">
+      <button class="w4-h" data-act="store"><span>${tz('My wallet', '我的钱包')}</span>${ic('chevR', 'sm')}</button>
+      <div class="w4-row">
+        <div class="w4-n"><b>${coinIc()}<span class="coins-n">${S.coins}</span></b><small>${tz('Coins', '金币')}</small></div>
+        <div class="w4-n"><b>${ic('headphones', 'sm')}${S.vip ? '∞' : freeMin()}<em>${S.vip ? '' : tz('min', '分钟')}</em></b><small>${tz('Free listening left', '剩余免费收听')}</small></div>
+        <button class="btn btn-grad btn-sm" data-act="store">${tz('Get coins', '获取金币')}</button>
+      </div>
+      <i class="fl-bar"><i style="width:${Math.round(100 * used / FREE_LISTEN)}%"></i></i>
+      <p class="w4-note">${S.vip ? tz('VIP — everything is free', 'VIP —— 全部免费') : left ? tz('Your first 30 minutes are free for everything. After that Ep 1–3 stay free, later episodes are 10 coins.', '前 30 分钟所有内容免费；用完后每部前 3 集仍免费，之后每集 10 金币。') : tz('Free minutes used up · Ep 1–3 stay free on every series, later episodes are 10 coins.', '免费时长已用完 · 每部前 3 集仍免费，之后每集 10 金币。')}</p>
+    </section>
+    <div class="me4-tabs">
+      ${[['listening', tz('Listening', '在听'), cont.length], ['saved', tz('Saved', '收藏'), saved.length], ['history', tz('History', '历史'), hist.length]].map(([k, l, c]) => `<button class="me4-tab ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}${c ? `<em>${c}</em>` : ''}</button>`).join('')}
+      ${n ? `<button class="link-btn page-edit" data-act="lib-edit">${libEdit ? tz('Done', '完成') : tz('Edit', '编辑')}</button>` : ''}
+    </div>
+    ${body}`;
+}
 function renderMe() {
+  if (V4) { renderMeV4(); return; }
   const el = $('#v-me'); if (!el) return;
   const keep = { n: ($('#pf-name', el) || {}).value, m: ($('#pf-me', el) || {}).value };
   const calls = callsFor(), hist = histItems();
@@ -4814,7 +4886,7 @@ async function loadDetail(id, force) {
 function hideDetail() { $('#detail').classList.remove('on'); }
 function renderDetail() {
   const s = byId(detailId); if (!s) return;
-  setTimeout(() => { if (detailId === s.id && isDetailOpen() && netKnown() && !slowNet()) { warmRings(); prepareCall(s.id); } }, 1200);   // slow link: not before Play — the first bytes of the story come first
+  if (!NOCALL) setTimeout(() => { if (detailId === s.id && isDetailOpen() && netKnown() && !slowNet()) { warmRings(); prepareCall(s.id); } }, 1200);   // slow link: not before Play — the first bytes of the story come first
   const d = aboutOf(s);
   const ss = getSess(s.id);
   const pr = S.progress[skey(s.id)];
@@ -4848,10 +4920,10 @@ function renderDetail() {
         <div class="tags">${(s.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
         <div class="dt-cta">
           <button class="btn btn-grad" data-act="play-series" data-id="${esc(s.id)}">${cta}</button>
-          <button class="btn btn-ghost call-btn" data-act="call-lead" data-id="${esc(s.id)}" aria-label="Call">${ic('phone', 'sm')}<span>${callersOf(s).length > 1 ? 'Call' : `Call ${esc(shortName(callersOf(s)[0]).split(' ')[0])}`}</span></button>
+          ${NOCALL ? '' : `<button class="btn btn-ghost call-btn" data-act="call-lead" data-id="${esc(s.id)}" aria-label="Call">${ic('phone', 'sm')}<span>${callersOf(s).length > 1 ? 'Call' : `Call ${esc(shortName(callersOf(s)[0]).split(' ')[0])}`}</span></button>`}
         </div>
-        <p class="call-note">${ic('phone', 'xs')} ${callCost(s.id) ? `Voice call · ${CALL_PRICE} coins` : 'Voice call · first call free'} · ${((s.callers || [])[0] || {}).gender === 'female' ? 'she' : 'he'} remembers your story</p>
-        ${(() => { const cl = callsFor(s.id); return cl.length ? `<button class="hist-btn" data-act="series-calls" data-id="${esc(s.id)}">${ic('clock', 'sm')}<span><b>Call history</b><small>${cl.length} call${cl.length === 1 ? '' : 's'} · latest ${fmtWhen(cl[0].startedAt)} · ${esc(recStatusLabel(cl[0]))}</small></span>${ic('chevR', 'sm')}</button>` : ''; })()}
+        ${NOCALL ? `<p class="loop4"><span>${ic('headphones', 'xs')}${tz('Listen', '听一段')}</span><i>›</i><span>${ic('mic', 'xs')}${tz('Say, type or tap', '说话、打字或点选项')}</span><i>›</i><span>${ic('sparkles', 'xs')}${tz('Next part, written live', '下一段实时生成')}</span></p>` : `<p class="call-note">${ic('phone', 'xs')} ${callCost(s.id) ? `Voice call · ${CALL_PRICE} coins` : 'Voice call · first call free'} · ${((s.callers || [])[0] || {}).gender === 'female' ? 'she' : 'he'} remembers your story</p>
+        ${(() => { const cl = callsFor(s.id); return cl.length ? `<button class="hist-btn" data-act="series-calls" data-id="${esc(s.id)}">${ic('clock', 'sm')}<span><b>Call history</b><small>${cl.length} call${cl.length === 1 ? '' : 's'} · latest ${fmtWhen(cl[0].startedAt)} · ${esc(recStatusLabel(cl[0]))}</small></span>${ic('chevR', 'sm')}</button>` : ''; })()}`}
         ${ss ? `<button class="restart" data-act="restart" data-id="${esc(s.id)}">${ic('restart')} Start a new story from Ep 1</button>` : ''}
       </div>
     </div>
@@ -5051,7 +5123,7 @@ function renderPlayer() {
       <header class="pl-top">
         <button class="icon-btn" data-act="close-player" aria-label="Close player">${ic('down')}</button>
         <div class="pl-top-t tap" data-act="pl-detail" role="button" tabindex="0" aria-label="${tz('Series details', '查看剧集详情')}"><b id="pl-series" translate="no"></b><small><span id="pl-ep"></span>${ic('chevR', 'xs')}</small></div>
-        <button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>
+        ${NOCALL ? '' : `<button class="icon-btn" data-act="pl-call" aria-label="Call">${ic('phone')}</button>`}
         <button class="icon-btn" data-act="share" id="pl-share" aria-label="Share">${ic('share')}</button>
       </header>
       <div class="pl-body">
@@ -5790,7 +5862,7 @@ function closePlayer() {
 function showPlayerUI() {
   if (!P.id) { location.replace('#/home'); return; }
   playerOpen = true;
-  { const pid = P.id, t0 = Date.now(); const w = () => { if (!playerOpen || P.id !== pid) return; if (P.loading || (P.want && !P.aux && !audioRoom() && Date.now() - t0 < 60000)) { setTimeout(w, 3000); return; } warmRings(); prepareCall(pid); }; setTimeout(w, 8000); }   // ring tones and his first lines: once the story has audio in hand
+  if (!NOCALL) { const pid = P.id, t0 = Date.now(); const w = () => { if (!playerOpen || P.id !== pid) return; if (P.loading || (P.want && !P.aux && !audioRoom() && Date.now() - t0 < 60000)) { setTimeout(w, 3000); return; } warmRings(); prepareCall(pid); }; setTimeout(w, 8000); }   // ring tones and his first lines: once the story has audio in hand
   renderPlayer();
   const el = $('#player');
   el.classList.add('on'); el.setAttribute('aria-hidden', 'false');
@@ -5823,7 +5895,7 @@ function route() {
   baseHash = location.hash || '#/home';
   if (a === 'series' && b) { showDetail(decodeURIComponent(b)); return; }
   hideDetail();
-  const tab = TABS.some(([k]) => k === a) ? a : 'home';
+  const tab = V4 && a === 'library' ? 'me' : TABS.some(([k]) => k === a) ? a : 'home';
   showTab(tab);
   if (V3 && a === 'explore') homeFind(true);
 }
@@ -5836,11 +5908,12 @@ function showTab(tab) {
   else if (tab === 'library') renderLibrary();
   else if (tab === 'rewards') renderRewards();
   else if (tab === 'me') renderMe();
-  if (tab !== 'library') libEdit = false;
+  if (tab !== 'library' && !(V4 && tab === 'me')) libEdit = false;
   if (tab !== 'me') meEdit = false;
 }
 function go(to) {
   if (V3 && to === 'explore') { homeFind(true); return; }
+  if (V4 && to === 'library') { if (libTab === 'calls') libTab = 'listening'; to = 'me'; }
   if (V3 && to === 'home' && curTab === 'home' && !isDetailOpen() && homeFinding()) { exGenre = ''; exQuery = ''; homeOpen = false; const q = $('#ex-q'); if (q) q.value = ''; homeMode(); return; }   // Home tab while searching: back to the home page
   if (to === curTab && !isDetailOpen()) { const v = $('#v-' + to); if (v) v.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); return; }
   location.hash = '#/' + to;
@@ -5887,7 +5960,7 @@ document.addEventListener('click', (e) => {
     case 'rw-go': rewardGo(el.dataset.to); break;
     case 'rw-tab': rwTab = el.dataset.t; renderRewards(); break;
     case 'ob-claim': claimOb(el.dataset.k); break;
-    case 'free-reset': S.freeSec = 0; save(); renderMe(); toast(tz('Free listening reset to 30 min', '免费收听已重置为 30 分钟')); break;
+    case 'free-reset': S.freeSec = 0; save(); if (curTab === 'me') renderMe(); toast(tz('Free listening reset to 30 min', '免费收听已重置为 30 分钟')); break;
     case 'free-end': S.freeSec = FREE_LISTEN; freeEnded(); break;
     case 'lib-rm': delete S.progress[el.dataset.k]; save(); renderLibrary(); toast('Removed from Listening'); break;
     case 'unsave': S.saved = S.saved.filter((x) => x !== id); save(); renderLibrary(); break;
@@ -5899,7 +5972,7 @@ document.addEventListener('click', (e) => {
     case 'buy': { const p = PACKS[+el.dataset.i]; const bonus = parseInt((p.bonus || '0').replace(/\D/g, ''), 10) || 0; addCoins(p.n + bonus, `Coin pack ${p.n}${bonus ? ' + ' + bonus : ''} (test)`); toast(`${coinIc('sm')} +${p.n + bonus} test coins`); break; }
     case 'vip': S.vip = !S.vip; save(); toast(S.vip ? `${ic('crown', 'sm')} VIP on — every episode free` : 'VIP off'); refreshSheets(); refreshAfterWallet(); break;
     case 'auto-unlock': S.autoUnlock = !S.autoUnlock; save(); refreshSheets(); break;
-    case 'profile': if (V3) { meTab = 'profile'; go('me'); } else openProfile(); break;
+    case 'profile': if (V3 && !V4) { meTab = 'profile'; go('me'); } else openProfile(); break;
     case 'lang': if (el.dataset.l !== LANG) { save(true); location.href = langUrl(el.dataset.l); } break;
     case 'reset': if (window.confirm('Reset all local data (coins, progress, library, name)?')) { ['ua.state', 'ua.sess'].forEach(store.del); clearTimeout(saveT); window.removeEventListener('pagehide', save); S = DEF(); SESS = {}; location.hash = ''; location.reload(); } break;
     case 'scrim': { const t = topSheet(); if (t && !t.sticky) closeSheet(t); break; }
@@ -6012,7 +6085,7 @@ document.addEventListener('submit', (e) => {
     const t = (($('#cl-text') || {}).value || '').trim(); if (t) sendCallTurn(t, 'free');
   } else if (f.dataset.form === 'me') {
     S.me = ((($('#pf-me') || {}).value) || '').trim().slice(0, 400); save();
-    toast(S.me ? `${ic('spark', 'sm')} Your next episodes and calls will be written around you` : 'Cleared');
+    toast(S.me ? `${ic('spark', 'sm')} ${NOCALL ? tz('Your next episodes will be written around you', '之后的剧情会围绕你来写') : 'Your next episodes and calls will be written around you'}` : 'Cleared');
   } else if (f.dataset.form === 'wish') {
     const t = ((($('#tk-text') || {}).value) || '').trim(); if (t) sendWish(t);
   } else if (f.dataset.form === 'ob-name') {
