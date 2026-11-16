@@ -629,7 +629,7 @@ const GENRE_TILE = {
 };
 /* v2 genre tiles: which height of the cover sits in the tile (% from the top; 24 unless the faces are lower on that cover).
  * 11-15 she marked four tiles whose picture sat too low — faces cut off at the bottom edge. */
-const TILE_Y = { Billionaire: 35, Romance: 42, Adventure: 39, Mystery: 40 };
+const TILE_Y = { Billionaire: 35, Romance: 35, Adventure: 39, Mystery: 40 };
 /** how well a series fits the tastes she picked in onboarding (first pick weighs most) + what she's been listening to */
 function prefScore(s) {
   let n = 0;
