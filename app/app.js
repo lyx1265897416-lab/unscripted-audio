@@ -4354,7 +4354,26 @@ function renderLibrary() {
   let rows = '';
   if (V3 && libTab !== 'listening' && libTab !== 'saved') libTab = 'listening';   // v3: History and Calls live in Me
   const rmBtn = (attrs) => (!V3 ? `<button class="rm" ${attrs} aria-label="Remove">${ic('trash', 'sm')}</button>` : libEdit ? `<button class="rm danger" ${attrs} aria-label="Remove">${ic('trash', 'sm')}</button>` : `<span class="rm chev">${ic('chevR', 'sm')}</span>`);
-  if (libTab === 'listening') {
+  /* 11-16 v3 "the arrow at the end of every row means nothing — drop it; lay the shelf out two or three to a row":
+   * a bookshelf grid, three covers to a row. Tap a cover to go on listening; Edit puts a remove badge on each cover. */
+  const libCard = (s, pr, act, rmAttrs) => `<div class="lib-card">
+      <button class="open" data-act="${act}" data-id="${esc(s.id)}" ${libEdit ? 'disabled' : ''}>
+        <span class="cv">${thumbImg(s)}${pr && pr.needChoice ? `<i class="lc-flag">${tz('Your move', '轮到你了')}</i>` : ''}</span>
+        <b>${esc(s.title)}</b>
+        <span class="lc-m">${pr ? (pr.needChoice ? tz(`Ep ${pr.ep}`, `第 ${pr.ep} 集`) : tz(`Ep ${pr.ep} · ${Math.round((pr.pct || 0) * 100)}%`, `第 ${pr.ep} 集 · ${Math.round((pr.pct || 0) * 100)}%`)) : esc(s.lead || '')}</span>
+        ${pr ? `<span class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></span>` : ''}
+      </button>
+      ${libEdit ? `<button class="rm danger" ${rmAttrs} aria-label="Remove">${ic('close', 'sm')}</button>` : ''}
+    </div>`;
+  if (V3 && libTab === 'listening') {
+    const items = continueItems();
+    rows = items.length ? `<div class="lib-grid">${items.map((pr) => libCard(byId(pr.id), pr, 'continue', `data-act="lib-rm" data-k="${esc(skey(pr.id))}"`)).join('')}</div>`
+      : `<div class="empty">${ic('headphones')}Nothing in progress yet.<br>${tz('Start any series — your first 30 minutes are free.', '随便挑一部开始吧 —— 前 30 分钟全部免费。')}</div>`;
+  } else if (V3) {
+    const items = S.saved.map(byId).filter(Boolean);
+    rows = items.length ? `<div class="lib-grid">${items.map((s) => libCard(s, S.progress[skey(s.id)], 'open', `data-act="unsave" data-id="${esc(s.id)}"`)).join('')}</div>`
+      : `<div class="empty">${ic('plus')}Tap “+ Library” on any series to save it here.</div>`;
+  } else if (libTab === 'listening') {
     const items = continueItems();
     rows = items.length ? items.map((pr) => {
       const s = byId(pr.id);
@@ -4622,10 +4641,11 @@ const OB_TASKS = [
 const TASK_ZH = { listen: '收听 5 分钟', newSeries: '听一部新剧', choices: '做 3 次选择', share: '分享一部剧', call: '给喜欢的角色打电话' };
 function rwRow(o) {
   return `<div class="rw-task ${o.claimed ? 'done' : ''}">
-    <div class="rw-tt"><span class="rw-tag ${o.tagCls}">${o.tag}</span><b>${o.title}</b>${o.desc ? `<span>${o.desc}</span>` : ''}</div>
+    <div class="rw-tt">${o.tag ? `<span class="rw-tag ${o.tagCls}">${o.tag}</span>` : ''}<b>${o.title}</b>${o.desc ? `<span>${o.desc}</span>` : ''}</div>
     <div class="rw-act"><em>+${o.reward} ${coinIc('sm')}</em>${o.claimed ? `<span class="claimed">${ic('check', 'xs')} ${tz('Claimed', '已领取')}</span>` : o.ok ? `<button class="btn btn-grad btn-sm" data-act="${o.claimAct}" data-k="${o.k}">${tz('Claim', '领取')}</button>` : `<button class="btn btn-ghost btn-sm" data-act="rw-go" data-to="${o.go}">${tz('Go', '去完成')}</button>`}</div>
   </div>`;
 }
+let rwTab = 'daily';   // 11-16 "put the daily tasks and the new-listener rewards in one card, two tabs, daily first"
 function renderRewardsV3() {
   ensureToday();
   if (!S.ob) S.ob = { claimed: {} }; if (!S.ob.claimed) S.ob.claimed = {};
@@ -4633,6 +4653,7 @@ function renderRewardsV3() {
   const total = CHECKIN.reduce((a, b) => a + b, 0), got = CHECKIN.slice(0, ci.streak).reduce((a, b) => a + b, 0);
   const ob = OB_TASKS.map((t) => ({ t, ok: t.done(), claimed: !!S.ob.claimed[t.k] })).sort((a, b) => (a.claimed - b.claimed) || (b.ok - a.ok));
   const obLeft = ob.filter((x) => !x.claimed).length;
+  const obReady = ob.some((x) => x.ok && !x.claimed), dailyReady = TASKS.some((t) => (S.tasks[t.k] || 0) >= t.goal && !S.tasks.claimed[t.k]);
   el.innerHTML = `
     <div class="page-head"><h1 class="page-title">Rewards</h1><button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span>${ic('chevR', 'xs')}</button></div>
     ${freeCard()}
@@ -4645,13 +4666,15 @@ function renderRewardsV3() {
       }).join('')}</div>
       <button class="btn ${ci.today ? 'btn-ghost' : 'btn-grad'} btn-block checkin-btn" data-act="checkin" ${ci.today ? 'disabled' : ''}>${ci.today ? `${ic('check', 'sm')} ${tz('Checked in today', '今天已签到')}` : tz(`Check in · +${CHECKIN[ci.streak]} coins`, `签到 · +${CHECKIN[ci.streak]} 金币`)}</button>
     </section>
-    ${obLeft ? `<section class="rw-card">
-      <div class="rw-h"><h3>${tz('New listener rewards', '新手福利')}</h3><span>${tz(`${OB_TASKS.length - obLeft}/${OB_TASKS.length} · once each`, `${OB_TASKS.length - obLeft}/${OB_TASKS.length} · 每项一次`)}</span></div>
-      ${ob.map(({ t, ok, claimed }) => rwRow({ k: t.k, tag: tz('NEW', '新手'), tagCls: 'new', title: tz(t.en, t.zh), desc: [tz(t.den, t.dzh), t.prog ? t.prog() : ''].filter(Boolean).join(' · '), reward: t.reward, ok, claimed, go: t.go, claimAct: 'ob-claim' })).join('')}
-    </section>` : ''}
-    <section class="rw-card">
-      <div class="rw-h"><h3>${tz('Daily tasks', '每日任务')}</h3><span>${tz('Resets at midnight', '每天零点重置')}</span></div>
-      ${TASKS.map((t) => { const v = S.tasks[t.k] || 0; return rwRow({ k: t.k, tag: tz('DAILY', '每日'), tagCls: 'daily', title: tz(t.label, TASK_ZH[t.k] || t.label), desc: t.fmt(v), reward: t.reward, ok: v >= t.goal, claimed: !!S.tasks.claimed[t.k], go: 'home', claimAct: 'claim' }); }).join('')}
+    <section class="rw-card rw-tasks">
+      <div class="rw-tabs" role="tablist">
+        <button class="rw-tab ${rwTab === 'daily' ? 'on' : ''}" data-act="rw-tab" data-t="daily" role="tab" aria-selected="${rwTab === 'daily'}">${tz('Daily tasks', '每日任务')}${dailyReady ? '<i class="dot"></i>' : ''}</button>
+        <button class="rw-tab ${rwTab === 'new' ? 'on' : ''}" data-act="rw-tab" data-t="new" role="tab" aria-selected="${rwTab === 'new'}">${tz('New listener', '新手福利')}${obReady ? '<i class="dot"></i>' : ''}</button>
+        <span class="rw-tabs-note">${rwTab === 'daily' ? tz('Resets at midnight', '每天零点重置') : tz(`${OB_TASKS.length - obLeft}/${OB_TASKS.length} · once each`, `${OB_TASKS.length - obLeft}/${OB_TASKS.length} · 每项一次`)}</span>
+      </div>
+      ${rwTab === 'daily'
+        ? TASKS.map((t) => { const v = S.tasks[t.k] || 0; return rwRow({ k: t.k, title: tz(t.label, TASK_ZH[t.k] || t.label), desc: t.fmt(v), reward: t.reward, ok: v >= t.goal, claimed: !!S.tasks.claimed[t.k], go: 'home', claimAct: 'claim' }); }).join('')
+        : ob.map(({ t, ok, claimed }) => rwRow({ k: t.k, title: tz(t.en, t.zh), desc: [tz(t.den, t.dzh), t.prog ? t.prog() : ''].filter(Boolean).join(' · '), reward: t.reward, ok, claimed, go: t.go, claimAct: 'ob-claim' })).join('')}
     </section>
     <section class="panel">
       <div class="panel-h"><h3>Coin history</h3><span>${S.ledger.length} records</span></div>
@@ -5846,6 +5869,7 @@ document.addEventListener('click', (e) => {
     case 'me-tab': meTab = el.dataset.t; meEdit = false; renderMe(); break;
     case 'me-edit': meEdit = !meEdit; renderMe(); break;
     case 'rw-go': rewardGo(el.dataset.to); break;
+    case 'rw-tab': rwTab = el.dataset.t; renderRewards(); break;
     case 'ob-claim': claimOb(el.dataset.k); break;
     case 'free-reset': S.freeSec = 0; save(); renderMe(); toast(tz('Free listening reset to 30 min', '免费收听已重置为 30 分钟')); break;
     case 'free-end': S.freeSec = FREE_LISTEN; freeEnded(); break;
