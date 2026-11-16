@@ -395,10 +395,10 @@ const RealAPI = {
     return r.json();
   },
   fillers({ series, who }) { return this.get('api/call/fillers', { series, who }, true); },
-  callStart({ series, who, sid, direction, ckey }) { return this.post('api/call/start', { series, lang: LANG, name: S.name || '', who, sid: sid || null, direction, tts: TTS, ckey }); },
+  callStart({ series, who, sid, direction, ckey }) { return this.post('api/call/start', { series, lang: LANG, name: '', who, sid: sid || null, direction, tts: TTS, ckey }); },
   callTurn({ cid, text, via }) { return this.post('api/call/turn', { cid, text, via }); },
   callEnd({ cid, seconds }) { return this.post('api/call/end', { cid, seconds }); },
-  callPrepare({ series, who, sid }) { return this.post('api/call/prepare', { series, lang: LANG, name: S.name || '', who, sid: sid || null, tts: TTS }); },
+  callPrepare({ series, who, sid }) { return this.post('api/call/prepare', { series, lang: LANG, name: '', who, sid: sid || null, tts: TTS }); },
 };
 
 const MockAPI = {
@@ -688,6 +688,8 @@ const bigCover = (s) => { const c = coverOf(s); return slowNet() ? thumbOf(s) : 
 const thumbImg = (s) => `<img src="${esc(thumbOf(s))}" alt="" loading="lazy" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">`;
 const motionOf = (s) => s.motion || (MOCK ? `motion/${s.id}.mp4` : null);
 const avatarOf = (s) => s.avatar || `avatars/${s.id}.jpg`;
+/* 11-16 her own avatar (set from the settings sheet) — or the first letter of her account name */
+const avInner = () => (S.avatar ? `<img src="${esc(S.avatar)}" alt="">` : esc((S.name || '?').slice(0, 1).toUpperCase()));
 
 /* =========================================================================
  * 7. Toast / sheets / ad overlay
@@ -1462,7 +1464,7 @@ async function newSession(id) {
       if (waits[i]) await sleep(waits[i]);
       if (early && getSess(id) !== mine) throw new Error('restarted');
       try {
-        const res = await API.play({ series: id, name: S.name || '' });
+        const res = await API.play({ series: id, name: '' });
         let ep = res.ep;
         if (!ep && res.job) ep = await waitJobEp(res.job, (j) => { P.loadStatus = j.status; updatePlayerUI(); });
         if (!ep) throw new Error('No episode returned');
@@ -1517,7 +1519,7 @@ async function sidReady(id) {  // Episode 1 starts before /api/play returns; any
   if (!ss.sid && SIDP[skey(id)]) { try { const r = await SIDP[skey(id)]; if (!ss.sid) ss.sid = r.res.sid; } catch (e) { /* ignore */ } }
   if (!ss.sid && !MOCK && ss.eps && ss.eps.length === 1 && ss.eps[0].kind === 'produced') {
     // the start never reached the relay (it was down / the link dropped): open the server session now, for the same Episode 1
-    if (!SIDLATE[skey(id)]) SIDLATE[skey(id)] = API.play({ series: id, name: S.name || '' }).finally(() => { setTimeout(() => { delete SIDLATE[skey(id)]; }, 3000); });
+    if (!SIDLATE[skey(id)]) SIDLATE[skey(id)] = API.play({ series: id, name: '' }).finally(() => { setTimeout(() => { delete SIDLATE[skey(id)]; }, 3000); });
     try {
       const res = await SIDLATE[skey(id)];
       if (res && res.sid && !ss.sid) {
@@ -2998,14 +3000,56 @@ function openProfile() {
   const body = () => `
     <div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="pf-head" style="margin-top:-34px">
-      <div class="pf-av">${esc((S.name || '?').slice(0, 1).toUpperCase())}</div>
-      <div><b>${esc(S.name || 'Listener')}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${coinIc('sm')} <span class="coins-n">${S.coins}</span> coins · ${S.played.length} series started</p></div>
+      <button class="pf-av pf-av-edit" data-act="av-pick" aria-label="${tz('Change avatar', '换头像')}">${avInner()}<i class="av-cam">${ic('pen', 'xs')}</i></button>
+      <div class="pf-who">${S.acct ? `<button class="pf-name" data-act="rename" aria-label="${tz('Change name', '改名')}"><b>${esc(S.name || tz('Listener', '听众'))}</b>${ic('pen', 'xs')}</button>` : `<b>${esc(S.name || tz('Listener', '听众'))}</b>`}${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${coinIc('sm')} <span class="coins-n">${S.coins}</span> coins · ${S.played.length} series started</p>
+        ${S.acct ? '' : `<button class="btn btn-grad btn-sm pf-signin" data-act="signin">${tz('Sign in', '登录')}</button>`}</div>
     </div>
     ${profileFields()}${V4 ? `
     <span class="field-l">${tz('Free listening (test)', '免费收听（测试）')}</span>
     <div class="segc"><button data-act="free-reset">${tz('Reset to 30 min', '重置为 30 分钟')}</button><button data-act="free-end">${tz('Use it up now', '立刻用完')}</button></div>` : ''}`;
   const entry = openSheet(body(), { kind: 'profile' });
   entry.refresh = () => { const v = ($('#pf-name', entry.el) || {}).value; entry.el.innerHTML = '<div class="grab"></div>' + body(); if (v != null) $('#pf-name', entry.el).value = v; };
+}
+/* 11-16 the name is only her account name now (characters no longer use it). Sign-in is a mock in this prototype:
+ * Apple / Google hand back an account name, she keeps it or changes it right there. */
+const MOCK_ACCT = () => tz('Mia Carter', '林小满');
+function openRename(after) {
+  openSheet(`
+    <div class="sh-h"><div><h3>${after ? tz('Signed in', '已登录') : tz('Change name', '改名')}</h3><p>${after ? tz('Use your account name, or change it.', '可以用账户原来的名字，也可以改一个。') : tz('This is your account name.', '这是你的账户名。')}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <form class="field" data-form="name"><input id="pf-name" maxlength="24" value="${esc(S.name)}" placeholder="${tz('Your name', '你的名字')}" autocomplete="nickname"><button class="btn btn-grad" type="submit">${after ? tz('Done', '完成') : tz('Save', '保存')}</button></form>`, { kind: 'rename' });
+  setTimeout(() => { const i = $('#pf-name'); if (i && !after) { i.focus(); i.select(); } }, 350);
+}
+function openSignin() {
+  openSheet(`
+    <div class="sh-h"><div><h3>${tz('Sign in', '登录')}</h3><p>${tz('Keep your stories, coins and saved series on every device.', '在听的剧、金币和收藏都跟着账户走，换手机也在。')}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="signin-btns">
+      <button class="btn btn-block signin-apple" data-act="signin-go" data-via="apple"><span class="si-logo"></span>${tz('Continue with Apple', '通过 Apple 继续')}</button>
+      <button class="btn btn-block btn-ghost" data-act="signin-go" data-via="google"><span class="si-logo g">G</span>${tz('Continue with Google', '通过 Google 继续')}</button>
+    </div>`, { kind: 'signin' });
+}
+function signIn(via) {
+  S.acct = { via, at: Date.now() }; S.name = MOCK_ACCT(); save();
+  closeSheet(); refreshSheets(); if (curTab === 'me') renderMe();
+  openRename(true);
+}
+function pickAvatar() {
+  const f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*';
+  f.onchange = () => {
+    const file = f.files && f.files[0]; if (!file) return;
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const n = 240, c = document.createElement('canvas'); c.width = c.height = n;
+      const k = Math.min(img.naturalWidth, img.naturalHeight);
+      c.getContext('2d').drawImage(img, (img.naturalWidth - k) / 2, (img.naturalHeight - k) / 2, k, k, 0, 0, n, n);
+      URL.revokeObjectURL(url);
+      S.avatar = c.toDataURL('image/jpeg', 0.85); save();
+      refreshSheets(); if (curTab === 'me') renderMe(); else if (curTab === 'home') renderHome();
+      toast(tz('Avatar updated', '头像已更新'));
+    };
+    img.onerror = () => toast(tz('Couldn’t read that image', '这张图读不出来'));
+    img.src = url;
+  };
+  f.click();
 }
 function langUrl(l) {
   const q = new URLSearchParams(location.search); q.set('lang', l); q.delete('k');
@@ -4187,7 +4231,7 @@ const topbar = () => `
     <div class="tb-actions">
       <button class="icon-btn" data-act="go" data-to="explore" aria-label="Search">${ic('search')}</button>
       <button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span></button>
-      <button class="avatar-btn" data-act="profile" aria-label="Profile">${esc((S.name || '?').slice(0, 1).toUpperCase())}</button>
+      <button class="avatar-btn" data-act="profile" aria-label="Profile">${avInner()}</button>
     </div>
   </header>`;
 
@@ -4750,7 +4794,7 @@ function renderMeV4() {
   if (!n) libEdit = false;
   el.innerHTML = `
     <div class="me4-top">
-      <button class="pf-av" data-act="profile" aria-label="${tz('Settings', '设置')}">${esc((S.name || '?').slice(0, 1).toUpperCase())}</button>
+      <button class="pf-av" data-act="profile" aria-label="${tz('Settings', '设置')}">${avInner()}</button>
       <button class="me-id" data-act="profile"><b>${esc(S.name || tz('Listener', '听众'))}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}${ic('chevR', 'sm')}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)} · ${MODES[modeOf()].name}</p></button>
     </div>
     <section class="wallet4">
@@ -4799,8 +4843,9 @@ function renderMe() {
   el.innerHTML = `
     <h1 class="page-title">${tz('Me', '我的')}</h1>
     <div class="me-head">
-      <div class="pf-av">${esc((S.name || '?').slice(0, 1).toUpperCase())}</div>
-      <div class="me-id"><b>${esc(S.name || 'Listener')}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)}</p></div>
+      <button class="pf-av pf-av-edit" data-act="av-pick" aria-label="${tz('Change avatar', '换头像')}">${avInner()}<i class="av-cam">${ic('pen', 'xs')}</i></button>
+      <div class="me-id pf-who">${S.acct ? `<button class="pf-name" data-act="rename" aria-label="${tz('Change name', '改名')}"><b>${esc(S.name || tz('Listener', '听众'))}</b>${ic('pen', 'xs')}</button>` : `<b>${esc(S.name || tz('Listener', '听众'))}</b>`}${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)}</p>
+        ${S.acct ? '' : `<button class="btn btn-grad btn-sm pf-signin" data-act="signin">${tz('Sign in', '登录')}</button>`}</div>
       <button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span>${ic('chevR', 'xs')}</button>
     </div>
     ${freeCard()}
@@ -4937,7 +4982,7 @@ function renderDetailPane() {
         <div class="how">
           <div><b>1</b><span>Episode 1 is a produced audio drama. It ends on a choice.</span></div>
           <div><b>2</b><span>Pick an answer, type your own, or just say it out loud.</span></div>
-          <div><b>3</b><span>The next episode is written and voiced live from what you chose${S.name ? `, and they’ll call you ${esc(S.name)}` : ''}.</span></div>
+          <div><b>3</b><span>The next episode is written and voiced live from what you chose.</span></div>
         </div></div>
       <div class="about-block"><h4>Genres</h4><div class="tags" style="justify-content:flex-start">${(s.genres || []).map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div></div>`;
     quoteMark();
@@ -5959,6 +6004,10 @@ document.addEventListener('click', (e) => {
     case 'buy': { const p = PACKS[+el.dataset.i]; const bonus = parseInt((p.bonus || '0').replace(/\D/g, ''), 10) || 0; addCoins(p.n + bonus, `Coin pack ${p.n}${bonus ? ' + ' + bonus : ''} (test)`); toast(`${coinIc('sm')} +${p.n + bonus} test coins`); break; }
     case 'vip': S.vip = !S.vip; save(); toast(S.vip ? `${ic('crown', 'sm')} VIP on — every episode free` : 'VIP off'); refreshSheets(); refreshAfterWallet(); break;
     case 'auto-unlock': S.autoUnlock = !S.autoUnlock; save(); refreshSheets(); break;
+    case 'av-pick': pickAvatar(); break;
+    case 'rename': openRename(); break;
+    case 'signin': openSignin(); break;
+    case 'signin-go': signIn(el.dataset.via); break;
     case 'profile': if (V3 && !V4) { meTab = 'profile'; go('me'); } else openProfile(); break;
     case 'lang': if (el.dataset.l !== LANG) { save(true); location.href = langUrl(el.dataset.l); } break;
     case 'reset': if (window.confirm('Reset all local data (coins, progress, library, name)?')) { ['ua.state', 'ua.sess'].forEach(store.del); clearTimeout(saveT); window.removeEventListener('pagehide', save); S = DEF(); SESS = {}; location.hash = ''; location.reload(); } break;
@@ -6064,7 +6113,8 @@ document.addEventListener('submit', (e) => {
   e.preventDefault();
   if (f.dataset.form === 'name') {
     const v = ($('#pf-name').value || '').trim().slice(0, 24);
-    S.name = v; save(); toast(v ? `They'll call you ${esc(v)}` : 'Name cleared');
+    if (!v) { toast(tz('Name can’t be empty', '名字不能为空')); return; }
+    S.name = v; save(); toast(tz(`Name changed to ${esc(v)}`, `已改名为 ${esc(v)}`)); if (topSheet() && topSheet().kind === 'rename') closeSheet();
     refreshSheets(); if (curTab === 'home') renderHome(); if (curTab === 'me') { const i = $('#pf-name'); if (i) i.blur(); renderMe(); }
   } else if (f.dataset.form === 'search') {
     const q = $('#ex-q'); if (q) q.blur();
@@ -6155,17 +6205,24 @@ function renderOnboard() {
         <p class="ob-sub">Audio series where every episode ends with your choice — and the next one is written and voiced live, just for you.</p>
       </div>
       <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">Get started</button></div>`;
-  } else if (obStep === 1) {
+  } else if (obStep === 1) {   // 11-16 was "What should they call you?" — now a short tutorial of the core loop
     const m = byId('rian') || SERIES[0];
     body = `
-      <form class="ob-body" data-form="ob-name" autocomplete="off">
+      <div class="ob-body ob-how-body">
         <p class="ob-step-l">Step 2 of 3</p>
-        <h1 class="ob-title">What should they call you?</h1>
-        <p class="ob-sub">Characters will say your name in the story.</p>
-        <div class="ob-name"><input id="ob-name" maxlength="24" placeholder="Your name" value="${esc(S.name)}" autocomplete="given-name" enterkeyhint="next" aria-label="Your name"></div>
-        <div class="ob-bubble"><img src="${esc(avatarOf(m))}" alt=""><p id="ob-preview" translate="no">${LANG === 'zh' ? `“别松开我的手。从现在起，你是我未来的新娘，<b>${esc(S.name || '…')}</b>。”` : `“Don't let go of my hand. As of now, you're my future bride, <b>${esc(S.name || '…')}</b>.”`}</p></div>
-      </form>
-      <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">Continue</button><button class="link-btn" data-act="ob-next" data-skip="1">Skip for now</button></div>`;
+        <h1 class="ob-title">${tz('How it works', '怎么玩')}</h1>
+        <p class="ob-sub">${tz('Every episode stops at your turn — and the next one is written from what you say.', '每一集都停在轮到你的时候，下一段按你的回应现写。')}</p>
+        <ol class="ob-how">
+          <li><i>1</i><div><b>${tz('Listen', '听一段')}</b><span>${tz('A fully voiced drama — the lines scroll along like lyrics.', '多角色配音的有声剧，台词像歌词一样跟着滚。')}</span></div></li>
+          <li class="hot"><i>2</i><div><b>${tz('Your turn', '轮到你')}</b><span>${tz('The narrator asks what you do. Answer any way you like:', '旁白问你怎么做，用哪种方式回答都行：')}</span>
+            <div class="ob-demo"><div class="ob-q"><img src="${esc(avatarOf(m))}" alt=""><p>${tz('He’s still holding your hand. What do you say?', '他还握着你的手。你要对他说什么？')}</p></div>
+              <div class="ob-ways"><em>${ic('mic', 'xs')} ${tz('Say it', '说出来')}</em><em>${tz('Type it', '打字')}</em><em>${tz('Tap A / B', '点 A / B')}</em></div>
+              <p class="ob-you">${tz('“Don’t let go. Tell me who you really are.”', '“先别松手。告诉我你到底是谁。”')}</p></div></div></li>
+          <li><i>3</i><div><b>${tz('Written live', '现写下一段')}</b><span>${tz('The next part is written and voiced from your answer, in seconds.', '下一段按你的回答现写、现配音，几秒就开始播。')}</span></div></li>
+          <li><i>${ic('restart', 'xs')}</i><div><b>${tz('Keep listening', '一直听下去')}</b><span>${tz('Then it’s your turn again — the story goes on as long as you do.', '然后又轮到你，故事可以一直往下走。')}</span></div></li>
+        </ol>
+      </div>
+      <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">${tz('Next', '下一步')}</button></div>`;
   } else {
     body = `
       <div class="ob-body">
@@ -6193,7 +6250,6 @@ function grantWelcome() {
   return WELCOME - had;
 }
 function obNext(skip) {
-  if (obStep === 1 && !skip) { const inp = $('#ob-name'); if (inp) S.name = inp.value.trim().slice(0, 24); }
   if (obStep < 2) { obStep += 1; save(); renderOnboard(); return; }
   S.genres = obGenres.slice();
   S.onboarded = true;

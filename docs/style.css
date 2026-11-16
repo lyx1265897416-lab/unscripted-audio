@@ -1367,3 +1367,35 @@ h1, h2, h3, h4, p { margin: 0; }
 .v4 .me4-top .me-id b { vertical-align: middle; }
 .v4 .me4-top .me-id > .ic { vertical-align: middle; color: var(--dim); margin-left: 2px; }
 .v3 #v-home .find-bar .search { margin-top: 4px; }   /* the search box starts exactly where the hero does (68 px) */
+
+/* 11-16 v106：头像可换、名字只是账户名、登录、引导第 2 步改成“怎么玩” */
+.pf-av, .avatar-btn { overflow: hidden; }
+.pf-av img, .avatar-btn img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
+.pf-av-edit { position: relative; overflow: visible; border: 0; cursor: pointer; padding: 0; }
+.pf-av-edit > img { border-radius: 50%; }
+.pf-av-edit .av-cam { position: absolute; right: -2px; bottom: -2px; width: 22px; height: 22px; border-radius: 50%; background: var(--s2); color: var(--text); display: grid; place-items: center; box-shadow: 0 0 0 2px var(--s1, #15161b); }
+.pf-who { min-width: 0; }
+.pf-name { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; color: var(--text); cursor: pointer; text-align: left; }
+.pf-name .ic { color: var(--dim); }
+.pf-signin { margin-top: 8px; }
+.signin-btns { display: grid; gap: 10px; margin: 6px 0 4px; }
+.signin-btns .btn { height: 50px; font-size: 15.5px; gap: 10px; }
+.signin-apple { background: #fff; color: #000; }
+.si-logo { font-size: 18px; line-height: 1; font-weight: 700; }
+.si-logo.g { font-family: var(--fd); color: #4C8BF5; }
+.ob-how-body { padding-bottom: 8px; }
+.ob-how { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 4px; position: relative; }
+.ob-how li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; position: relative; }
+.ob-how li:not(:last-child)::after { content: ''; position: absolute; left: 13px; top: 40px; bottom: -6px; width: 2px; background: var(--line-2); border-radius: 1px; }
+.ob-how li > i { width: 28px; height: 28px; border-radius: 50%; flex: none; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 14px; background: var(--s2); color: var(--muted); }
+.ob-how li.hot > i, .ob-how li:first-child > i { background: var(--grad); color: #1A0B06; }
+.ob-how li > div { min-width: 0; flex: 1; }
+.ob-how b { display: block; font-family: var(--fd); font-size: 17px; margin: 3px 0 2px; }
+.ob-how span { display: block; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.ob-demo { margin-top: 10px; background: var(--s2); border-radius: 16px; padding: 12px; box-shadow: inset 0 0 0 1px var(--line-2); }
+.ob-q { display: flex; gap: 8px; align-items: flex-start; }
+.ob-q img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; }
+.ob-q p { font-size: 14px; line-height: 1.4; color: var(--text); font-weight: 600; }
+.ob-ways { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 8px; }
+.ob-ways em { font-style: normal; font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: rgba(255, 140, 70, .14); color: var(--b); display: inline-flex; align-items: center; gap: 4px; }
+.ob-you { margin-left: auto; width: fit-content; max-width: 90%; background: var(--grad); color: #1A0B06; font-size: 13.5px; font-weight: 600; line-height: 1.4; padding: 8px 12px; border-radius: 14px 14px 4px 14px; }
