@@ -1324,3 +1324,5 @@ h1, h2, h3, h4, p { margin: 0; }
 .v3 .tb-actions .tb-find { margin-right: -4px; }
 /* the save button is a star (same word as the Library's Saved tab) */
 .v3 .dt-top .icon-btn .ic:not(.sm) { width: 20px; height: 20px; }
+.v3 .rw-tab { margin-right: 16px; }
+.v3 .rw-tabs-note { white-space: nowrap; font-size: 11.5px; }
