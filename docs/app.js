@@ -1464,7 +1464,7 @@ async function newSession(id) {
       if (waits[i]) await sleep(waits[i]);
       if (early && getSess(id) !== mine) throw new Error('restarted');
       try {
-        const res = await API.play({ series: id, name: '' });
+        const res = await API.play({ series: id, name: V4 ? (S.name || '') : '' });
         let ep = res.ep;
         if (!ep && res.job) ep = await waitJobEp(res.job, (j) => { P.loadStatus = j.status; updatePlayerUI(); });
         if (!ep) throw new Error('No episode returned');
@@ -1519,7 +1519,7 @@ async function sidReady(id) {  // Episode 1 starts before /api/play returns; any
   if (!ss.sid && SIDP[skey(id)]) { try { const r = await SIDP[skey(id)]; if (!ss.sid) ss.sid = r.res.sid; } catch (e) { /* ignore */ } }
   if (!ss.sid && !MOCK && ss.eps && ss.eps.length === 1 && ss.eps[0].kind === 'produced') {
     // the start never reached the relay (it was down / the link dropped): open the server session now, for the same Episode 1
-    if (!SIDLATE[skey(id)]) SIDLATE[skey(id)] = API.play({ series: id, name: '' }).finally(() => { setTimeout(() => { delete SIDLATE[skey(id)]; }, 3000); });
+    if (!SIDLATE[skey(id)]) SIDLATE[skey(id)] = API.play({ series: id, name: V4 ? (S.name || '') : '' }).finally(() => { setTimeout(() => { delete SIDLATE[skey(id)]; }, 3000); });
     try {
       const res = await SIDLATE[skey(id)];
       if (res && res.sid && !ss.sid) {
@@ -2537,7 +2537,7 @@ function openModeSheet() {
     <div class="sh-h"><div><h3>How do you want to listen?</h3><p>${NOCALL ? tz('Switch any time.', '随时可以切换。') : 'Switch any time. Calls with characters work in every mode.'}</p></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
     <div class="mode-list">
       ${Object.entries(MODES).map(([k, m]) => `<button class="mode-opt ${cur === k ? 'on' : ''}" data-act="set-mode" data-m="${k}" ${k === 'voice' && !VOICE_OK ? 'disabled' : ''}>
-        <span class="mo-ic">${ic(m.icon)}</span><span class="mo-t"><b>${m.name}${k === 'voice' && !VOICE_OK ? ' · not supported in this browser' : ''}</b><small>${m.desc}</small></span>${cur === k ? ic('check') : ''}</button>`).join('')}
+        <span class="mo-ic">${ic(m.icon)}</span><span class="mo-t"><b>${m.name}${k === 'voice' && !VOICE_OK ? ' · not supported in this browser' : ''}</b><small>${V4 ? m.short : m.desc}</small></span>${cur === k ? ic('check') : ''}</button>`).join('')}
     </div>`, { kind: 'mode' });
 }
 function setMode(m) {
@@ -2886,7 +2886,7 @@ function openUnlockSheet(id, n, onDone, opts = {}) {
       ${enough
         ? `<button class="btn btn-grad" data-act="ul-coins">${coinIc()} ${isCall ? 'Call' : 'Unlock'} with ${price} coins</button>`
         : `<button class="btn btn-grad" data-act="store">${coinIc()} Not enough coins · Get more</button>`}
-      <button class="btn btn-ghost" data-act="ul-ad">${ic('tv', 'sm')} Watch an ad to ${isCall ? 'call free' : 'unlock'}</button>
+      ${V4 ? '' : `<button class="btn btn-ghost" data-act="ul-ad">${ic('tv', 'sm')} Watch an ad to ${isCall ? 'call free' : 'unlock'}</button>`}
       ${isCall ? '' : `<div class="wait-free" aria-disabled="true">${ic('hourglass', 'sm')} Wait-free in <span id="wf-t">${fmtWait(S.waitFree[k])}</span></div>`}
       ${isCall ? `<button class="link-btn" data-act="vip-from-call">${ic('crown', 'xs')} VIP calls are free</button>` : enough ? `<button class="link-btn" data-act="store">Get more coins</button>` : ''}
     </div>
@@ -2945,7 +2945,7 @@ function openStore() {
       <h4>${ic('crown', 'sm')} VIP · Unlimited episodes</h4>
       <ul>
         <li>${ic('check')} Every live episode unlocked</li>
-        <li>${ic('check')} No ads, no waiting</li>
+        <li>${ic('check')} ${V4 ? tz('No waiting', '不用等') : 'No ads, no waiting'}</li>
         <li>${ic('check')} Test toggle — no charge</li>
       </ul>
       <button class="btn ${S.vip ? 'btn-ghost' : 'btn-grad'} btn-block" data-act="vip">${S.vip ? 'VIP is on · Turn off' : 'Start VIP (test)'}</button>
@@ -2998,12 +2998,12 @@ const profileFields = () => `
     <p class="foot-note" style="padding-bottom:0">${MOCK ? 'Demo mode · mock content' : 'Live mode'} · ${BRAND}</p>`;
 function openProfile() {
   const body = () => `
-    <div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
-    <div class="pf-head" style="margin-top:-34px">
+    ${V4 ? `<div class="sh-h"><div><h3>${tz('Settings', '设置')}</h3></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>` : `<div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>`}
+    ${V4 ? '' : `<div class="pf-head" style="margin-top:-34px">
       <button class="pf-av pf-av-edit" data-act="av-pick" aria-label="${tz('Change avatar', '换头像')}">${avInner()}<i class="av-cam">${ic('pen', 'xs')}</i></button>
       <div class="pf-who">${S.acct ? `<button class="pf-name" data-act="rename" aria-label="${tz('Change name', '改名')}"><b>${esc(S.name || tz('Listener', '听众'))}</b>${ic('pen', 'xs')}</button>` : `<b>${esc(S.name || tz('Listener', '听众'))}</b>`}${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${coinIc('sm')} <span class="coins-n">${S.coins}</span> coins · ${S.played.length} series started</p>
         ${S.acct ? '' : `<button class="btn btn-grad btn-sm pf-signin" data-act="signin">${tz('Sign in', '登录')}</button>`}</div>
-    </div>
+    </div>`}
     ${profileFields()}${V4 ? `
     <span class="field-l">${tz('Free listening (test)', '免费收听（测试）')}</span>
     <div class="segc"><button data-act="free-reset">${tz('Reset to 30 min', '重置为 30 分钟')}</button><button data-act="free-end">${tz('Use it up now', '立刻用完')}</button></div>` : ''}`;
@@ -4628,6 +4628,11 @@ function openContMore(id) {
  * icon (or a genre); Cancel — or the Home tab — closes it and brings the home page back. */
 let homeOpen = false;
 const homeFinding = () => !!(homeOpen || exQuery.trim() || exGenre);
+const contShelf = (d) => `
+      <section class="shelf cont-shelf">
+        <div class="shelf-h"><h3>Continue Listening</h3><button class="more" data-act="go" data-to="library">See all</button></div>
+        <div class="row cl-list">${d.cont.map(contRow).join('')}</div>
+      </section>`;
 function homeV3(d) {
   const finding = homeFinding();
   return `
@@ -4647,12 +4652,9 @@ function homeV3(d) {
     </div>
     <div id="home-find" ${finding ? '' : 'hidden'}><div class="chips" id="home-chips"></div><div id="ex-res"></div></div>
     <div id="home-main" ${finding ? 'hidden' : ''}>
+      ${V4 && d.cont.length ? contShelf(d) : ''}
       ${heroSection(d.heroes)}
-      ${d.cont.length ? `
-      <section class="shelf">
-        <div class="shelf-h"><h3>Continue Listening</h3><button class="more" data-act="go" data-to="library">See all</button></div>
-        <div class="row cl-list">${d.cont.map(contRow).join('')}</div>
-      </section>` : ''}
+      ${!V4 && d.cont.length ? contShelf(d) : ''}
       <div class="chips" role="list">${(S.genres || []).filter((g) => GENRES.indexOf(g) >= 0).concat(GENRES.filter((g) => (S.genres || []).indexOf(g) < 0)).map((g) => `<button class="chip" data-act="genre" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
       <section class="shelf">
         <div class="shelf-h"><h3>Top 10 this week</h3></div>
@@ -4665,7 +4667,7 @@ function homeV3(d) {
       ${shelf('Bingeworthy', d.binge.map((s) => card(s)))}
       <section class="shelf"><div class="shelf-h"><h3>All series</h3></div><div class="res-list">${SERIES.map(resRow).join('')}</div></section>
       ${promoV3()}
-      <p class="foot-note">Every episode after Ep 1 is written live from what you choose.</p>
+      ${V4 ? '' : '<p class="foot-note">Every episode after Ep 1 is written live from what you choose.</p>'}
     </div>`;
 }
 /** Home ⇄ search results: typing or picking a genre swaps the page body, the search box itself is never re-drawn (keeps focus) */
@@ -4739,7 +4741,7 @@ function renderRewardsV3() {
       </div>
       ${rwTab === 'daily'
         ? tasksNow().map((t) => { const v = S.tasks[t.k] || 0; return rwRow({ k: t.k, title: tz(t.label, TASK_ZH[t.k] || t.label), desc: t.fmt(v), reward: t.reward, ok: v >= t.goal, claimed: !!S.tasks.claimed[t.k], go: 'home', claimAct: 'claim' }); }).join('')
-        : ob.map(({ t, ok, claimed }) => rwRow({ k: t.k, title: tz(t.en, t.zh), desc: [tz(t.den, t.dzh), t.prog ? t.prog() : ''].filter(Boolean).join(' · '), reward: t.reward, ok, claimed, go: t.go, claimAct: 'ob-claim' })).join('')}
+        : ob.map(({ t, ok, claimed }) => rwRow({ k: t.k, title: tz(t.en, t.zh), desc: [V4 ? '' : tz(t.den, t.dzh), t.prog ? t.prog() : ''].filter(Boolean).join(' · '), reward: t.reward, ok, claimed, go: t.go, claimAct: 'ob-claim' })).join('')}
     </section>
     <section class="panel">
       <div class="panel-h"><h3>Coin history</h3><span>${S.ledger.length} records</span></div>
@@ -4794,8 +4796,10 @@ function renderMeV4() {
   if (!n) libEdit = false;
   el.innerHTML = `
     <div class="me4-top">
-      <button class="pf-av" data-act="profile" aria-label="${tz('Settings', '设置')}">${avInner()}</button>
-      <button class="me-id" data-act="profile"><b>${esc(S.name || tz('Listener', '听众'))}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}${ic('chevR', 'sm')}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)} · ${MODES[modeOf()].name}</p></button>
+      <button class="pf-av pf-av-edit" data-act="av-pick" aria-label="${tz('Change avatar', '换头像')}">${avInner()}<i class="av-cam">${ic('pen', 'xs')}</i></button>
+      <div class="me-id pf-who">${S.acct ? `<button class="pf-name" data-act="rename" aria-label="${tz('Change name', '改名')}"><b>${esc(S.name || tz('Listener', '听众'))}</b>${ic('pen', 'xs')}</button>` : `<b>${esc(S.name || tz('Listener', '听众'))}</b>`}${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}
+        ${S.acct ? `<p class="pf-meta">${ic('headphones', 'xs')} ${S.played.length} · ${ic(MODES[modeOf()].icon, 'xs')} ${MODES[modeOf()].name}</p>` : `<button class="btn btn-grad btn-sm pf-signin" data-act="signin">${tz('Sign in', '登录')}</button>`}</div>
+      <button class="icon-btn me4-set" data-act="profile" aria-label="${tz('Settings', '设置')}">${ic('gear')}</button>
     </div>
     <section class="wallet4">
       <button class="w4-h" data-act="store"><span>${tz('My wallet', '我的钱包')}</span>${ic('chevR', 'sm')}</button>
@@ -4805,7 +4809,8 @@ function renderMeV4() {
         <button class="btn btn-grad btn-sm" data-act="store">${tz('Get coins', '获取金币')}</button>
       </div>
       <i class="fl-bar"><i style="width:${Math.round(100 * used / FREE_LISTEN)}%"></i></i>
-      <p class="w4-note">${S.vip ? tz('VIP — everything is free', 'VIP —— 全部免费') : left ? tz('Your first 30 minutes are free for everything. After that Ep 1–3 stay free, later episodes are 10 coins.', '前 30 分钟所有内容免费；用完后每部前 3 集仍免费，之后每集 10 金币。') : tz('Free minutes used up · Ep 1–3 stay free on every series, later episodes are 10 coins.', '免费时长已用完 · 每部前 3 集仍免费，之后每集 10 金币。')}</p>
+      ${V4 ? `<div class="w4-tags"><span>${ic('check', 'xs')} ${tz('Ep 1–3 always free', '每部前 3 集免费')}</span><span>${coinIc('sm')} ${tz('Then 10 / ep', '之后每集 10')}</span></div>` : ''}
+      <p class="w4-note" ${V4 ? 'hidden' : ''}>${S.vip ? tz('VIP — everything is free', 'VIP —— 全部免费') : left ? tz('Your first 30 minutes are free for everything. After that Ep 1–3 stay free, later episodes are 10 coins.', '前 30 分钟所有内容免费；用完后每部前 3 集仍免费，之后每集 10 金币。') : tz('Free minutes used up · Ep 1–3 stay free on every series, later episodes are 10 coins.', '免费时长已用完 · 每部前 3 集仍免费，之后每集 10 金币。')}</p>
     </section>
     <div class="me4-tabs">
       ${[['listening', tz('Listening', '在听'), cont.length], ['saved', tz('Saved', '收藏'), saved.length]].map(([k, l, c]) => `<button class="me4-tab ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}${c ? `<em>${c}</em>` : ''}</button>`).join('')}
@@ -6005,6 +6010,11 @@ document.addEventListener('click', (e) => {
     case 'vip': S.vip = !S.vip; save(); toast(S.vip ? `${ic('crown', 'sm')} VIP on — every episode free` : 'VIP off'); refreshSheets(); refreshAfterWallet(); break;
     case 'auto-unlock': S.autoUnlock = !S.autoUnlock; save(); refreshSheets(); break;
     case 'av-pick': pickAvatar(); break;
+    case 'ob4-skip': ob4Finish(false); break;
+    case 'ob4-play': ob4Finish(true); break;
+    case 'ob4-noname': ob4Name(''); break;
+    case 'ob4-pick': { const b = el; ob4Answer(b.textContent.replace(/^[AB]/, '').trim(), +b.dataset.i); break; }
+    case 'ob4-mic': ob4Mic(el); break;
     case 'rename': openRename(); break;
     case 'signin': openSignin(); break;
     case 'signin-go': signIn(el.dataset.via); break;
@@ -6125,6 +6135,9 @@ document.addEventListener('submit', (e) => {
     toast(S.me ? `${ic('spark', 'sm')} ${NOCALL ? tz('Your next episodes will be written around you', '之后的剧情会围绕你来写') : 'Your next episodes and calls will be written around you'}` : 'Cleared');
   } else if (f.dataset.form === 'wish') {
     const t = ((($('#tk-text') || {}).value) || '').trim(); if (t) sendWish(t);
+  } else if (f.dataset.form === 'ob4') {
+    const t = (($('#ob4-t') || {}).value || '').trim(); const k = ($('#ob4-bar') || {}).dataset ? $('#ob4-bar').dataset.k : '';
+    if (k === 'name') ob4Name(t); else if (k === 'turn' && t) ob4Answer(t, -1);
   } else if (f.dataset.form === 'ob-name') {
     obNext();
   }
@@ -6191,6 +6204,7 @@ function refreshAfterWallet() {
  * ========================================================================= */
 let obStep = 0, obGenres = [];
 function renderOnboard() {
+  if (V4) { renderOnboardV4(); return; }
   const el = $('#onboard');
   el.hidden = false;
   const pick = (NARRA ? ['magnus', 'rian', 'rafael'] : ['magnus', 'reborn', 'rian']).map(byId).filter(Boolean);
@@ -6249,7 +6263,125 @@ function grantWelcome() {
   addCoins(WELCOME - had, 'Welcome bonus');
   return WELCOME - had;
 }
+/* 11-16 v4 onboarding — 阿炫: "let them say who they are, then how to play; nobody reads a wall of text".
+ * One short scene instead of explanation pages: the narrator sets it up (real voice), Rian asks what to call you (type it),
+ * then hands you a real choice — tap A / B, type, or say it — and the next line comes back "written from your answer".
+ * The last card starts Episode 1 right away (no genre page, no detour through Home). No server calls, no credits. */
+const OB4 = { s: 'rian', busy: false, rec: null, au: null };
+const ob4Q = (who) => `quote/${OB4.s}.${who}.${LANG}.mp3`;
+function renderOnboardV4() {
+  const el = $('#onboard'); el.hidden = false; el.classList.add('ob4');
+  const s = byId(OB4.s) || SERIES[0];
+  const steps = `<div class="ob-steps">${[0, 1].map((i) => `<i class="${i <= obStep ? 'on' : ''}"></i>`).join('')}</div>`;
+  if (obStep === 0) {
+    const pick = ['magnus', 'rian', 'rafael'].map(byId).filter(Boolean);
+    el.innerHTML = steps + `
+      <div class="ob-body">
+        <div class="logo" style="justify-content:center;margin-top:8px">${LOGO}<span class="logo-word">narra<em>.</em></span></div>
+        <div class="ob-collage">${pick.map((x) => `<img src="${esc(thumbOf(x))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(x))}'">`).join('')}</div>
+        <h1 class="ob-title">Stories that <em>listen back.</em></h1>
+        <p class="ob-sub">${tz('You decide what happens next.', '接下来发生什么，你说了算。')}</p>
+        <div class="ob4-ways">${[['headphones', tz('Listen', '听')], ['mic', tz('Answer', '回应')], ['sparkles', tz('It’s written for you', '为你现写')]].map(([i, t], k) => `${k ? `<i class="ar">${ic('chevR', 'xs')}</i>` : ''}<span>${ic(i)}<b>${t}</b></span>`).join('')}</div>
+      </div>
+      <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">${tz('Get started', '开始')}</button></div>`;
+    return;
+  }
+  el.innerHTML = steps + `
+    <button class="link-btn ob4-skip" data-act="ob4-skip">${tz('Skip', '跳过')}</button>
+    <div class="ob4-head"><img src="${esc(avatarOf(s))}" alt=""><div><b>${esc((s.lead || '').split(' · ')[0] || s.title)}</b><span>${esc(s.title)}</span></div></div>
+    <div class="ob4-chat" id="ob4-chat"></div>
+    <div class="ob4-bar" id="ob4-bar"></div>`;
+  ob4Run();
+}
+const ob4Wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function ob4Scroll() { const c = $('#ob4-chat'); if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' }); }
+function ob4Add(html, cls) { const c = $('#ob4-chat'); if (!c) return null; const d = document.createElement('div'); d.className = 'ob4-m ' + cls; d.innerHTML = html; c.appendChild(d); ob4Scroll(); return d; }
+/** one line of the scene: typing dots, then the words; with `voice` it plays that real line and waits for it */
+async function ob4Say(kind, text, voice) {
+  const s = byId(OB4.s) || SERIES[0];
+  const d = ob4Add(`${kind === 'char' ? `<img src="${esc(avatarOf(s))}" alt="">` : ''}<p><i class="ob4-dots"><b></b><b></b><b></b></i></p>`, kind);
+  await ob4Wait(kind === 'narr' ? 500 : 750);
+  if (!d || !d.isConnected) return;
+  d.querySelector('p').innerHTML = (voice ? `<i class="ob4-wave">${ic('volume', 'xs')}</i>` : '') + esc(text); ob4Scroll();
+  if (voice) {
+    try { if (OB4.au) OB4.au.pause(); } catch (e) { /* ignore */ }
+    const au = OB4.au = new Audio(voice); d.classList.add('speaking');
+    await new Promise((r) => { const t = setTimeout(r, 7000); au.onended = au.onerror = () => { clearTimeout(t); r(); }; au.play().catch(() => { clearTimeout(t); setTimeout(r, 1200); }); });
+    d.classList.remove('speaking');
+  } else await ob4Wait(350);
+}
+function ob4Bar(kind) {
+  const bar = $('#ob4-bar'); if (!bar) return;
+  const mic = VOICE_OK ? `<button class="ob4-mic" type="button" data-act="ob4-mic" aria-label="${tz('Say it', '说出来')}">${ic('mic')}</button>` : '';
+  bar.innerHTML = kind === 'name'
+    ? `<form class="ob4-in" data-form="ob4"><input id="ob4-t" maxlength="24" placeholder="${tz('Your name', '你的名字')}" autocomplete="given-name" enterkeyhint="send"><button class="ob4-send" type="submit" aria-label="Send">${ic('send')}</button></form>
+       <button class="link-btn ob4-later" data-act="ob4-noname">${tz('Not now', '先不说')}</button>`
+    : kind === 'turn'
+      ? `<form class="ob4-in" data-form="ob4">${mic}<input id="ob4-t" maxlength="120" placeholder="${tz('Or say / type your own…', '或者说出 / 打出你自己的回答…')}" enterkeyhint="send"><button class="ob4-send" type="submit" aria-label="Send">${ic('send')}</button></form>`
+      : '';
+  bar.dataset.k = kind || '';
+  if (kind === 'name') setTimeout(() => { const i = $('#ob4-t'); if (i) try { i.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 200);
+}
+async function ob4Run() {
+  OB4.busy = true; ob4Bar('');
+  await ob4Say('narr', tz('The tide pool glowed at dawn, and you jumped in after her.', '清晨的潮池忽然发光，你跟着她跳进了海里。'), ob4Q('NARR'));
+  await ob4Say('char', tz('You’re not from the sea. What should I call you?', '你不是海里的人。我该怎么叫你？'));
+  OB4.busy = false; ob4Bar('name');
+}
+async function ob4Name(v) {
+  if (OB4.busy) return; OB4.busy = true; ob4Bar('');
+  v = (v || '').trim().slice(0, 24);
+  if (v) { S.name = v; save(); ob4Add(`<p>${esc(v)}</p>`, 'you'); await ob4Wait(300); await ob4Say('char', tz(`${v}. I’ll remember that.`, `${v}。我记住了。`)); }
+  await ob4Say('char', tz('Relax. How long we play this out is your call.', '别紧张，这出戏演多久，你说了算。'), ob4Q('Rian'));
+  const opts = [tz('Play along', '配合他演下去'), tz('Tell them the truth', '当众说出真相')];
+  ob4Add(`<div class="ob4-turn"><span class="ob4-tag">${ic('mic', 'xs')} ${tz('Your turn', '轮到你')}</span>
+      <p>${tz('He just told the whole hall you’re his future bride. What do you do?', '他刚当着整个大殿说，你是他未来的新娘。你怎么做？')}</p>
+      <div class="ob4-opts">${opts.map((o, i) => `<button class="ob4-opt" data-act="ob4-pick" data-i="${i}"><em>${'AB'[i]}</em>${esc(o)}</button>`).join('')}</div>
+      <div class="ob4-how">${[['hand', tz('Tap', '点选')], ['send', tz('Type', '打字')], ['mic', tz('Say it', '说话')]].map(([i, t]) => `<span>${ic(i, 'xs')}${t}</span>`).join('')}</div></div>`, 'turn');
+  OB4.busy = false; ob4Bar('turn');
+}
+async function ob4Answer(text, i) {
+  if (OB4.busy || !text) return; OB4.busy = true; ob4Bar('');
+  if (OB4.rec) { try { OB4.rec.cancel(); } catch (e) { /* ignore */ } OB4.rec = null; }
+  document.querySelectorAll('.ob4-opt').forEach((b) => { b.disabled = true; if (+b.dataset.i === i) b.classList.add('on'); });
+  ob4Add(`<p>${esc(text)}</p>`, 'you');
+  const w = ob4Add(`<p>${ic('sparkles', 'xs')} ${tz('Writing the next part from your answer…', '正在按你的回答写下一段…')}<i class="ob4-bars"><b></b><b></b><b></b></i></p>`, 'writing');
+  await ob4Wait(1700); if (w) w.remove();
+  await ob4Say('char', i === 0 ? tz('Then smile, and don’t let go of my hand. They’re all watching.', '那就笑一下，别松开我的手。他们都在看。')
+    : i === 1 ? tz('…You really are full of surprises. Now they’ll never let you leave.', '……你还真是让人意外。这下他们更不会放你走了。')
+    : tz('He looks at you for a long second — then laughs.', '他盯着你看了好一会儿，然后笑了。'));
+  const s = byId(OB4.s) || SERIES[0];
+  ob4Add(`<div class="ob4-end"><img src="${esc(thumbOf(s))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
+      <div><span>${tz('Episode 1', '第 1 集')}</span><b>${esc(s.title)}</b><p>${tz('Every episode ends with your turn.', '每一集都停在轮到你的时候。')}</p></div></div>
+    <button class="btn btn-grad btn-block" data-act="ob4-play">${ic('play')} ${tz('Start listening', '开始收听')}</button>
+    <button class="link-btn ob4-browse" data-act="ob4-skip">${tz('Browse all stories', '看看其他剧')}</button>`, 'endcard');
+  OB4.busy = false;
+}
+function ob4Mic(btn) {
+  if (OB4.busy) return;
+  if (OB4.rec) { OB4.rec.stop(); return; }
+  const inp = $('#ob4-t'); btn.classList.add('rec'); if (inp) inp.placeholder = tz('Listening…', '在听…');
+  const h = OB4.rec = recordAnswer({ wait: 6000, max: 15000, onPartial: (t) => { if (inp) inp.value = t; } });
+  h.done.then((r) => {
+    if (OB4.rec === h) OB4.rec = null; btn.classList.remove('rec');
+    if (inp) inp.placeholder = tz('Or say / type your own…', '或者说出 / 打出你自己的回答…');
+    if (r.canceled) return;
+    if (r.text) ob4Answer(r.text.trim(), -1); else if (r.spoke) toast(tz('Didn’t catch that — try again', '没听清，再说一次'));
+  });
+}
+function ob4Finish(play) {
+  if (OB4.rec) { try { OB4.rec.cancel(); } catch (e) { /* ignore */ } OB4.rec = null; }
+  try { if (OB4.au) OB4.au.pause(); } catch (e) { /* ignore */ }
+  S.genres = []; S.onboarded = true;
+  const got = grantWelcome(); save(true);
+  const el = $('#onboard'); el.hidden = true; el.innerHTML = ''; el.classList.remove('ob4');
+  primeMic();
+  toast(`${coinIc('sm')} ${tz(`Welcome${S.name ? ', ' + esc(S.name) : ''}! +${got || WELCOME} coins`, `欢迎${S.name ? '，' + esc(S.name) : ''}！+${got || WELCOME} 金币`)}`);
+  route();
+  if (play) setTimeout(() => startOrContinue(OB4.s), 200);
+}
 function obNext(skip) {
+  if (V4 && obStep === 0) { obStep = 1; renderOnboardV4(); return; }
   if (obStep < 2) { obStep += 1; save(); renderOnboard(); return; }
   S.genres = obGenres.slice();
   S.onboarded = true;
