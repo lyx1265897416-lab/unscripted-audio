@@ -47,15 +47,17 @@ const NARRA = Q.get('ui') !== 'classic';
 /* 11-15 ?ui=v2 — narra with each screen tidied, for her to compare before it replaces anything. Same four tabs, same pages,
  * same functions; only layout, components and wording inside the screens change (she turned down a cut-down version:
  * "keep the four tabs, look at what each screen's layout can do better"). Everything is behind V2; narra is untouched. */
-const V2 = Q.get('ui') === 'v2';
-const UIQ = V2 ? 'v2' : NARRA ? 'narra' : 'classic';
+/* 11-16 she confirmed it: "replace the current version with the tidied one". The tidied layout IS narra now (the default,
+ * ?ui=narra, and old ?ui=v2 links). The layout it replaced stays reachable with ?ui=narra1, only for looking back. */
+const V2 = NARRA && Q.get('ui') !== 'narra1';
+const UIQ = !NARRA ? 'classic' : V2 ? 'narra' : 'narra1';
 const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
 if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
 if (V2) document.documentElement.classList.add('v2');
 if (V2 && Q.get('tile') === 'b') document.documentElement.classList.add('tile-b');   // the other look of the genre tiles, for comparing
 if (Q.has('k') || !Q.has('ui')) {
   if (Q.has('k')) { store.set('ua.k', Q.get('k')); Q.delete('k'); }
-  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'v2') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI
+  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'narra1') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI (an old ?ui=v2 link becomes ?ui=narra)
   const qs = Q.toString();
   history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
