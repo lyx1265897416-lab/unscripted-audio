@@ -1199,7 +1199,11 @@ h1, h2, h3, h4, p { margin: 0; }
 .v2 .genre-tile small { margin-top: 2px; font-size: 11.5px; opacity: .85; }
 .v2 .genre-tile img { display: none; }
 .v2 .genre-tile::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: 0; right: 0; left: 34%; background: var(--bg) center 24% / cover no-repeat; }
-.v2 .genre-tile::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(90deg, var(--tile) 0, var(--tile) 34%, color-mix(in srgb, var(--tile) 62%, transparent) 58%, color-mix(in srgb, var(--tile) 12%, transparent) 100%); }
+/* clean colour: the deeper tone sits under the name, brightens, then lets go of the cover completely (no grey wash over the picture) */
+.v2 .genre-tile::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(90deg, var(--tile) 0, var(--tile2, var(--tile)) 34%, color-mix(in srgb, var(--tile2, var(--tile)) 58%, transparent) 54%, transparent 84%); }
+.v2 .genre-tile { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.v2 .genre-tile span { text-shadow: 0 1px 5px rgba(0, 0, 0, .22); }
+.v2 .genre-tile small { opacity: .95; font-weight: 700; text-shadow: 0 1px 4px rgba(0, 0, 0, .2); }
 .v2.tile-b .genre-tile::before { left: -14px; right: -14px; top: -14px; bottom: -14px; filter: blur(7px) saturate(1.2); }
 .v2.tile-b .genre-tile::after { background: linear-gradient(90deg, color-mix(in srgb, var(--tile) 70%, rgba(0, 0, 0, .55)) 0, color-mix(in srgb, var(--tile) 30%, rgba(0, 0, 0, .35)) 100%); }
 /* explore · rows: name, who, hook, rating — one thing per line, nothing cut off mid-number */
