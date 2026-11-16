@@ -20,7 +20,7 @@
 window.__relayP = fetch('relay.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
 try { var b = localStorage.getItem('ua.relay'); if (b) { b = JSON.parse(b); var l = document.createElement('link'); l.rel = 'preconnect'; l.href = b; l.crossOrigin = ''; document.head.appendChild(l); } } catch (e) {}
 </script>
-<link rel="stylesheet" href="style.css?v=56">
+<link rel="stylesheet" href="style.css?v=57">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -40,6 +40,7 @@ try { var b = localStorage.getItem('ua.relay'); if (b) { b = JSON.parse(b); var 
     <section class="view" id="v-explore" aria-label="Explore"></section>
     <section class="view" id="v-library" aria-label="Library"></section>
     <section class="view" id="v-rewards" aria-label="Rewards"></section>
+    <section class="view" id="v-me" aria-label="Profile"></section>
   </main>
 
   <section id="detail" class="page" aria-label="Series"></section>
@@ -60,6 +61,6 @@ try { var b = localStorage.getItem('ua.relay'); if (b) { b = JSON.parse(b); var 
 </div>
 
 <script src="i18n.js?v=54"></script>
-<script src="app.js?v=98"></script>
+<script src="app.js?v=99"></script>
 </body>
 </html>

@@ -50,14 +50,17 @@ const NARRA = Q.get('ui') !== 'classic';
 /* 11-16 she confirmed it: "replace the current version with the tidied one". The tidied layout IS narra now (the default,
  * ?ui=narra, and old ?ui=v2 links). The layout it replaced stays reachable with ?ui=narra1, only for looking back. */
 const V2 = NARRA && Q.get('ui') !== 'narra1';
-const UIQ = !NARRA ? 'classic' : V2 ? 'narra' : 'narra1';
+/* 11-16 ?ui=v3 — the redesign she asked to see side by side before it replaces the default (section "ui=v3" below). */
+const V3 = NARRA && Q.get('ui') === 'v3';
+const UIQ = !NARRA ? 'classic' : V3 ? 'v3' : V2 ? 'narra' : 'narra1';
 const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
 if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
 if (V2) document.documentElement.classList.add('v2');
+if (V3) document.documentElement.classList.add('v3');
 if (V2 && Q.get('tile') === 'b') document.documentElement.classList.add('tile-b');   // the other look of the genre tiles, for comparing
 if (Q.has('k') || !Q.has('ui')) {
   if (Q.has('k')) { store.set('ua.k', Q.get('k')); Q.delete('k'); }
-  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'narra1') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI (an old ?ui=v2 link becomes ?ui=narra)
+  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'narra1' && Q.get('ui') !== 'v3') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI (an old ?ui=v2 link becomes ?ui=narra)
   const qs = Q.toString();
   history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
@@ -194,6 +197,7 @@ const DEF = () => ({
   tasks: { date: null, listen: 0, newSeries: 0, choices: 0, share: 0, claimed: {} },
   ledger: [], unlocks: {}, saved: [], progress: {}, hist: [], played: [], waitFree: {}, sleep: null,
   calls: [], callsUsed: {}, inDay: {}, callSpeed: 1,
+  freeSec: 0, ob: { claimed: {}, ep: 0, choice: 0, voice: 0, call: 0, streak: 0 },   // v3: seconds of free listening used; new-listener rewards
 });
 let S = Object.assign(DEF(), store.get('ua.state', {}) || {});
 let SESS = store.get('ua.sess', {}) || {};
@@ -222,7 +226,17 @@ function addCoins(delta, label) {
 }
 const PRICE = 10;
 const FREE_EPS = 3;
-const isUnlocked = (id, n) => S.vip || n <= FREE_EPS || ((S.unlocks[id] || []).indexOf(n) >= 0);
+/* v3 "every account's first 30 minutes are free for everything; after that the paid mode starts": while free time is left
+ * nothing asks for coins (an episode written in that time stays unlocked afterwards); once it is used up the rules that were
+ * already there apply — Ep 1–3 free on every series, 10 coins an episode after that. Only listening counts (not calls). */
+const FREE_LISTEN = 30 * 60;
+const freeLeft = () => (V3 ? Math.max(0, FREE_LISTEN - (S.freeSec || 0)) : 0);
+const freeMin = () => Math.ceil(freeLeft() / 60);
+const isUnlocked = (id, n) => S.vip || n <= FREE_EPS || freeLeft() > 0 || ((S.unlocks[id] || []).indexOf(n) >= 0);
+function obBump(k, v) {
+  if (!S.ob) S.ob = { claimed: {} };
+  S.ob[k] = v != null ? Math.max(S.ob[k] || 0, v) : (S.ob[k] || 0) + 1; save();
+}
 function markUnlocked(id, n) { (S.unlocks[id] = S.unlocks[id] || []).push(n); save(); }
 
 /* =========================================================================
@@ -577,6 +591,8 @@ const ICON = {
   tv: '<rect x="3" y="5" width="18" height="12" rx="2.2"/><path d="M8.5 20.5h7"/><path d="M10.3 8.6v4.8l4-2.4z" fill="currentColor"/>',
   hourglass: '<path d="M6.5 3.5h11M6.5 20.5h11M7.5 3.5c0 4.5 4.5 5.5 4.5 8.5s-4.5 4-4.5 8.5M16.5 3.5c0 4.5-4.5 5.5-4.5 8.5s4.5 4 4.5 8.5"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
+  me: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
+  more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
   globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.4 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.4-3.5-8.5S9.6 5.9 12 3.5z"/>',
   wave: '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/>',
   quote: '<path d="M7 7h4v4c0 3-1.5 5-4 6M14 7h4v4c0 3-1.5 5-4 6"/>',
@@ -707,7 +723,7 @@ function closeSheet(entry) {
 function syncPass() { const t = sheetStack[sheetStack.length - 1]; $('#sheets').classList.toggle('nr-pass', !!(t && t.mini)); }
 function closeAllSheets() { while (sheetStack.length) closeSheet(); }
 const topSheet = () => sheetStack[sheetStack.length - 1];
-function refreshSheets() { sheetStack.forEach((s) => s.refresh && s.refresh()); }
+function refreshSheets() { sheetStack.forEach((s) => s.refresh && s.refresh()); if (V3 && curTab === 'me' && typeof renderMe === 'function' && $('#v-me') && $('#v-me').classList.contains('on') && !(document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName))) renderMe(); }
 
 /* =========================================================================
  * 8. Audio engine
@@ -1193,6 +1209,7 @@ setInterval(() => {
   if (playing) {
     ensureToday();
     S.tasks.listen += 1;
+    if (V3 && freeLeft() > 0) { S.freeSec = (S.freeSec || 0) + 1; if (freeLeft() <= 0) freeEnded(); }
     if (++lastTick % 5 === 0) { saveProgress(); save(); }
   }
   if (S.sleep && S.sleep.until && Date.now() >= S.sleep.until) {
@@ -1219,6 +1236,7 @@ function saveProgress() {
   S.progress[k] = {
     id: P.id, ep: P.ep.n, title: P.ep.title, pct, t: P.ep.kind === 'live' ? 0 : audio.currentTime || 0,
     line: P.ep.kind === 'live' ? P.idx : 0, at: Date.now(), needChoice: P.needChoice,
+    rem: P.ep.kind === 'live' || !(audio.duration > 0) ? null : Math.max(0, audio.duration - (audio.currentTime || 0)),   // seconds left in a produced episode (v3 "22 min left")
   };
   save();
 }
@@ -1562,6 +1580,7 @@ function playStored(id, n) {
 function onEpisodeEnd() {
   const ss = getSess(P.id);
   const ep = P.ep; if (!ss || !ep) return;
+  obBump('ep', 1);
   /* 11-13 (4) the end of an episode was sometimes handled twice (the second call a moment after the first): the second one cut
    * off the question the first had just started, and after that nobody opened the mic — the question played, "Listening"
    * showed, and the story sat there on its music. Once per episode now. */
@@ -2551,6 +2570,7 @@ function pickSpoken(text, choices) {
 }
 function submitChoice(text, via) {
   if (!P.ep || !P.needChoice) return;
+  if (via === 'voice') obBump('voice', 1);
   if (via === 'voice' || via === 'free') {
     const k = pickSpoken(text, P.ep.choices);
     if (k >= 0) { text = P.ep.choices[k]; via = 'option'; toast((LANG === 'zh' ? '已选 ' : 'Picked ') + 'AB'[k]); }
@@ -2558,6 +2578,9 @@ function submitChoice(text, via) {
   stopAutoCountdown(); hfStop(true);
   const id = P.id, nextN = P.ep.n + 1;
   primeAudio();
+  if (freeLeft() > 0 && !S.vip && nextN > FREE_EPS && (S.unlocks[id] || []).indexOf(nextN) < 0) {   // v3: written during the free 30 minutes → hers to keep
+    markUnlocked(id, nextN); toast(`${ic('headphones', 'sm')} ${tz(`Free listening · ${freeMin()} min left`, `免费收听 · 还剩 ${freeMin()} 分钟`)}`);
+  }
   if (!isUnlocked(id, nextN)) {
     // eyes-free answers (voice / no answer) never stop for a sheet when she has the coins
     if ((S.autoUnlock || via === 'auto' || via === 'voice') && S.coins >= PRICE) {
@@ -2579,7 +2602,7 @@ async function sendNext(id, text, via) {
   const nextN = P.ep.n + 1;
   ss.chosen = ss.chosen || {};
   ss.chosen[P.ep.n] = via === 'silence' ? '' : text;
-  ensureToday(); S.tasks.choices += 1;
+  ensureToday(); S.tasks.choices += 1; if (via !== 'auto' && via !== 'silence') obBump('choice', 1);
   P.needChoice = false;
   if (!P.aux) audio.pause(); P.cur = '';
   const specText = via === 'auto' ? ((P.ep.choices || [])[0] || '') : text;
@@ -2949,13 +2972,7 @@ function openEpisodesSheet() {
     <div class="ep-list">${episodeRows(s)}</div>`, { kind: 'eps' });
 }
 
-function openProfile() {
-  const body = () => `
-    <div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
-    <div class="pf-head" style="margin-top:-34px">
-      <div class="pf-av">${esc((S.name || '?').slice(0, 1).toUpperCase())}</div>
-      <div><b>${esc(S.name || 'Listener')}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${coinIc('sm')} <span class="coins-n">${S.coins}</span> coins · ${S.played.length} series started</p></div>
-    </div>
+const profileFields = () => `
     <label class="field-l" for="pf-name">What characters call you</label>
     <form class="field" data-form="name"><input id="pf-name" maxlength="24" value="${esc(S.name)}" placeholder="Your name" autocomplete="given-name"><button class="btn btn-ghost" type="submit">Save</button></form>
     <label class="field-l" for="pf-me">Your story self <small>who you want to become, the life you want, how you want to be loved</small></label>
@@ -2972,6 +2989,14 @@ function openProfile() {
       <button class="opt danger" data-act="reset"><span class="ol">Reset all data</span>${ic('trash', 'sm')}</button>
     </div>
     <p class="foot-note" style="padding-bottom:0">${MOCK ? 'Demo mode · mock content' : 'Live mode'} · ${BRAND}</p>`;
+function openProfile() {
+  const body = () => `
+    <div class="sh-h"><div></div><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="pf-head" style="margin-top:-34px">
+      <div class="pf-av">${esc((S.name || '?').slice(0, 1).toUpperCase())}</div>
+      <div><b>${esc(S.name || 'Listener')}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${coinIc('sm')} <span class="coins-n">${S.coins}</span> coins · ${S.played.length} series started</p></div>
+    </div>
+    ${profileFields()}`;
   const entry = openSheet(body(), { kind: 'profile' });
   entry.refresh = () => { const v = ($('#pf-name', entry.el) || {}).value; entry.el.innerHTML = '<div class="grab"></div>' + body(); if (v != null) $('#pf-name', entry.el).value = v; };
 }
@@ -3264,7 +3289,7 @@ function startCall(id, who, o) {
   closeAllSheets();
   const call = newCall(id, who, 'outgoing', o.sid);
   S.callsUsed = S.callsUsed || {}; S.callsUsed[id] = true;
-  ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save();
+  ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save(); obBump('call', 1);
   call.dialAt = Date.now();
   renderCall();
   playLoop('ringback.mp3');  // the ringback tone you hear while it rings on his side
@@ -3311,7 +3336,7 @@ function acceptCall() {
   stopRing();
   C.accepted = true; C.phase = 'connecting'; C.acceptedAt = Date.now();
   if (C.rec) { C.rec.status = 'live'; saveCalls(true); }
-  ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save();
+  ensureToday(); S.tasks.call = (S.tasks.call || 0) + 1; save(); obBump('call', 1);
   renderCall();
   callAdvance(); // lines may already be ready
 }
@@ -3921,6 +3946,7 @@ function recFinish(call, status) {
   if (TR && TR.rid === rec.rid) renderTranscriptView();
 }
 function refreshCallLists() {
+  if (V3 && curTab === 'me' && meTab === 'calls' && !isDetailOpen()) renderMe();
   if (curTab === 'library' && libTab === 'calls' && $('#v-library').classList.contains('on')) renderLibrary();
   if (isDetailOpen()) renderDetail();
 }
@@ -4136,7 +4162,8 @@ function cycleTrSpeed() {
 /* =========================================================================
  * 11. Rendering: shell, tabs, views
  * ========================================================================= */
-const TABS = [['home', 'Home'], ['explore', 'Explore'], ['library', 'Library'], ['rewards', 'Rewards']];
+const TABS = V3 ? [['home', 'Home'], ['library', 'Library'], ['rewards', 'Rewards'], ['me', tz('Me', '我的')]]   // v3: Explore is inside Home, the profile is the fourth tab
+  : [['home', 'Home'], ['explore', 'Explore'], ['library', 'Library'], ['rewards', 'Rewards']];
 let curTab = 'home';
 function renderTabbar() {
   $('#tabbar').innerHTML = TABS.map(([k, l]) => `<button class="tab ${curTab === k ? 'on' : ''}" data-act="go" data-to="${k}" aria-label="${l}" ${curTab === k ? 'aria-current="page"' : ''}>${ic(k)}<span>${l}</span></button>`).join('');
@@ -4200,6 +4227,7 @@ function renderHome() {
       <span class="pt"><b>Daily free listening</b><span>Ep 1–3 free on every series. Check in for up to 50 coins a day.</span></span>
       <span class="go">Claim</span>
     </button>`;
+  if (V3) { el.innerHTML = homeV3({ heroes, cont, top, fresh, becauseLabel, becauseList, binge }); homeWire(); setupHero(); return; }
   el.innerHTML = `
     ${topbar()}
     <section class="hero" aria-label="Featured">
@@ -4295,6 +4323,7 @@ function renderExplore() {
 function renderExploreResults() {
   const box = $('#ex-res'); if (!box) return;
   const q = exQuery.trim().toLowerCase();
+  if (V3 && !q && !exGenre) { box.innerHTML = ''; return; }   // v3: the genre tiles and the full list are part of Home itself
   if (!q && !exGenre) {
     const usedTile = [];
     box.innerHTML = `<h3 class="sec-h">Browse genres</h3>
@@ -4319,10 +4348,12 @@ const resRow = (s) => `
   </button>`;
 
 /* Library */
-let libTab = 'listening';
+let libTab = 'listening', libEdit = false;
 function renderLibrary() {
   const el = $('#v-library');
   let rows = '';
+  if (V3 && libTab !== 'listening' && libTab !== 'saved') libTab = 'listening';   // v3: History and Calls live in Me
+  const rmBtn = (attrs) => (!V3 ? `<button class="rm" ${attrs} aria-label="Remove">${ic('trash', 'sm')}</button>` : libEdit ? `<button class="rm danger" ${attrs} aria-label="Remove">${ic('trash', 'sm')}</button>` : `<span class="rm chev">${ic('chevR', 'sm')}</span>`);
   if (libTab === 'listening') {
     const items = continueItems();
     rows = items.length ? items.map((pr) => {
@@ -4332,9 +4363,9 @@ function renderLibrary() {
           <span class="cv">${thumbImg(s)}</span>
           <span class="lt"><b>${esc(s.title)}</b><span>${esc(progressLabel(pr))}${pr.title ? ' · ' + esc(pr.title) : ''}</span><span class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></span></span>
         </button>
-        <button class="rm" data-act="lib-rm" data-k="${esc(skey(s.id))}" aria-label="Remove">${ic('trash', 'sm')}</button>
+        ${rmBtn(`data-act="lib-rm" data-k="${esc(skey(s.id))}"`)}
       </div>`;
-    }).join('') : `<div class="empty">${ic('headphones')}Nothing in progress yet.<br>Start any series — Ep 1–3 are free.</div>`;
+    }).join('') : `<div class="empty">${ic('headphones')}Nothing in progress yet.<br>${V3 ? tz('Start any series — your first 30 minutes are free.', '随便挑一部开始吧 —— 前 30 分钟全部免费。') : 'Start any series — Ep 1–3 are free.'}</div>`;
   } else if (libTab === 'saved') {
     const items = S.saved.map(byId).filter(Boolean);
     rows = items.length ? items.map((s) => {
@@ -4344,7 +4375,7 @@ function renderLibrary() {
           <span class="cv">${thumbImg(s)}</span>
           <span class="lt"><b>${esc(s.title)}</b><span>${pr ? esc(progressLabel(pr)) : esc(s.lead)}</span>${pr ? `<span class="cont-bar"><i style="width:${Math.round((pr.pct || 0) * 100)}%"></i></span>` : ''}</span>
         </button>
-        <button class="rm" data-act="unsave" data-id="${esc(s.id)}" aria-label="Remove">${ic('trash', 'sm')}</button>
+        ${rmBtn(`data-act="unsave" data-id="${esc(s.id)}"`)}
       </div>`;
     }).join('') : `<div class="empty">${ic('plus')}Tap “+ Library” on any series to save it here.</div>`;
   } else if (libTab === 'calls') {
@@ -4365,9 +4396,11 @@ function renderLibrary() {
       </div>`;
     }).join('') : `<div class="empty">${ic('clock')}Your listening history shows up here.</div>`;
   }
+  const hasRows = V3 && (libTab === 'listening' ? continueItems().length : S.saved.map(byId).filter(Boolean).length) > 0;
+  if (!hasRows) libEdit = false;
   el.innerHTML = `
-    <h1 class="page-title">Library</h1>
-    <div class="seg">${[['listening', 'Listening'], ['saved', 'Saved'], ['history', 'History'], ['calls', 'Calls']].map(([k, l]) => `<button class="chip ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}</button>`).join('')}</div>
+    ${V3 ? `<div class="page-head"><h1 class="page-title">Library</h1>${hasRows ? `<button class="link-btn page-edit" data-act="lib-edit">${libEdit ? tz('Done', '完成') : tz('Edit', '编辑')}</button>` : ''}</div>` : '<h1 class="page-title">Library</h1>'}
+    <div class="seg">${(V3 ? [['listening', 'Listening'], ['saved', 'Saved']] : [['listening', 'Listening'], ['saved', 'Saved'], ['history', 'History'], ['calls', 'Calls']]).map(([k, l]) => `<button class="chip ${libTab === k ? 'on' : ''}" data-act="lib-tab" data-t="${k}">${l}</button>`).join('')}</div>
     ${rows}`;
 }
 function timeAgo(t) {
@@ -4397,6 +4430,7 @@ function checkinInfo() {
   return { today, streak, idx: today ? streak - 1 : streak };
 }
 function renderRewards() {
+  if (V3) { renderRewardsV3(); return; }
   ensureToday();
   const el = $('#v-rewards');
   const ci = checkinInfo();
@@ -4432,6 +4466,254 @@ function renderRewards() {
       ${S.ledger.length ? S.ledger.slice(0, 30).map((h) => `
         <div class="hist-row"><span>${esc(h.l)}<small>${new Date(h.t).toLocaleString(LANG === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></span><b class="${h.d >= 0 ? 'plus' : 'minus'}">${h.d >= 0 ? '+' : ''}${h.d}</b></div>`).join('') : '<div class="empty" style="padding:16px">No coin activity yet.</div>'}
     </section>`;
+}
+
+/* =========================================================================
+ * 11-16 ?ui=v3 — the redesign she asked to compare before it replaces anything:
+ *   tabs Home · Library · Rewards · Me (Explore lives inside Home, the profile is a page, calls and history sit in it),
+ *   Continue Listening as rows (cover left; when, title, a play pill with the progress in it),
+ *   Library = Listening + Saved with Remove behind an Edit button, Rewards with new-listener rewards,
+ *   and the first 30 minutes of listening free for everything.
+ * Everything here is behind V3; the default UI does not run any of it.
+ * ========================================================================= */
+function freeEnded() {
+  save(true);
+  toast(`${ic('headphones', 'sm')} ${tz('Your 30 free minutes are used — Ep 1–3 stay free, later episodes are 10 coins', '30 分钟免费收听已用完 —— 每部前 3 集仍免费，之后每集 10 金币')}`);
+  if (curTab === 'rewards') renderRewards();
+  if (curTab === 'me') renderMe();
+  if (curTab === 'home') { const p = $('#v-home .promo'); if (p) p.outerHTML = promoV3(); }
+  if (isDetailOpen()) renderDetail();
+}
+/** the strip that says how much free listening is left (Home foot, Rewards, Me) */
+function freeCard() {
+  const left = freeLeft(), used = Math.min(FREE_LISTEN, S.freeSec || 0);
+  return `<section class="fl-card ${left ? '' : 'out'}">
+    <span class="fl-ic">${ic('headphones')}</span>
+    <div class="fl-t"><b>${tz('Free listening', '免费收听')}</b>
+      <span>${S.vip ? tz('VIP — everything is free', 'VIP —— 全部免费') : left ? tz(`${freeMin()} min left of 30 · every episode is free until it runs out`, `还剩 ${freeMin()} 分钟（共 30 分钟）· 用完之前所有内容免费`) : tz('Used up · Ep 1–3 stay free on every series, later episodes are 10 coins', '已用完 · 每部前 3 集仍免费，之后每集 10 金币')}</span>
+      <i class="fl-bar"><i style="width:${Math.round(100 * used / FREE_LISTEN)}%"></i></i></div>
+  </section>`;
+}
+const promoV3 = () => `
+  <button class="promo" data-act="go" data-to="rewards">
+    <span class="pi">${coinIc('lg')}</span>
+    <span class="pt"><b>${freeLeft() ? tz(`${freeMin()} min of free listening left`, `还剩 ${freeMin()} 分钟免费收听`) : tz('Rewards', '福利')}</b><span>${tz('Check in and finish tasks for coins.', '签到、做任务领金币。')}</span></span>
+    <span class="go">${tz('Claim', '领取')}</span>
+  </button>`;
+const heroSection = (heroes) => `
+  <section class="hero" aria-label="Featured">
+    <div class="hero-track" id="hero">
+      ${heroes.map((s, i) => `
+        <div class="hero-slide" data-act="open" data-id="${esc(s.id)}" role="button" tabindex="0" aria-label="${esc(s.title)}">
+          <img src="${esc(bigCover(s))}" alt="" ${i ? 'loading="lazy"' : ''} style="object-position:center ${HERO_Y[s.id] || 40}%" onerror="this.onerror=null;this.src='${esc(coverOf(s))}'">
+          <div class="hero-info">
+            <span class="hero-badge"><span class="dot"></span>Written live from your choices</span>
+            <h2 class="hero-title">${esc(s.title)}</h2>
+            <p class="hero-lead">${esc(s.lead || '')}</p>
+            <p class="hero-hook">${esc(s.hook)}</p>
+            <div class="hero-row"><button class="btn btn-grad btn-play-now" data-act="play-series" data-id="${esc(s.id)}">${ic('play')} Play Now</button></div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="hero-dots" id="hero-dots">${heroes.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>
+  </section>`;
+function genreTiles() {
+  const used = [];
+  return `<div class="genre-grid">${GENRES.map((g) => {
+    const s = SERIES.find((x) => matchGenre(x, g) && used.indexOf(x) < 0) || SERIES.find((x) => matchGenre(x, g)) || SERIES[0];
+    used.push(s);
+    const count = SERIES.filter((x) => matchGenre(x, g)).length;
+    return `<button class="genre-tile" style="--tile:${GENRE_TILE[g] || '#333'}${s ? `;--bg:url(${esc(thumbOf(s))});--by:${TILE_Y[g] || 24}%` : ''}" data-act="ex-genre" data-g="${esc(g)}"><span>${esc(g)}</span><small>${count} series</small></button>`;
+  }).join('')}</div>`;
+}
+/** Continue Listening, one row per series: cover on the left; when she last listened, the title and episode, and a pill
+ *  that plays it and shows how far she is. Remove sits behind the ⋯ button. */
+function contRow(pr) {
+  const s = byId(pr.id); const pct = Math.round((pr.pct || 0) * 100);
+  const left = pr.needChoice ? tz('Your move', '轮到你了') : pr.rem > 20 ? tz(`${Math.max(1, Math.round(pr.rem / 60))} min left`, `还剩 ${Math.max(1, Math.round(pr.rem / 60))} 分钟`) : `${pct}%`;
+  return `<div class="cl-item">
+    <button class="cl-cv" data-act="continue" data-id="${esc(s.id)}" aria-label="${esc(s.title)}">${thumbImg(s)}</button>
+    <div class="cl-t">
+      <small>${timeAgo(pr.at)}</small>
+      <button class="cl-name" data-act="continue" data-id="${esc(s.id)}"><b>${esc(s.title)}</b><span>${tz(`Ep ${pr.ep}`, `第 ${pr.ep} 集`)}${pr.title ? ' · ' + esc(pr.title) : ''}</span></button>
+      <div class="cl-ctl">
+        <button class="cl-pill" data-act="continue" data-id="${esc(s.id)}">${ic(pr.needChoice ? 'spark' : 'play', 'sm')}<i class="cl-bar"><i style="width:${pct}%"></i></i><span>${left}</span></button>
+        <button class="cl-more" data-act="cl-more" data-id="${esc(s.id)}" aria-label="${tz('More', '更多')}">${ic('more')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function openContMore(id) {
+  const s = byId(id); if (!s) return;
+  openSheet(`
+    <div class="sh-h"><h3>${esc(s.title)}</h3><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('close')}</button></div>
+    <div class="sh-list">
+      <button class="opt" data-act="cl-open" data-id="${esc(id)}"><span class="ol">${ic('list')} ${tz('Series page', '剧集详情')}</span>${ic('chevR', 'sm')}</button>
+      <button class="opt danger" data-act="cl-rm" data-k="${esc(skey(id))}"><span class="ol">${ic('trash')} ${tz('Remove from Listening', '移出在听')}</span></button>
+    </div>`, { kind: 'cont' });
+}
+function homeV3(d) {
+  const finding = !!(exQuery.trim() || exGenre);
+  return `
+    <header class="topbar">
+      <div class="logo">${LOGO}<span class="logo-word">narra<em>.</em></span></div>
+      <div class="tb-actions"><button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span></button></div>
+    </header>
+    <form class="search" data-form="search" role="search">
+      ${ic('search', 'sm')}
+      <input id="ex-q" type="search" placeholder="Search series, characters, tropes" value="${esc(exQuery)}" enterkeyhint="search" aria-label="Search">
+      <button class="clear" type="button" data-act="ex-clear" aria-label="Clear" ${finding ? '' : 'hidden'}>${ic('close', 'sm')}</button>
+    </form>
+    <div id="home-find" ${finding ? '' : 'hidden'}><div class="chips" id="home-chips"></div><div id="ex-res"></div></div>
+    <div id="home-main" ${finding ? 'hidden' : ''}>
+      ${heroSection(d.heroes)}
+      ${d.cont.length ? `
+      <section class="shelf">
+        <div class="shelf-h"><h3>Continue Listening</h3><button class="more" data-act="go" data-to="library">See all</button></div>
+        <div class="row cl-list">${d.cont.map(contRow).join('')}</div>
+      </section>` : ''}
+      <div class="chips" role="list">${(S.genres || []).filter((g) => GENRES.indexOf(g) >= 0).concat(GENRES.filter((g) => (S.genres || []).indexOf(g) < 0)).map((g) => `<button class="chip" data-act="genre" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+      <section class="shelf">
+        <div class="shelf-h"><h3>Top 10 this week</h3></div>
+        <div class="row">${d.top.slice(0, 10).map((s, i) => `
+          <button class="top-card" data-act="open" data-id="${esc(s.id)}" aria-label="#${i + 1} ${esc(s.title)}"><span class="rank">${i + 1}</span><span class="cv">${thumbImg(s)}</span></button>`).join('')}</div>
+      </section>
+      ${shelf('New Releases', d.fresh.map((s) => card(s)))}
+      ${shelf(`Because you like ${d.becauseLabel}`, d.becauseList.map((s) => card(s)))}
+      <section class="shelf"><div class="shelf-h"><h3>Browse genres</h3></div>${genreTiles()}</section>
+      ${shelf('Bingeworthy', d.binge.map((s) => card(s)))}
+      <section class="shelf"><div class="shelf-h"><h3>All series</h3></div><div class="res-list">${SERIES.map(resRow).join('')}</div></section>
+      ${promoV3()}
+      <p class="foot-note">Every episode after Ep 1 is written live from what you choose.</p>
+    </div>`;
+}
+/** Home ⇄ search results: typing or picking a genre swaps the page body, the search box itself is never re-drawn (keeps focus) */
+function homeMode() {
+  const finding = !!(exQuery.trim() || exGenre);
+  const f = $('#home-find'), m = $('#home-main'), c = $('#v-home .search .clear'); if (!f || !m) return;
+  f.hidden = !finding; m.hidden = finding; if (c) c.hidden = !finding;
+  if (finding) {
+    $('#home-chips').innerHTML = GENRES.map((g) => `<button class="chip ${exGenre === g ? 'on' : ''}" data-act="ex-genre" data-g="${esc(g)}">${esc(g)}</button>`).join('');
+    renderExploreResults();
+  }
+}
+function homeWire() {
+  const q = $('#ex-q'); if (!q) return;
+  q.addEventListener('input', () => { exQuery = q.value; homeMode(); });
+  homeMode();
+}
+/** every "go to Explore" in v3 lands on Home with the search box ready */
+function homeFind(focus) {
+  const run = () => { const v = $('#v-home'), q = $('#ex-q'); if (v) v.scrollTo({ top: 0 }); if (q && focus) q.focus(); };
+  if (curTab !== 'home' || isDetailOpen()) { location.hash = '#/home'; setTimeout(run, 140); } else { homeMode(); run(); }
+}
+
+/* ---- Rewards (v3) ---- */
+const OB_TASKS = [
+  { k: 'name', en: 'Tell them your name', zh: '告诉他们你的名字', den: 'Characters say it in the story', dzh: '角色会在故事里叫你的名字', reward: 10, go: 'me', done: () => !!S.name },
+  { k: 'ep', en: 'Finish your first episode', zh: '听完第一集', den: 'Any Episode 1, to its choice', dzh: '任意一部的第 1 集，听到选择点', reward: 20, go: 'home', done: () => (S.ob.ep || 0) >= 1 || S.hist.some((h) => h.n >= 2) },
+  { k: 'choice', en: 'Make your first choice', zh: '做出第一个选择', den: 'Tap an option, type, or say your own', dzh: '点选项、打字，或者自己说', reward: 10, go: 'home', done: () => (S.ob.choice || 0) >= 1 || S.hist.some((h) => h.n >= 2) },
+  { k: 'voice', en: 'Answer out loud once', zh: '用语音回答一次', den: 'Say your answer instead of tapping', dzh: '不点选项，直接开口说', reward: 20, go: 'mode', done: () => (S.ob.voice || 0) >= 1 },
+  { k: 'save', en: 'Save a series to your Library', zh: '收藏一部剧', den: 'Tap + on any series page', dzh: '在任意剧集页点右上角的 +', reward: 10, go: 'home', done: () => S.saved.length > 0 },
+  { k: 'call', en: 'Call a lead', zh: '给主角打一通电话', den: 'Your first call is free', dzh: '第一通电话免费', reward: 20, go: 'home', done: () => (S.ob.call || 0) >= 1 || callsFor().length > 0 },
+  { k: 'me', en: 'Write your story self', zh: '写下你的故事人设', den: 'Episodes and calls are written around you', dzh: '之后的剧情和通话都会围绕你来写', reward: 15, go: 'me', done: () => !!S.me },
+  { k: 'streak', en: 'Check in 3 days in a row', zh: '连续签到 3 天', den: '', dzh: '', reward: 30, go: 'checkin', done: () => Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0) >= 3, prog: () => `${Math.min(3, Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0))}/3` },
+];
+const TASK_ZH = { listen: '收听 5 分钟', newSeries: '听一部新剧', choices: '做 3 次选择', share: '分享一部剧', call: '给喜欢的角色打电话' };
+function rwRow(o) {
+  return `<div class="rw-task ${o.claimed ? 'done' : ''}">
+    <div class="rw-tt"><span class="rw-tag ${o.tagCls}">${o.tag}</span><b>${o.title}</b>${o.desc ? `<span>${o.desc}</span>` : ''}</div>
+    <div class="rw-act"><em>+${o.reward} ${coinIc('sm')}</em>${o.claimed ? `<span class="claimed">${ic('check', 'xs')} ${tz('Claimed', '已领取')}</span>` : o.ok ? `<button class="btn btn-grad btn-sm" data-act="${o.claimAct}" data-k="${o.k}">${tz('Claim', '领取')}</button>` : `<button class="btn btn-ghost btn-sm" data-act="rw-go" data-to="${o.go}">${tz('Go', '去完成')}</button>`}</div>
+  </div>`;
+}
+function renderRewardsV3() {
+  ensureToday();
+  if (!S.ob) S.ob = { claimed: {} }; if (!S.ob.claimed) S.ob.claimed = {};
+  const el = $('#v-rewards'); const ci = checkinInfo();
+  const total = CHECKIN.reduce((a, b) => a + b, 0), got = CHECKIN.slice(0, ci.streak).reduce((a, b) => a + b, 0);
+  const ob = OB_TASKS.map((t) => ({ t, ok: t.done(), claimed: !!S.ob.claimed[t.k] })).sort((a, b) => (a.claimed - b.claimed) || (b.ok - a.ok));
+  const obLeft = ob.filter((x) => !x.claimed).length;
+  el.innerHTML = `
+    <div class="page-head"><h1 class="page-title">Rewards</h1><button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span>${ic('chevR', 'xs')}</button></div>
+    ${freeCard()}
+    <section class="rw-card rw-checkin">
+      <div class="rw-h"><h3>${tz('Daily check-in', '每日签到')}</h3><span>${ci.today ? tz(`Day ${ci.streak} claimed · back tomorrow`, `第 ${ci.streak} 天已签 · 明天再来`) : tz(`7 days in a row = ${total} coins`, `连续签到 7 天共 ${total} 金币`)}</span></div>
+      <div class="rw-prog"><b>${got}</b><span>/${total}</span><i class="rw-bar"><i style="width:${Math.round(100 * got / total)}%"></i></i></div>
+      <div class="days">${CHECKIN.map((c, i) => {
+        const done = i < ci.streak; const isToday = !ci.today && i === ci.streak;
+        return `<div class="day ${done ? 'done' : ''} ${isToday ? 'today' : ''}">${done ? `<span class="ok">${ic('check')}</span>` : coinIc()}<b>+${c}</b><small>${isToday ? tz('Today', '今天') : tz(`Day ${i + 1}`, `第 ${i + 1} 天`)}</small></div>`;
+      }).join('')}</div>
+      <button class="btn ${ci.today ? 'btn-ghost' : 'btn-grad'} btn-block checkin-btn" data-act="checkin" ${ci.today ? 'disabled' : ''}>${ci.today ? `${ic('check', 'sm')} ${tz('Checked in today', '今天已签到')}` : tz(`Check in · +${CHECKIN[ci.streak]} coins`, `签到 · +${CHECKIN[ci.streak]} 金币`)}</button>
+    </section>
+    ${obLeft ? `<section class="rw-card">
+      <div class="rw-h"><h3>${tz('New listener rewards', '新手福利')}</h3><span>${tz(`${OB_TASKS.length - obLeft}/${OB_TASKS.length} · once each`, `${OB_TASKS.length - obLeft}/${OB_TASKS.length} · 每项一次`)}</span></div>
+      ${ob.map(({ t, ok, claimed }) => rwRow({ k: t.k, tag: tz('NEW', '新手'), tagCls: 'new', title: tz(t.en, t.zh), desc: [tz(t.den, t.dzh), t.prog ? t.prog() : ''].filter(Boolean).join(' · '), reward: t.reward, ok, claimed, go: t.go, claimAct: 'ob-claim' })).join('')}
+    </section>` : ''}
+    <section class="rw-card">
+      <div class="rw-h"><h3>${tz('Daily tasks', '每日任务')}</h3><span>${tz('Resets at midnight', '每天零点重置')}</span></div>
+      ${TASKS.map((t) => { const v = S.tasks[t.k] || 0; return rwRow({ k: t.k, tag: tz('DAILY', '每日'), tagCls: 'daily', title: tz(t.label, TASK_ZH[t.k] || t.label), desc: t.fmt(v), reward: t.reward, ok: v >= t.goal, claimed: !!S.tasks.claimed[t.k], go: 'home', claimAct: 'claim' }); }).join('')}
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h3>Coin history</h3><span>${S.ledger.length} records</span></div>
+      ${S.ledger.length ? S.ledger.slice(0, 30).map((h) => `
+        <div class="hist-row"><span>${esc(h.l)}<small>${new Date(h.t).toLocaleString(LANG === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></span><b class="${h.d >= 0 ? 'plus' : 'minus'}">${h.d >= 0 ? '+' : ''}${h.d}</b></div>`).join('') : '<div class="empty" style="padding:16px">No coin activity yet.</div>'}
+    </section>`;
+}
+function claimOb(k) {
+  const t = OB_TASKS.find((x) => x.k === k); if (!t || !S.ob || S.ob.claimed[k] || !t.done()) return;
+  S.ob.claimed[k] = true;
+  addCoins(t.reward, `${tz('New listener reward', '新手福利')} · ${tz(t.en, t.zh)}`);
+  toast(`${coinIc('sm')} +${t.reward} ${tz('coins', '金币')}`);
+  renderRewards();
+}
+function rewardGo(to) {
+  if (to === 'me') { meTab = 'profile'; go('me'); }
+  else if (to === 'mode') openModeSheet();
+  else if (to === 'checkin') { const v = $('#v-rewards'); if (v) v.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); }
+  else go('home');
+}
+
+/* ---- Me (v3): the profile as a page, with the call records and the listening history in it ---- */
+let meTab = 'profile', meEdit = false;
+const histItems = () => S.hist.filter((h) => h.k && h.k.endsWith(`:${LANG}`) && h.k.startsWith(`${MOCK ? 'm' : 'r'}:`) && byId(h.id));
+function renderMe() {
+  const el = $('#v-me'); if (!el) return;
+  const keep = { n: ($('#pf-name', el) || {}).value, m: ($('#pf-me', el) || {}).value };
+  const calls = callsFor(), hist = histItems();
+  let body = '';
+  if (meTab === 'calls') {
+    body = calls.length ? `<div class="calls-head"><span>${calls.length} call${calls.length === 1 ? '' : 's'} · saved after every turn</span><button class="link-btn" data-act="calls-clear">Clear all</button></div>
+      <div class="calls-list">${calls.map(callRowHtml).join('')}</div><p class="swipe-hint">Swipe left on a call to delete</p>`
+      : `<div class="empty">${ic('phone')}No calls yet.<br>Call a lead from any series page.</div>`;
+  } else if (meTab === 'history') {
+    body = hist.length ? `<div class="calls-head"><span>${tz(`${hist.length} episodes`, `${hist.length} 集`)}</span><button class="link-btn" data-act="me-edit">${meEdit ? tz('Done', '完成') : tz('Edit', '编辑')}</button></div>` + hist.map((h) => {
+      const s = byId(h.id);
+      return `<div class="lib-row">
+        <button class="open" data-act="hist-play" data-id="${esc(s.id)}" data-n="${h.n}">
+          <span class="cv">${thumbImg(s)}</span>
+          <span class="lt"><b>${esc(s.title)}</b><span>Ep ${h.n} · ${esc(h.title || '')}</span><span>${timeAgo(h.at)}</span></span>
+        </button>
+        ${meEdit ? `<button class="rm danger" data-act="hist-rm" data-at="${h.at}" aria-label="Remove">${ic('trash', 'sm')}</button>` : ''}
+      </div>`;
+    }).join('') : `<div class="empty">${ic('clock')}Your listening history shows up here.</div>`;
+  } else {
+    body = `<div class="me-fields">${profileFields()}
+      <span class="field-l">${tz('Free listening (test)', '免费收听（测试）')}</span>
+      <div class="segc"><button data-act="free-reset">${tz('Reset to 30 min', '重置为 30 分钟')}</button><button data-act="free-end">${tz('Use it up now', '立刻用完')}</button></div>
+    </div>`;
+  }
+  el.innerHTML = `
+    <h1 class="page-title">${tz('Me', '我的')}</h1>
+    <div class="me-head">
+      <div class="pf-av">${esc((S.name || '?').slice(0, 1).toUpperCase())}</div>
+      <div class="me-id"><b>${esc(S.name || 'Listener')}</b>${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}<p class="pf-meta">${tz(`${S.played.length} series started`, `听过 ${S.played.length} 部剧`)}</p></div>
+      <button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span>${ic('chevR', 'xs')}</button>
+    </div>
+    ${freeCard()}
+    <div class="seg">${[['profile', tz('Profile', '资料')], ['calls', tz('Calls', '通话') + (calls.length ? ` ${calls.length}` : '')], ['history', tz('History', '历史') + (hist.length ? ` ${hist.length}` : '')]].map(([k, l]) => `<button class="chip ${meTab === k ? 'on' : ''}" data-act="me-tab" data-t="${k}">${l}</button>`).join('')}</div>
+    ${body}`;
+  if (keep.n != null && $('#pf-name', el)) $('#pf-name', el).value = keep.n;
+  if (keep.m != null && $('#pf-me', el)) $('#pf-me', el).value = keep.m;
 }
 
 /* Detail */
@@ -4547,7 +4829,7 @@ function renderDetail() {
 function renderDetailPane() {
   const s = byId(detailId); const box = $('#dt-pane'); if (!s || !box) return;
   if (detailTab === 'episodes') {
-    box.innerHTML = `<div class="ep-head"><span>Ep 1–${FREE_EPS} free · then ${PRICE} coins each</span><span>${S.vip ? 'VIP · all free' : ''}</span></div><div class="ep-list" id="dt-eps">${episodeRows(s)}</div>`;
+    box.innerHTML = `<div class="ep-head"><span>${freeLeft() > 0 ? tz(`Free listening · ${freeMin()} min left · every episode is free`, `免费收听 · 还剩 ${freeMin()} 分钟 · 所有集数免费`) : `Ep 1–${FREE_EPS} free · then ${PRICE} coins each`}</span><span>${S.vip ? 'VIP · all free' : ''}</span></div><div class="ep-list" id="dt-eps">${episodeRows(s)}</div>`;
   } else if (detailTab === 'about') {
     const cast = aboutOf(s).cast;   // 11-11 she asked: About shows single-person character avatars only, never the series picture (Rafael's is a couple)
     if (!cast.length && DETAIL_ST[s.id] !== 'fail') loadDetail(s.id);   // after three failed tries the row below asks; reopening the page asks again
@@ -5505,6 +5787,7 @@ function route() {
   hideDetail();
   const tab = TABS.some(([k]) => k === a) ? a : 'home';
   showTab(tab);
+  if (V3 && a === 'explore') homeFind(true);
 }
 function showTab(tab) {
   curTab = tab;
@@ -5514,8 +5797,12 @@ function showTab(tab) {
   else if (tab === 'explore') renderExplore();
   else if (tab === 'library') renderLibrary();
   else if (tab === 'rewards') renderRewards();
+  else if (tab === 'me') renderMe();
+  if (tab !== 'library') libEdit = false;
+  if (tab !== 'me') meEdit = false;
 }
 function go(to) {
+  if (V3 && to === 'explore') { homeFind(true); return; }
   if (to === curTab && !isDetailOpen()) { const v = $('#v-' + to); if (v) v.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); return; }
   location.hash = '#/' + to;
 }
@@ -5548,13 +5835,23 @@ document.addEventListener('click', (e) => {
     case 'cast-quote': quotePlay(detailId, el.dataset.key); break;
     case 'dt-tab': quoteStop(); detailTab = el.dataset.t; $$('.tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === detailTab); b.setAttribute('aria-selected', b.dataset.t === detailTab); }); renderDetailPane(); break;
     case 'ep': onEpisodeTap(id, +el.dataset.n, el.dataset.k); break;
-    case 'genre': exGenre = el.dataset.g; exQuery = ''; go('explore'); break;
-    case 'ex-genre': exGenre = exGenre === el.dataset.g ? '' : el.dataset.g; renderExplore(); break;
-    case 'ex-clear': exGenre = ''; exQuery = ''; renderExplore(); break;
+    case 'genre': exGenre = el.dataset.g; exQuery = ''; if (V3) { const q = $('#ex-q'); if (q) q.value = ''; homeFind(false); } else go('explore'); break;
+    case 'ex-genre': exGenre = exGenre === el.dataset.g ? '' : el.dataset.g; if (V3) homeFind(false); else renderExplore(); break;
+    case 'ex-clear': exGenre = ''; exQuery = ''; if (V3) { const q = $('#ex-q'); if (q) q.value = ''; homeMode(); } else renderExplore(); break;
     case 'lib-tab': libTab = el.dataset.t; renderLibrary(); break;
+    case 'lib-edit': libEdit = !libEdit; renderLibrary(); break;
+    case 'cl-more': openContMore(id); break;
+    case 'cl-open': closeAllSheets(); location.hash = '#/series/' + id; break;
+    case 'cl-rm': delete S.progress[el.dataset.k]; save(); closeAllSheets(); if (curTab === 'home') renderHome(); toast('Removed from Listening'); break;
+    case 'me-tab': meTab = el.dataset.t; meEdit = false; renderMe(); break;
+    case 'me-edit': meEdit = !meEdit; renderMe(); break;
+    case 'rw-go': rewardGo(el.dataset.to); break;
+    case 'ob-claim': claimOb(el.dataset.k); break;
+    case 'free-reset': S.freeSec = 0; save(); renderMe(); toast(tz('Free listening reset to 30 min', '免费收听已重置为 30 分钟')); break;
+    case 'free-end': S.freeSec = FREE_LISTEN; freeEnded(); break;
     case 'lib-rm': delete S.progress[el.dataset.k]; save(); renderLibrary(); toast('Removed from Listening'); break;
     case 'unsave': S.saved = S.saved.filter((x) => x !== id); save(); renderLibrary(); break;
-    case 'hist-rm': S.hist = S.hist.filter((h) => String(h.at) !== el.dataset.at); save(); renderLibrary(); break;
+    case 'hist-rm': S.hist = S.hist.filter((h) => String(h.at) !== el.dataset.at); save(); if (V3 && curTab === 'me') renderMe(); else renderLibrary(); break;
     case 'hist-play': { const ss = getSess(id); if (ss && ss.eps.some((x) => x.n === +el.dataset.n)) playStored(id, +el.dataset.n); else location.hash = '#/series/' + id; break; }
     case 'checkin': doCheckin(); break;
     case 'claim': claimTask(el.dataset.k); break;
@@ -5562,7 +5859,7 @@ document.addEventListener('click', (e) => {
     case 'buy': { const p = PACKS[+el.dataset.i]; const bonus = parseInt((p.bonus || '0').replace(/\D/g, ''), 10) || 0; addCoins(p.n + bonus, `Coin pack ${p.n}${bonus ? ' + ' + bonus : ''} (test)`); toast(`${coinIc('sm')} +${p.n + bonus} test coins`); break; }
     case 'vip': S.vip = !S.vip; save(); toast(S.vip ? `${ic('crown', 'sm')} VIP on — every episode free` : 'VIP off'); refreshSheets(); refreshAfterWallet(); break;
     case 'auto-unlock': S.autoUnlock = !S.autoUnlock; save(); refreshSheets(); break;
-    case 'profile': openProfile(); break;
+    case 'profile': if (V3) { meTab = 'profile'; go('me'); } else openProfile(); break;
     case 'lang': if (el.dataset.l !== LANG) { save(true); location.href = langUrl(el.dataset.l); } break;
     case 'reset': if (window.confirm('Reset all local data (coins, progress, library, name)?')) { ['ua.state', 'ua.sess'].forEach(store.del); clearTimeout(saveT); window.removeEventListener('pagehide', save); S = DEF(); SESS = {}; location.hash = ''; location.reload(); } break;
     case 'scrim': { const t = topSheet(); if (t && !t.sticky) closeSheet(t); break; }
@@ -5668,7 +5965,7 @@ document.addEventListener('submit', (e) => {
   if (f.dataset.form === 'name') {
     const v = ($('#pf-name').value || '').trim().slice(0, 24);
     S.name = v; save(); toast(v ? `They'll call you ${esc(v)}` : 'Name cleared');
-    refreshSheets(); if (curTab === 'home') renderHome();
+    refreshSheets(); if (curTab === 'home') renderHome(); if (curTab === 'me') { const i = $('#pf-name'); if (i) i.blur(); renderMe(); }
   } else if (f.dataset.form === 'search') {
     const q = $('#ex-q'); if (q) q.blur();
   } else if (f.dataset.form === 'call') {
@@ -5720,7 +6017,7 @@ async function shareSeries(id) {
 function doCheckin() {
   const ci = checkinInfo(); if (ci.today) return;
   const reward = CHECKIN[ci.streak];
-  S.checkin = { last: dayStr(), streak: ci.streak + 1 };
+  S.checkin = { last: dayStr(), streak: ci.streak + 1 }; obBump('streak', ci.streak + 1);
   addCoins(reward, `Daily check-in · Day ${ci.streak + 1}`);
   toast(`${coinIc('sm')} +${reward} coins · Day ${ci.streak + 1}`);
   renderRewards();
