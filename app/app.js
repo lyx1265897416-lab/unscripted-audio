@@ -49,10 +49,12 @@ const NARRA = Q.get('ui') !== 'classic';
  * "keep the four tabs, look at what each screen's layout can do better"). Everything is behind V2; narra is untouched. */
 /* 11-16 she confirmed it: "replace the current version with the tidied one". The tidied layout IS narra now (the default,
  * ?ui=narra, and old ?ui=v2 links). The layout it replaced stays reachable with ?ui=narra1, only for looking back. */
-const V2 = NARRA && Q.get('ui') !== 'narra1';
+const V2 = NARRA && Q.get('ui') !== 'narra1';   // narra1 = the layout before 11-16
 /* 11-16 ?ui=v3 — the redesign she asked to see side by side before it replaces the default (section "ui=v3" below). */
-const V3 = NARRA && Q.get('ui') === 'v3';
-const UIQ = !NARRA ? 'classic' : V3 ? 'v3' : V2 ? 'narra' : 'narra1';
+/* 11-16 (later) she confirmed it: "replace the default". The redesign IS narra now (no ui=, ?ui=narra, old ?ui=v3 links).
+ * The layout it replaced (four tabs Home · Explore · Library · Rewards) stays reachable with ?ui=narra2, only for looking back. */
+const V3 = V2 && Q.get('ui') !== 'narra2';
+const UIQ = !NARRA ? 'classic' : V3 ? 'narra' : V2 ? 'narra2' : 'narra1';
 const BRAND = NARRA ? 'narra' : 'Unscripted Audio';
 if (NARRA) { document.documentElement.classList.add('narra'); document.title = 'narra'; }
 if (V2) document.documentElement.classList.add('v2');
@@ -60,7 +62,7 @@ if (V3) document.documentElement.classList.add('v3');
 if (V2 && Q.get('tile') === 'b') document.documentElement.classList.add('tile-b');   // the other look of the genre tiles, for comparing
 if (Q.has('k') || !Q.has('ui')) {
   if (Q.has('k')) { store.set('ua.k', Q.get('k')); Q.delete('k'); }
-  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'narra1' && Q.get('ui') !== 'v3') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI (an old ?ui=v2 link becomes ?ui=narra)
+  if (Q.get('ui') !== 'classic' && Q.get('ui') !== 'narra1' && Q.get('ui') !== 'narra2') Q.set('ui', 'narra');   // keep the address explicit, so a reload or a copied link opens the same UI (an old ?ui=v2 link becomes ?ui=narra)
   const qs = Q.toString();
   history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
