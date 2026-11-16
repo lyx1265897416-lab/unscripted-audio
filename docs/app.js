@@ -583,6 +583,7 @@ const ICON = {
   back: '<path d="m15 5-7 7 7 7"/>',
   chevR: '<path d="m9.5 5.5 6.5 6.5-6.5 6.5"/>',
   star: '<path d="m12 3.6 2.6 5.3 5.8.85-4.2 4.1 1 5.8L12 16.9l-5.2 2.75 1-5.8-4.2-4.1 5.8-.85z" fill="currentColor" stroke="none"/>',
+  starO: '<path d="m12 3.6 2.6 5.3 5.8.85-4.2 4.1 1 5.8L12 16.9l-5.2 2.75 1-5.8-4.2-4.1 5.8-.85z"/>',
   headphones: '<path d="M4 15.5V12a8 8 0 0 1 16 0v3.5"/><rect x="3" y="14" width="4.5" height="7" rx="1.6"/><rect x="16.5" y="14" width="4.5" height="7" rx="1.6"/>',
   trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.9 13h9.2l.9-13"/>',
   spark: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M19 16.5l.8 1.9 1.7.6-1.7.7-.8 1.8-.7-1.8-1.8-.7 1.8-.6z"/>',
@@ -4323,7 +4324,7 @@ function renderExplore() {
 function renderExploreResults() {
   const box = $('#ex-res'); if (!box) return;
   const q = exQuery.trim().toLowerCase();
-  if (V3 && !q && !exGenre) { box.innerHTML = ''; return; }   // v3: the genre tiles and the full list are part of Home itself
+  if (V3 && !q && !exGenre) { box.innerHTML = `<h3 class="sec-h">All series</h3><div class="res-list">${SERIES.map(resRow).join('')}</div>`; return; }   // v3: search opened, nothing typed yet
   if (!q && !exGenre) {
     const usedTile = [];
     box.innerHTML = `<h3 class="sec-h">Browse genres</h3>
@@ -4372,7 +4373,7 @@ function renderLibrary() {
   } else if (V3) {
     const items = S.saved.map(byId).filter(Boolean);
     rows = items.length ? `<div class="lib-grid">${items.map((s) => libCard(s, S.progress[skey(s.id)], 'open', `data-act="unsave" data-id="${esc(s.id)}"`)).join('')}</div>`
-      : `<div class="empty">${ic('plus')}Tap “+ Library” on any series to save it here.</div>`;
+      : `<div class="empty">${ic('starO')}${tz('Tap the star on any series page to save it here.', '在任意剧集页点右上角的星标，就会收藏到这里。')}</div>`;
   } else if (libTab === 'listening') {
     const items = continueItems();
     rows = items.length ? items.map((pr) => {
@@ -4571,18 +4572,27 @@ function openContMore(id) {
       <button class="opt danger" data-act="cl-rm" data-k="${esc(skey(id))}"><span class="ol">${ic('trash')} ${tz('Remove from Listening', '移出在听')}</span></button>
     </div>`, { kind: 'cont' });
 }
+/* 11-16 (3) "put the search back in the top bar as an icon, drop the long search box": the bar only shows after she taps the
+ * icon (or a genre); Cancel — or the Home tab — closes it and brings the home page back. */
+let homeOpen = false;
+const homeFinding = () => !!(homeOpen || exQuery.trim() || exGenre);
 function homeV3(d) {
-  const finding = !!(exQuery.trim() || exGenre);
+  const finding = homeFinding();
   return `
     <header class="topbar">
       <div class="logo">${LOGO}<span class="logo-word">narra<em>.</em></span></div>
-      <div class="tb-actions"><button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span></button></div>
+      <div class="tb-actions">
+        <button class="icon-btn tb-find" data-act="go" data-to="explore" aria-label="Search">${ic('search')}</button>
+        <button class="coin-pill" data-act="store" aria-label="Coins">${coinIc()}<span class="coins-n">${S.coins}</span></button>
+      </div>
     </header>
-    <form class="search" data-form="search" role="search">
-      ${ic('search', 'sm')}
-      <input id="ex-q" type="search" placeholder="Search series, characters, tropes" value="${esc(exQuery)}" enterkeyhint="search" aria-label="Search">
-      <button class="clear" type="button" data-act="ex-clear" aria-label="Clear" ${finding ? '' : 'hidden'}>${ic('close', 'sm')}</button>
-    </form>
+    <div class="find-bar" id="home-bar" ${finding ? '' : 'hidden'}>
+      <form class="search" data-form="search" role="search">
+        ${ic('search', 'sm')}
+        <input id="ex-q" type="search" placeholder="Search series, characters, tropes" value="${esc(exQuery)}" enterkeyhint="search" aria-label="Search">
+      </form>
+      <button class="link-btn" type="button" data-act="ex-clear">${tz('Cancel', '取消')}</button>
+    </div>
     <div id="home-find" ${finding ? '' : 'hidden'}><div class="chips" id="home-chips"></div><div id="ex-res"></div></div>
     <div id="home-main" ${finding ? 'hidden' : ''}>
       ${heroSection(d.heroes)}
@@ -4608,9 +4618,10 @@ function homeV3(d) {
 }
 /** Home ⇄ search results: typing or picking a genre swaps the page body, the search box itself is never re-drawn (keeps focus) */
 function homeMode() {
-  const finding = !!(exQuery.trim() || exGenre);
-  const f = $('#home-find'), m = $('#home-main'), c = $('#v-home .search .clear'); if (!f || !m) return;
-  f.hidden = !finding; m.hidden = finding; if (c) c.hidden = !finding;
+  const finding = homeFinding();
+  const f = $('#home-find'), m = $('#home-main'), bar = $('#home-bar'); if (!f || !m) return;
+  f.hidden = !finding; m.hidden = finding; if (bar) bar.hidden = !finding;
+  $('#v-home').classList.toggle('finding', finding);
   if (finding) {
     $('#home-chips').innerHTML = GENRES.map((g) => `<button class="chip ${exGenre === g ? 'on' : ''}" data-act="ex-genre" data-g="${esc(g)}">${esc(g)}</button>`).join('');
     renderExploreResults();
@@ -4623,6 +4634,7 @@ function homeWire() {
 }
 /** every "go to Explore" in v3 lands on Home with the search box ready */
 function homeFind(focus) {
+  homeOpen = true;
   const run = () => { const v = $('#v-home'), q = $('#ex-q'); if (v) v.scrollTo({ top: 0 }); if (q && focus) q.focus(); };
   if (curTab !== 'home' || isDetailOpen()) { location.hash = '#/home'; setTimeout(run, 140); } else { homeMode(); run(); }
 }
@@ -4633,7 +4645,7 @@ const OB_TASKS = [
   { k: 'ep', en: 'Finish your first episode', zh: '听完第一集', den: 'Any Episode 1, to its choice', dzh: '任意一部的第 1 集，听到选择点', reward: 20, go: 'home', done: () => (S.ob.ep || 0) >= 1 || S.hist.some((h) => h.n >= 2) },
   { k: 'choice', en: 'Make your first choice', zh: '做出第一个选择', den: 'Tap an option, type, or say your own', dzh: '点选项、打字，或者自己说', reward: 10, go: 'home', done: () => (S.ob.choice || 0) >= 1 || S.hist.some((h) => h.n >= 2) },
   { k: 'voice', en: 'Answer out loud once', zh: '用语音回答一次', den: 'Say your answer instead of tapping', dzh: '不点选项，直接开口说', reward: 20, go: 'mode', done: () => (S.ob.voice || 0) >= 1 },
-  { k: 'save', en: 'Save a series to your Library', zh: '收藏一部剧', den: 'Tap + on any series page', dzh: '在任意剧集页点右上角的 +', reward: 10, go: 'home', done: () => S.saved.length > 0 },
+  { k: 'save', en: 'Save a series to your Library', zh: '收藏一部剧', den: 'Tap the star on any series page', dzh: '在任意剧集页点右上角的星标', reward: 10, go: 'home', done: () => S.saved.length > 0 },
   { k: 'call', en: 'Call a lead', zh: '给主角打一通电话', den: 'Your first call is free', dzh: '第一通电话免费', reward: 20, go: 'home', done: () => (S.ob.call || 0) >= 1 || callsFor().length > 0 },
   { k: 'me', en: 'Write your story self', zh: '写下你的故事人设', den: 'Episodes and calls are written around you', dzh: '之后的剧情和通话都会围绕你来写', reward: 15, go: 'me', done: () => !!S.me },
   { k: 'streak', en: 'Check in 3 days in a row', zh: '连续签到 3 天', den: '', dzh: '', reward: 30, go: 'checkin', done: () => Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0) >= 3, prog: () => `${Math.min(3, Math.max(S.ob.streak || 0, (S.checkin || {}).streak || 0))}/3` },
@@ -4818,7 +4830,7 @@ function renderDetail() {
       <div class="dt-top">
         <button class="icon-btn" data-act="back" aria-label="Back">${ic('back')}</button>
         <span class="dt-top-r">
-          <button class="icon-btn ${saved ? 'on' : ''}" data-act="save" data-id="${esc(s.id)}" aria-label="${saved ? 'Saved to Library' : 'Add to Library'}">${ic(saved ? 'check' : 'plus', 'sm')}</button>
+          <button class="icon-btn ${saved ? 'on' : ''}" data-act="save" data-id="${esc(s.id)}" aria-label="${V3 ? (saved ? tz('Saved', '已收藏') : tz('Save', '收藏')) : saved ? 'Saved to Library' : 'Add to Library'}">${V3 ? ic(saved ? 'star' : 'starO', saved ? '' : 'sm') : ic(saved ? 'check' : 'plus', 'sm')}</button>
           <button class="icon-btn" data-act="share" data-id="${esc(s.id)}" aria-label="Share">${ic('share', 'sm')}</button>
         </span>
       </div>
@@ -5406,7 +5418,8 @@ function updatePlayerUI(force) {
   $('#pl-title').textContent = s.title;
   $('#pl-ep').textContent = P.gen ? `Episode ${P.gen.n} · Writing your episode…` : P.loading ? 'Episode 1 · Preparing…' : ep ? `Episode ${ep.n} · ${ep.title || ''}` : '';
   const saved = S.saved.indexOf(s.id) >= 0;
-  const sv = $('#pl-save'); sv.innerHTML = ic(saved ? 'check' : 'plus'); sv.style.color = saved ? 'var(--b)' : '';
+  const sv = $('#pl-save'); sv.innerHTML = V3 ? ic(saved ? 'star' : 'starO') : ic(saved ? 'check' : 'plus'); sv.style.color = saved ? 'var(--b)' : '';
+  if (V3) sv.setAttribute('aria-label', saved ? tz('Saved', '已收藏') : tz('Save', '收藏'));
   const badge = $('#pl-badge');
   if (ep && ep.kind === 'live' && !P.gen) { badge.hidden = false; badge.innerHTML = P.jobDone ? `${ic('spark', 'xs')} WRITTEN FOR YOU` : '<span class="dot"></span> LIVE · WRITING'; }
   else badge.hidden = true;
@@ -5826,6 +5839,7 @@ function showTab(tab) {
 }
 function go(to) {
   if (V3 && to === 'explore') { homeFind(true); return; }
+  if (V3 && to === 'home' && curTab === 'home' && !isDetailOpen() && homeFinding()) { exGenre = ''; exQuery = ''; homeOpen = false; const q = $('#ex-q'); if (q) q.value = ''; homeMode(); return; }   // Home tab while searching: back to the home page
   if (to === curTab && !isDetailOpen()) { const v = $('#v-' + to); if (v) v.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); return; }
   location.hash = '#/' + to;
 }
@@ -5848,7 +5862,7 @@ document.addEventListener('click', (e) => {
     case 'restart': closeAllSheets(); newSession(id || P.id); break;
     case 'save': case 'pl-save': {
       const sid = id || P.id; const i = S.saved.indexOf(sid);
-      if (i >= 0) { S.saved.splice(i, 1); toast('Removed from Library'); } else { S.saved.unshift(sid); toast(`${ic('check', 'sm')} Added to Library`); }
+      if (i >= 0) { S.saved.splice(i, 1); toast(V3 ? tz('Removed from Saved', '已取消收藏') : 'Removed from Library'); } else { S.saved.unshift(sid); toast(V3 ? `${ic('star', 'sm')} ${tz('Saved', '已收藏')}` : `${ic('check', 'sm')} Added to Library`); }
       save(); if (isDetailOpen()) renderDetail(); updatePlayerUI(); break;
     }
     case 'share': shareSeries(id || P.id); break;
@@ -5860,7 +5874,7 @@ document.addEventListener('click', (e) => {
     case 'ep': onEpisodeTap(id, +el.dataset.n, el.dataset.k); break;
     case 'genre': exGenre = el.dataset.g; exQuery = ''; if (V3) { const q = $('#ex-q'); if (q) q.value = ''; homeFind(false); } else go('explore'); break;
     case 'ex-genre': exGenre = exGenre === el.dataset.g ? '' : el.dataset.g; if (V3) homeFind(false); else renderExplore(); break;
-    case 'ex-clear': exGenre = ''; exQuery = ''; if (V3) { const q = $('#ex-q'); if (q) q.value = ''; homeMode(); } else renderExplore(); break;
+    case 'ex-clear': exGenre = ''; exQuery = ''; if (V3) { homeOpen = false; const q = $('#ex-q'); if (q) { q.value = ''; q.blur(); } homeMode(); } else renderExplore(); break;
     case 'lib-tab': libTab = el.dataset.t; renderLibrary(); break;
     case 'lib-edit': libEdit = !libEdit; renderLibrary(); break;
     case 'cl-more': openContMore(id); break;

@@ -1295,7 +1295,6 @@ h1, h2, h3, h4, p { margin: 0; }
 .v3 .me-fields .field-l:first-child { margin-top: 6px; }
 .v3 .calls-head [data-act="me-edit"] { color: var(--b); }
 .v3 .me-id .pf-meta { color: var(--muted); font-size: 13px; }
-.v3 #ex-q::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
 /* 11-16 v3 Rewards: daily tasks and new-listener rewards share one card, two tabs */
 .v3 .rw-tabs { display: flex; align-items: center; margin: -4px 0 2px; }
 .v3 .rw-tab { position: relative; font-family: var(--fd); font-weight: 800; font-size: 17px; color: var(--dim); padding: 6px 0; margin-right: 20px; min-height: 42px; white-space: nowrap; }
@@ -1316,3 +1315,12 @@ h1, h2, h3, h4, p { margin: 0; }
 .v3 .lib-card .rm { position: absolute; top: -8px; right: -8px; width: 30px; height: 30px; border-radius: 50%; background: var(--a); color: #fff; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0, 0, 0, .55); }
 .v3 .lib-card .rm .ic { width: 16px; height: 16px; stroke-width: 2.6; }
 .v3 .lib-card .open[disabled] .cv { opacity: .82; }
+/* 11-16 (3) v3 Home: search is an icon in the top bar again; the bar shows only while she is searching */
+.v3 .find-bar { display: flex; align-items: center; gap: 4px; padding-right: 6px; }
+.v3 .find-bar[hidden] { display: none; }
+.v3 .find-bar .search { flex: 1; min-width: 0; margin-right: 0; }
+.v3 .find-bar .link-btn { color: var(--b); font-weight: 700; flex: none; }
+.v3 #v-home.finding .tb-find { display: none; }
+.v3 .tb-actions .tb-find { margin-right: -4px; }
+/* the save button is a star (same word as the Library's Saved tab) */
+.v3 .dt-top .icon-btn .ic:not(.sm) { width: 20px; height: 20px; }
