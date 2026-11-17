@@ -601,6 +601,7 @@ const ICON = {
   hourglass: '<path d="M6.5 3.5h11M6.5 20.5h11M7.5 3.5c0 4.5 4.5 5.5 4.5 8.5s-4.5 4-4.5 8.5M16.5 3.5c0 4.5-4.5 5.5-4.5 8.5s4.5 4 4.5 8.5"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
   me: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
+  cog: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',   // classic settings cog (Lucide, ISC)
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3.2v2.3M12 18.5v2.3M3.2 12h2.3M18.5 12h2.3M5.8 5.8l1.6 1.6M16.6 16.6l1.6 1.6M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6"/>',
   more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
   globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.4 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.4-3.5-8.5S9.6 5.9 12 3.5z"/>',
@@ -4799,7 +4800,7 @@ function renderMeV4() {
       <button class="pf-av pf-av-edit" data-act="av-pick" aria-label="${tz('Change avatar', '换头像')}">${avInner()}<i class="av-cam">${ic('pen', 'xs')}</i></button>
       <div class="me-id pf-who">${S.acct ? `<button class="pf-name" data-act="rename" aria-label="${tz('Change name', '改名')}"><b>${esc(S.name || tz('Listener', '听众'))}</b>${ic('pen', 'xs')}</button>` : `<b>${esc(S.name || tz('Listener', '听众'))}</b>`}${S.vip ? `<span class="vip-chip">${ic('crown')} VIP</span>` : ''}
         ${S.acct ? `<p class="pf-meta">${ic('headphones', 'xs')} ${S.played.length} · ${ic(MODES[modeOf()].icon, 'xs')} ${MODES[modeOf()].name}</p>` : `<button class="btn btn-grad btn-sm pf-signin" data-act="signin">${tz('Sign in', '登录')}</button>`}</div>
-      <button class="icon-btn me4-set" data-act="profile" aria-label="${tz('Settings', '设置')}">${ic('gear')}</button>
+      <button class="icon-btn me4-set" data-act="profile" aria-label="${tz('Settings', '设置')}">${ic('cog')}</button>
     </div>
     <section class="wallet4">
       <button class="w4-h" data-act="store"><span>${tz('My wallet', '我的钱包')}</span>${ic('chevR', 'sm')}</button>
