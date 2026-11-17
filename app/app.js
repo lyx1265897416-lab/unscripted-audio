@@ -207,6 +207,13 @@ const DEF = () => ({
   calls: [], callsUsed: {}, inDay: {}, callSpeed: 1,
   freeSec: 0, ob: { claimed: {}, ep: 0, choice: 0, voice: 0, call: 0, streak: 0 },   // v3: seconds of free listening used; new-listener rewards
 });
+/* 11-16 &start=1: open from the very first screen (onboarding), as a brand-new listener — clears this browser's progress, coins and history.
+ * The flag is removed from the address right away, so reloading the page doesn't wipe it again. */
+if (Q.has('start')) {
+  try { store.set('ua.state', {}); store.set('ua.sess', {}); } catch (e) { /* ignore */ }
+  Q.delete('start'); const q0 = Q.toString();
+  history.replaceState(history.state, '', location.pathname + (q0 ? '?' + q0 : '') + location.hash);
+}
 let S = Object.assign(DEF(), store.get('ua.state', {}) || {});
 let SESS = store.get('ua.sess', {}) || {};
 let saveT = 0;
@@ -6281,7 +6288,7 @@ function renderOnboardV4() {
         <div class="ob-collage">${pick.map((x) => `<img src="${esc(thumbOf(x))}" alt="" onerror="this.onerror=null;this.src='${esc(coverOf(x))}'">`).join('')}</div>
         <h1 class="ob-title">Stories that <em>listen back.</em></h1>
         <p class="ob-sub">${tz('You decide what happens next.', '接下来发生什么，你说了算。')}</p>
-        <div class="ob4-ways">${[['headphones', tz('Listen', '听')], ['mic', tz('Answer', '回应')], ['sparkles', tz('It’s written for you', '为你现写')]].map(([i, t], k) => `${k ? `<i class="ar">${ic('chevR', 'xs')}</i>` : ''}<span>${ic(i)}<b>${t}</b></span>`).join('')}</div>
+        <div class="ob4-ways">${[['headphones', tz('Listen', '听')], ['mic', tz('Answer', '回应')], ['sparkles', tz('Written for you', '为你现写')]].map(([i, t], k) => `${k ? `<i class="ar">${ic('chevR', 'xs')}</i>` : ''}<span>${ic(i)}<b>${t}</b></span>`).join('')}</div>
       </div>
       <div class="ob-foot"><button class="btn btn-grad btn-block" data-act="ob-next">${tz('Get started', '开始')}</button></div>`;
     return;

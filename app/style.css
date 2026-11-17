@@ -1479,3 +1479,7 @@ h1, h2, h3, h4, p { margin: 0; }
 /* 11-16 v108：“我的”右上角设置——经典齿轮、无圆形底，和首页右上角按钮同一高度（顶栏里图标按钮 top 10px、44×44） */
 .v4 .me4-top { padding-right: 52px; }
 .v4 .me4-top .me4-set { position: absolute; top: 10px; right: 6px; width: 44px; height: 44px; margin: 0; background: none; border-radius: 0; color: var(--text); }
+/* 11-16 v110：欢迎页三个图标顶端对齐（第三个标签折行时不再被顶高），箭头对准图标中线 */
+.ob4-ways { align-items: flex-start; }
+.ob4-ways .ar { margin: 15px 0 0; }
+.ob4-ways b { white-space: nowrap; }
