@@ -4653,9 +4653,8 @@ function homeV3(d) {
     </div>
     <div id="home-find" ${finding ? '' : 'hidden'}><div class="chips" id="home-chips"></div><div id="ex-res"></div></div>
     <div id="home-main" ${finding ? 'hidden' : ''}>
-      ${V4 && d.cont.length ? contShelf(d) : ''}
       ${heroSection(d.heroes)}
-      ${!V4 && d.cont.length ? contShelf(d) : ''}
+      ${d.cont.length ? contShelf(d) : ''}
       <div class="chips" role="list">${(S.genres || []).filter((g) => GENRES.indexOf(g) >= 0).concat(GENRES.filter((g) => (S.genres || []).indexOf(g) < 0)).map((g) => `<button class="chip" data-act="genre" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
       <section class="shelf">
         <div class="shelf-h"><h3>Top 10 this week</h3></div>
