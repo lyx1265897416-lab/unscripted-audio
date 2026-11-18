@@ -1,0 +1,350 @@
+[
+  {
+    "file": "01_ob_mic_card.png",
+    "step": "新人引导",
+    "name": "麦克风说明卡",
+    "note": "欢迎页一出来先弹 App 自己的说明卡：Talk to the story out loud?，「Allow」走系统授权、「Not now」到第一个要说话的交互点再问。"
+  },
+  {
+    "file": "02_ob_speech_permission.png",
+    "step": "新人引导",
+    "name": "系统权限框 · 语音识别",
+    "note": "点 Allow 后 iOS 系统框：允许 Narra 使用语音识别（文案说明在本机把说的话转成文字）。"
+  },
+  {
+    "file": "03_ob_mic_permission.png",
+    "step": "新人引导",
+    "name": "系统权限框 · 麦克风",
+    "note": "紧接着第二个系统框：允许访问麦克风（Just say your answer at each choice）。"
+  },
+  {
+    "file": "04_ob_welcome.png",
+    "step": "新人引导",
+    "name": "欢迎页（登录优先）",
+    "note": "全屏 Rian 立绘 + Logo，大标题 Stories that listen back.，三个按钮：Continue with Apple / Google / Continue as Guest。"
+  },
+  {
+    "file": "05_ob_open.png",
+    "step": "新人引导",
+    "name": "开场 · 旁白",
+    "note": "播放页样式的小戏：顶部剧名 The Sea Prince's Almost Bride + Skip，上半屏 Rian 立绘，旁白台词逐句高亮（有配音）。"
+  },
+  {
+    "file": "06_ob_open_lines.png",
+    "step": "新人引导",
+    "name": "开场 · Rian 讲玩法",
+    "note": "台词往上滚，Rian 在戏里介绍 Narra：故事跟着你走，关键时刻你来决定，可以点也可以说。"
+  },
+  {
+    "file": "07_ob_name_kb.png",
+    "step": "新人引导",
+    "name": "起名（键盘弹出）",
+    "note": "Rian 问名字，YOUR MOVE 卡 What should Rian call you?，输入框自动聚焦弹键盘，下方有「Not now」可跳过。"
+  },
+  {
+    "file": "08_ob_name_typed.png",
+    "step": "新人引导",
+    "name": "起名 · 已输入",
+    "note": "输入框里填了 Mia，右侧出现橙色发送箭头。"
+  },
+  {
+    "file": "09_ob_genre.png",
+    "step": "新人引导",
+    "name": "Rian 问题材",
+    "note": "名字 Mia 进了台词流，Rian 接一句后问喜欢什么故事；YOUR MOVE 卡给 A 恋爱 / B 悬疑两个选项 + 说或打的输入框（模拟器上提示语音输入不可用）。"
+  },
+  {
+    "file": "10_ob_genre_picked.png",
+    "step": "新人引导",
+    "name": "选了 A 恋爱",
+    "note": "点 A 后选项卡收起，YOU 那行出现 Romance — make my heart race。"
+  },
+  {
+    "file": "11_ob_reply.png",
+    "step": "新人引导",
+    "name": "Rian 接话",
+    "note": "Rian 接住选择（Romance. Bold thing to say…）并说要给你挑一部会爱上的故事。"
+  },
+  {
+    "file": "12_ob_end.png",
+    "step": "新人引导",
+    "name": "收尾推荐",
+    "note": "推荐卡 PICKED FOR YOU · ROMANCE：Running with Wolves（封面 + 简介），大按钮 Start listening 直接开播，下方 See more stories 回首页。"
+  },
+  {
+    "file": "13_home_top.png",
+    "step": "首页",
+    "name": "首页 · 顶部",
+    "note": "顶栏 narra Logo + 搜索 + 金币 100；主推大图轮播（LIVE、剧名、主角一句话、Play Now）；下面 Top this week 开头；底部三个标签 Home / Rewards / Me。"
+  },
+  {
+    "file": "14_home_mid.png",
+    "step": "首页",
+    "name": "首页 · 中部",
+    "note": "Top this week 大数字排行、New Releases 一排封面、Because you like romance（按引导里选的题材推荐）。"
+  },
+  {
+    "file": "15_home_mid2.png",
+    "step": "首页",
+    "name": "首页 · 全部剧集",
+    "note": "All series 列表：封面、剧名、主角 · 一句话钩子、评分和收听量。"
+  },
+  {
+    "file": "16_home_bottom.png",
+    "step": "首页",
+    "name": "首页 · 底部",
+    "note": "列表到底，最后是 30 min free 免费时长横幅（点进福利）。"
+  },
+  {
+    "file": "17_search_kb.png",
+    "step": "搜索和分类",
+    "name": "搜索 · 键盘",
+    "note": "点首页搜索图标：搜索框自动聚焦弹键盘，下方题材横排（Werewolf / Billionaire / Romance / Fantasy…），未输入时列 All series。"
+  },
+  {
+    "file": "18_search_results.png",
+    "step": "搜索和分类",
+    "name": "搜索 · 结果",
+    "note": "输入 prince 实时出结果：1 result，The Sea Prince's Almost Bride。"
+  },
+  {
+    "file": "19_search_genre.png",
+    "step": "搜索和分类",
+    "name": "按题材筛选",
+    "note": "点 Romance 题材：标签高亮，标题 13 results in Romance，列表只剩该题材的剧。"
+  },
+  {
+    "file": "20_detail_top.png",
+    "step": "剧集详情",
+    "name": "详情 · 顶部",
+    "note": "Running with Wolves：返回 / 收藏星 / 分享，封面、剧名、主角一句话、收听量 · 评分 · 集数、题材标签和视角（1st），大按钮 Play Episode 1，三步玩法图标（听 → 说 → 实时写）。"
+  },
+  {
+    "file": "21_detail_about.png",
+    "step": "剧集详情",
+    "name": "详情 · 简介和角色",
+    "note": "剧情简介（More 展开），About / Episodes / More like this 三个标签；Cast 角色卡带头像、身份和可点播放的台词。"
+  },
+  {
+    "file": "22_detail_about_more.png",
+    "step": "剧集详情",
+    "name": "详情 · 角色和题材",
+    "note": "继续下滑：顶部标签吸顶，更多角色（含 Narrator）和 Genres 题材标签。"
+  },
+  {
+    "file": "23_detail_episodes.png",
+    "step": "剧集详情",
+    "name": "详情 · 剧集",
+    "note": "Episodes 标签：30 min free，Ep 1 已制作（FREE、可播放），Ep 2 选择后实时生成（FREE），+3 · written as you go 后续集按选择写。"
+  },
+  {
+    "file": "24_detail_more.png",
+    "step": "剧集详情",
+    "name": "详情 · 相似推荐",
+    "note": "More like this 标签：相似剧封面网格，带剧名、评分和收听量。"
+  },
+  {
+    "file": "25_unlock_sheet.png",
+    "step": "剧集详情",
+    "name": "解锁弹层",
+    "note": "免费时长用完后第 4 集要解锁：Unlock Episode 4，价格 10 coins、余额 100，Unlock with 10 coins、Wait-free 倒计时、Get more coins、自动解锁开关。（测试里临时把免费时长用完调出，截完已还原）"
+  },
+  {
+    "file": "26_player.png",
+    "step": "播放器",
+    "name": "播放器 · 第 1 集",
+    "note": "全屏播放页：顶部收起 / 剧名 · Episode 1 标题 / 分享，上半屏剧照，台词逐句高亮滚动；进度条和时间；上一集 / 退 10 秒 / 播放暂停 / 进 10 秒 / 下一集；工具行 1x 倍速、睡眠定时、剧集列表、收听方式。"
+  },
+  {
+    "file": "27_player_lines.png",
+    "step": "播放器",
+    "name": "播放器 · 台词滚动",
+    "note": "播放十几秒后：已读台词变暗上移，当前句高亮。"
+  },
+  {
+    "file": "28_sheet_sleep.png",
+    "step": "播放器",
+    "name": "睡眠定时弹层",
+    "note": "Sleep timer：Off / 5 / 15 / 30 分钟 / 1 小时 / End of episode，当前 Off 打勾。"
+  },
+  {
+    "file": "29_sheet_episodes.png",
+    "step": "播放器",
+    "name": "剧集列表弹层",
+    "note": "Episodes：Ep 1 正在播（FREE），Ep 2 Written live from your choice（听完第 1 集并选择后生成），Ep 3–5 Depends on your choices，第 4 集起带锁。"
+  },
+  {
+    "file": "30_sheet_mode.png",
+    "step": "播放器",
+    "name": "收听方式弹层",
+    "note": "How do you want to listen?：Hands-free（我出声问你、你直接答，当前选中）/ Lean back（故事自己往下走）/ Tap to choose（屏幕上点选）。"
+  },
+  {
+    "file": "31_choice.png",
+    "step": "选择点",
+    "name": "选择点（免手动）",
+    "note": "第 1 集结尾停在选择点：YOUR MOVE 问题、A / B 两个选项、说或打的输入框，底部 The narrator is asking…（旁白正在出声问）。"
+  },
+  {
+    "file": "32_choice_hold.png",
+    "step": "选择点",
+    "name": "选择点 · 暂停等我",
+    "note": "点 Wait for me 后倒计时停住，底部显示 Paused，可以慢慢想。"
+  },
+  {
+    "file": "33_choice_kb.png",
+    "step": "选择点",
+    "name": "打字回答 · 键盘",
+    "note": "点输入框弹键盘，选项和问题上移，输入框高亮。"
+  },
+  {
+    "file": "34_choice_typed.png",
+    "step": "选择点",
+    "name": "打字回答 · 已输入",
+    "note": "自由输入 Don’t let go. Tell me who you really are.，右侧发送箭头（走查实际提交的是选项 A）。"
+  },
+  {
+    "file": "35_generating.png",
+    "step": "下一集",
+    "name": "生成中",
+    "note": "选了 A 后：YOU 那行显示所选回答，下方 Writing Ep 2 波形提示正在实时写第 2 集，顶部副标题 Writing Episode 2 for you…。"
+  },
+  {
+    "file": "36_live_ep2.png",
+    "step": "下一集",
+    "name": "第 2 集开播",
+    "note": "实时生成的第 2 集 The Locked Exit 开播：台词流里先接上你的回答，再进入新剧情，剧照随剧情换。"
+  },
+  {
+    "file": "37_live_ep2_lines.png",
+    "step": "下一集",
+    "name": "第 2 集 · 继续播放",
+    "note": "第 2 集播到半分钟：新角色出场（Luca Marlowe），台词照常滚动高亮。"
+  },
+  {
+    "file": "38_sheet_episodes_ep2.png",
+    "step": "下一集",
+    "name": "剧集列表（有第 2 集后）",
+    "note": "Ep 2 · The Locked Exit 变成正在播（Written for you · 句数 · 你的选择），Ep 3 Written live from your choice 待生成。"
+  },
+  {
+    "file": "39_home_mini.png",
+    "step": "下一集",
+    "name": "首页 + 迷你播放条",
+    "note": "收起播放器回首页：Continue Listening 出现 Running with Wolves Ep 2 · The Locked Exit（带进度），底部导航上方常驻迷你播放条（封面、剧名、集数、暂停）。"
+  },
+  {
+    "file": "40_home_bottom_mini.png",
+    "step": "下一集",
+    "name": "首页底部 + 迷你条",
+    "note": "滚到首页最底：迷你条一直悬在底部导航上方，不挡 29 min free 横幅（免费时长已用掉约 1 分钟）。"
+  },
+  {
+    "file": "41_sheet_continue_more.png",
+    "step": "下一集",
+    "name": "继续收听 ⋯ 弹层",
+    "note": "继续收听那行点 ⋯：Series page（去详情）/ Remove from Listening（移出在听）。"
+  },
+  {
+    "file": "42_detail_progress.png",
+    "step": "下一集",
+    "name": "有进度的详情",
+    "note": "听过之后的详情页：主按钮变成 Continue Ep 2，下方多出 Restart；集数统计变 2。"
+  },
+  {
+    "file": "43_dialog_restart.png",
+    "step": "下一集",
+    "name": "重新开始确认框",
+    "note": "点 Restart：Start over?，说明已有剧情留在剧集里、下一段跟新的一轮走；Cancel / Start over。"
+  },
+  {
+    "file": "44_me.png",
+    "step": "我的",
+    "name": "我的 · 顶部",
+    "note": "个人主页式：背景图（最近在听封面）+ 头像 M、名字 Mia、简介、右上换背景和齿轮设置、未登录时 Sign in；数据行 1 Series / 1 Episode / 1 Choice；资产卡金币 100、免费分钟 27、VIP Join，Get coins。"
+  },
+  {
+    "file": "45_me_listening.png",
+    "step": "我的",
+    "name": "我的 · 在听",
+    "note": "书架「Recently played | Saved」同一行切换：在听里有 Running with Wolves，Ep 2 进度条；最底一行构建号。"
+  },
+  {
+    "file": "46_me_saved.png",
+    "step": "我的",
+    "name": "我的 · 收藏",
+    "note": "切到 Saved：详情页点过星的 Running with Wolves 在收藏里。"
+  },
+  {
+    "file": "47_me_edit.png",
+    "step": "我的",
+    "name": "我的 · 编辑",
+    "note": "点 Edit：封面右上出现红色 × 可移出，按钮变 Done。"
+  },
+  {
+    "file": "48_sheet_signin.png",
+    "step": "我的",
+    "name": "登录弹层",
+    "note": "点 Sign in：Sign in · Sync across devices，Continue with Apple / Continue with Google。"
+  },
+  {
+    "file": "49_settings.png",
+    "step": "设置",
+    "name": "设置 · 顶部",
+    "note": "齿轮进设置：账号卡（头像、Mia、Sign in）、Profile photo、Sign-in；Listening 组：How you listen（Hands-free）、Default speed、Autoplay next、Choice timer、Wait time、Answer from lock screen、Default sleep timer。"
+  },
+  {
+    "file": "50_settings_mid.png",
+    "step": "设置",
+    "name": "设置 · 中部",
+    "note": "Coins & VIP（Auto-unlock episodes、Coin store、Purchase history、Restore purchases）、Notifications（New episodes、Check-in reminder）、Language（English）、Storage（Clear cache）。"
+  },
+  {
+    "file": "51_settings_language.png",
+    "step": "设置",
+    "name": "设置 · 语言",
+    "note": "Language 二级页：System（手机语言 English）/ English（当前）/ 中文，说明 Stories switch too（故事内容跟着切）。"
+  },
+  {
+    "file": "52_settings_bottom.png",
+    "step": "设置",
+    "name": "设置 · 底部",
+    "note": "Privacy & permissions（Microphone & speech 已开、隐私政策、使用条款）、Help & feedback（FAQ、Send feedback、Rate Narra）、About 版本行（0.0.1 (1) · cbfab00 · 11-18 00:00 · update available）、Reset all data。"
+  },
+  {
+    "file": "53_rewards.png",
+    "step": "福利和金币",
+    "name": "福利 · 签到",
+    "note": "Rewards 页：顶栏金币 100；Daily check-in 7 天签到条（+10 到 +50），Check in · +10 coins；下面 Daily tasks / New listener 两个标签（带红点）。"
+  },
+  {
+    "file": "54_rewards_checked_in.png",
+    "step": "福利和金币",
+    "name": "福利 · 已签到",
+    "note": "签到后：第 1 天打勾、进度 10/190、Day 1 claimed · back tomorrow，按钮变 Checked in today，金币 110。"
+  },
+  {
+    "file": "55_rewards_daily.png",
+    "step": "福利和金币",
+    "name": "福利 · 每日任务",
+    "note": "Daily tasks：Listen 5 min（3/5 min）、Play a new series（可领 Claim）、Make 3 choices、Share a series，每项奖励金币，0:00 重置。"
+  },
+  {
+    "file": "56_rewards_new.png",
+    "step": "福利和金币",
+    "name": "福利 · 新手福利",
+    "note": "New listener 标签：Finish your first episode / Make your first choice / Save a series to your Library（可领）、Answer out loud once、Check in 3 days in a row，各一次。"
+  },
+  {
+    "file": "57_rewards_history.png",
+    "step": "福利和金币",
+    "name": "福利 · 金币记录",
+    "note": "Coin history：2 records，Daily check-in · Day 1 +10、Welcome bonus +100，带时间。"
+  },
+  {
+    "file": "58_store.png",
+    "step": "福利和金币",
+    "name": "金币商店",
+    "note": "点顶栏金币进 Coin store：余额 110，四档金币包（100 / 300 +30 / 600 +80 POPULAR / 1500 +300 BEST VALUE，测试币不真付费），VIP · Unlimited episodes 卡和 Start VIP (test)。"
+  }
+]
