@@ -1,0 +1,12 @@
+{
+  "env": "test",
+  "build_number": "263240453",
+  "version": "0.0.1",
+  "git_sha": "6d636d2",
+  "build_time": "11-20 04:53",
+  "branch": "feat/doc-shots-env",
+  "api_base": "https://narra-api-1049548997337.us-central1.run.app",
+  "captured_from": "2026-11-20 04:54",
+  "captured_to": "2026-11-20 04:58",
+  "screens": 57
+}

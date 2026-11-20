@@ -1,0 +1,219 @@
+[
+ {
+  "label": "Series details Running with Wolves Episode 1 · Ten Minutes to His Engagement",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   50.0,
+   68.5,
+   256.0,
+   39.0
+  ]
+ },
+ {
+  "label": "Remove from saved",
+  "flags": [
+   "isButton",
+   "hasToggledState",
+   "isToggled"
+  ],
+  "actions": [],
+  "rect": [
+   306.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "Share or report this episode",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   352.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE Don't move.",
+  "flags": [
+   "isHidden"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   220.7,
+   358.0,
+   57.0
+  ]
+ },
+ {
+  "label": "The black sedan's back door flies open. A hand clamps around your wrist. Hot. Steady.",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   339.8,
+   358.0,
+   35.9
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE Quiet. What is that… on your skin?",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   375.7,
+   358.0,
+   57.0
+  ]
+ },
+ {
+  "label": "He leans into the curve of your neck and breathes you in. Slowly.",
+  "flags": [],
+  "actions": [
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   432.7,
+   358.0,
+   70.0
+  ]
+ },
+ {
+  "label": "Level B2 is empty. Your earpiece hisses: find the groom. No photos, no pay.",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   502.7,
+   358.0,
+   98.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE Tell me… where did you come from?",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   600.7,
+   358.0,
+   30.3
+  ]
+ },
+ {
+  "label": "10%",
+  "flags": [
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable",
+   "isSlider"
+  ],
+  "actions": [
+   "increase",
+   "decrease",
+   "focus"
+  ],
+  "rect": [
+   34.0,
+   627.0,
+   48.0,
+   48.0
+  ]
+ },
+ {
+  "label": "Pause",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   159.0,
+   686.0,
+   84.0,
+   84.0
+  ]
+ },
+ {
+  "label": "Speed · 1x",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   22.0,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Sleep timer",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   111.5,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Episodes",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   201.0,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Listening mode · Hands-free",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   290.5,
+   780.0,
+   89.5,
+   48.0
+  ]
+ }
+]

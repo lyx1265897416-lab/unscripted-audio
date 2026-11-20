@@ -1,0 +1,48 @@
+[
+ {
+  "label": "Scrim",
+  "flags": [],
+  "actions": [
+   "tap",
+   "dismiss"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   402.0,
+   629.0
+  ]
+ },
+ {
+  "label": "Series page",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   18.0,
+   718.0,
+   366.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Remove from Listening",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   18.0,
+   770.0,
+   366.0,
+   52.0
+  ]
+ }
+]

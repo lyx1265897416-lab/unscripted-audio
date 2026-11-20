@@ -1,0 +1,196 @@
+[
+ {
+  "label": "Wait time 5 s",
+  "flags": [
+   "isButton",
+   "isHidden",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   0.0,
+   368.0,
+   13.0
+  ]
+ },
+ {
+  "label": "Answer from lock screen",
+  "flags": [
+   "isButton",
+   "isHidden",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   14.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Default sleep timer Off",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   114.0,
+   368.0,
+   5.0
+  ]
+ },
+ {
+  "label": "NOTIFICATIONS New episodes",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   120.0,
+   370.0,
+   103.0
+  ]
+ },
+ {
+  "label": "Language English",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   223.0,
+   370.0,
+   76.0
+  ]
+ },
+ {
+  "label": "STORAGE Clear cache Images only 3.3 MB",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   299.0,
+   370.0,
+   112.0
+  ]
+ },
+ {
+  "label": "Microphone & speech On",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   461.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Privacy policy",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   514.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Terms of use",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   567.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "FAQ",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   670.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Send feedback",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   723.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Report a content issue",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   776.0,
+   368.0,
+   52.0
+  ]
+ }
+]

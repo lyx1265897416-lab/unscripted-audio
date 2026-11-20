@@ -1,0 +1,230 @@
+[
+ {
+  "label": "Play Now, Running with Wolves Running with Wolves",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   761.0,
+   112.0,
+   113.0
+  ]
+ },
+ {
+  "label": "Play Now, Four Liars, One Island Four Liars, One Island",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   140.0,
+   761.0,
+   112.0,
+   113.0
+  ]
+ },
+ {
+  "label": "Play Now, Don't Trust This Feed Don't Trust This Feed",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   264.0,
+   761.0,
+   112.0,
+   113.0
+  ]
+ },
+ {
+  "label": "Play Now, No Work Today, Mii's Got You No Work Today, Mii's Got You",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   388.0,
+   761.0,
+   14.0,
+   113.0
+  ]
+ },
+ {
+  "label": "Play Now, 15%",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   16.0,
+   611.0,
+   318.0,
+   96.0
+  ]
+ },
+ {
+  "label": "Running with Wolves Ep 2 · The Locked Exit",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   124.0,
+   615.0,
+   210.0,
+   37.0
+  ]
+ },
+ {
+  "label": "See all",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   341.5,
+   571.0,
+   44.5,
+   30.0
+  ]
+ },
+ {
+  "label": "LIVE Open Book Ray · Your husband, heir to the family group. He hears every thought you have, and only yours.",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   11.0,
+   120.0,
+   380.0,
+   425.0
+  ]
+ },
+ {
+  "label": "Play Now Play Now",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   32.0,
+   489.0,
+   120.5,
+   40.0
+  ]
+ },
+ {
+  "label": "LIVE Not Pretending This Time Rafael Ortega · Your roommate of three years, who kissed you last night \"just for show\"",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   391.0,
+   120.0,
+   11.0,
+   425.0
+  ]
+ },
+ {
+  "label": "100 coins",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   308.9,
+   67.0,
+   77.1,
+   44.0
+  ]
+ },
+ {
+  "label": "Running with Wolves Ep 2 · The Locked Exit",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   8.0,
+   714.0,
+   386.0,
+   60.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Rewards",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   134.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   268.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ }
+]

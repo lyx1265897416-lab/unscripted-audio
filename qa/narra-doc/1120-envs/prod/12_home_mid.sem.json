@@ -1,0 +1,315 @@
+[
+ {
+  "label": "Romance, 12 series",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   16.0,
+   863.5,
+   181.0,
+   10.5
+  ]
+ },
+ {
+  "label": "Mystery, 5 series",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   205.0,
+   863.5,
+   181.0,
+   10.5
+  ]
+ },
+ {
+  "label": "See all",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   341.5,
+   823.5,
+   44.5,
+   30.0
+  ]
+ },
+ {
+  "label": "Play Now, Not Pretending This Time Not Pretending This Time",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   597.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Open Book Open Book",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   140.0,
+   597.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, The Bride Who Wasn't Her The Bride Who Wasn't Her",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   264.0,
+   597.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Alibi for Two Alibi for Two",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   388.0,
+   597.5,
+   14.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, The Sea Prince's Almost Bride The Sea Prince's Almost Bride",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   339.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Before the Mask Before the Mask",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   140.0,
+   339.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Married by Noon Married by Noon",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   264.0,
+   339.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Who Invited Her? Who Invited Her?",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   388.0,
+   339.5,
+   14.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Running with Wolves Running with Wolves",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   116.0,
+   112.0,
+   169.5
+  ]
+ },
+ {
+  "label": "Play Now, Four Liars, One Island Four Liars, One Island",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   140.0,
+   116.0,
+   112.0,
+   169.5
+  ]
+ },
+ {
+  "label": "Play Now, Don't Trust This Feed Don't Trust This Feed",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   264.0,
+   116.0,
+   112.0,
+   169.5
+  ]
+ },
+ {
+  "label": "Play Now, No Work Today, Mii's Got You No Work Today, Mii's Got You",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   388.0,
+   116.0,
+   14.0,
+   169.5
+  ]
+ },
+ {
+  "label": "LIVE Not Pretending This Time Rafael Ortega · Your roommate of three years, who kissed you last night \"just for show\"",
+  "flags": [
+   "isHidden",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   11.0,
+   5.5
+  ]
+ },
+ {
+  "label": "LIVE Open Book Ray · Your husband, heir to the family group. He hears every thought you have, and only yours.",
+  "flags": [
+   "isHidden",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   11.0,
+   0.0,
+   380.0,
+   5.5
+  ]
+ },
+ {
+  "label": "LIVE The Bride Who Wasn't Her Lucien Ashgrave · Master of Ashgrave, who has buried two brides",
+  "flags": [
+   "isHidden",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   391.0,
+   0.0,
+   11.0,
+   5.5
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   201.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ }
+]

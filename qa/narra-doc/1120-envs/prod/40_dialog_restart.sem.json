@@ -1,0 +1,52 @@
+[
+ {
+  "label": "Dismiss",
+  "flags": [],
+  "actions": [
+   "tap",
+   "dismiss"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   402.0,
+   874.0
+  ]
+ },
+ {
+  "label": "Cancel",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   170.8,
+   488.0,
+   69.2,
+   48.0
+  ]
+ },
+ {
+  "label": "Start over",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   248.0,
+   488.0,
+   90.0,
+   48.0
+  ]
+ }
+]

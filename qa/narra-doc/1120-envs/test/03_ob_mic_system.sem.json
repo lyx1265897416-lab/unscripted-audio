@@ -1,0 +1,47 @@
+[
+ {
+  "label": "Continue with Apple",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   638.0,
+   358.0,
+   52.0
+  ]
+ },
+ {
+  "label": "G Continue with Google",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   702.0,
+   358.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Continue as Guest",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   766.0,
+   358.0,
+   52.0
+  ]
+ }
+]

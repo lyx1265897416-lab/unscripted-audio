@@ -1,0 +1,62 @@
+[
+ {
+  "label": "Scrim",
+  "flags": [],
+  "actions": [
+   "tap",
+   "dismiss"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   402.0,
+   496.0
+  ]
+ },
+ {
+  "label": "Hands-free I ask out loud, you just answer",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   18.0,
+   585.0,
+   366.0,
+   73.0
+  ]
+ },
+ {
+  "label": "Lean back The story keeps going on its own",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   18.0,
+   668.0,
+   366.0,
+   72.0
+  ]
+ },
+ {
+  "label": "Tap to choose Pick on screen",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   18.0,
+   750.0,
+   366.0,
+   72.0
+  ]
+ }
+]

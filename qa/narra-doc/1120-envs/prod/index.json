@@ -1,0 +1,345 @@
+[
+  {
+    "file": "01_ob_age.png",
+    "step": "新人引导",
+    "name": "年龄确认",
+    "note": "引导第一步：说明部分故事含成人恋爱内容、需年满 17 岁，并披露故事和角色声音由 AI 实时生成；点「I’m 17 or older」继续，点「I’m under 17」进入拦截页。",
+    "shot_at": "2026-11-20 04:48"
+  },
+  {
+    "file": "02_ob_mic_card.png",
+    "step": "新人引导",
+    "name": "麦克风说明卡",
+    "note": "欢迎页一出来就弹 App 自己的说明卡「Talk to the story out loud?」：点 Allow 才弹系统授权框，点 Not now 留到第一次要说话时再问。",
+    "shot_at": "2026-11-20 04:48"
+  },
+  {
+    "file": "03_ob_mic_system.png",
+    "step": "新人引导",
+    "name": "系统权限框",
+    "note": "点 Allow 后的 iOS 系统授权框（先语音识别、再麦克风；模拟器系统语言是中文，所以框是中文），允许后选择点可以直接开口回答。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "04_ob_welcome.png",
+    "step": "新人引导",
+    "name": "欢迎页",
+    "note": "Lucien 全屏立绘 + 标语「Stories that listen back.」；正式版没有登录，只有一个白色「Get started」按钮直接进入。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "05_ob_open.png",
+    "step": "新人引导",
+    "name": "小戏开场",
+    "note": "新手小戏，播放页样式：上半屏《The Bride Who Wasn't Her》Lucien 剧照，Lucien 真声 1.35 倍念开场（逐词高亮），讲清故事跟着你说的话走；底部「Tap to skip」可跳过当前这句。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "06_ob_name_kb.png",
+    "step": "新人引导",
+    "name": "问名字",
+    "note": "Lucien 问「What do I call you?」的同时，YOUR MOVE 问名卡和「Your name」输入框一起出来、键盘自动弹起，不用等他说完就能打字。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "07_ob_name_typed.png",
+    "step": "新人引导",
+    "name": "输入名字",
+    "note": "输入 Mia 后输入框右侧出现发送箭头，点箭头或键盘回车提交。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "08_ob_genre.png",
+    "step": "新人引导",
+    "name": "问题材",
+    "note": "Lucien 问「Which door do you open?」，A 恋爱 / B 悬疑两个选项和「Say or type your answer…」输入框跟问句一起出来；也可以直接说或打任何题材，问完自动开麦（提示 Just say it — I'm listening）。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "09_ob_reply.png",
+    "step": "新人引导",
+    "name": "Lucien 接话",
+    "note": "点 A 后选项卡收起，你的回答作为「YOU」一行留在台词里，Lucien 用真声接住你的选择。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "10_ob_end.png",
+    "step": "新人引导",
+    "name": "推荐收尾",
+    "note": "Lucien 最后一句和「PICKED FOR YOU · ROMANCE」推荐卡一起出来（《The Bride Who Wasn't Her》）：点「Start listening」直接开播第 1 集，点「See more stories」回首页。",
+    "shot_at": "2026-11-20 04:49"
+  },
+  {
+    "file": "11_home_top.png",
+    "step": "首页",
+    "name": "首页顶部",
+    "note": "顶栏只有 Logo 和搜索（没有金币胶囊），大图轮播（LIVE 标、剧名、主角一句话、Play Now），下面 Editor's picks；底栏只有 Home / Me。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "12_home_mid.png",
+    "step": "首页",
+    "name": "首页中段",
+    "note": "Editor's picks、New Releases、Because you like romance（按引导里选的题材推荐）几行横滑封面，封面上的播放键可直接开播。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "13_home_mid2.png",
+    "step": "首页",
+    "name": "首页 All series",
+    "note": "继续往下：All series 全部正式剧目竖列表（封面、剧名、主角 · 简介、标签）。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "14_home_bottom.png",
+    "step": "首页",
+    "name": "首页底部",
+    "note": "正式剧目列表到底（共 15 部），没有免费时长 / 福利横条。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "15_search_kb.png",
+    "step": "搜索",
+    "name": "搜索",
+    "note": "点右上搜索：搜索框自动聚焦弹出键盘，下面是题材筛选标签（Werewolf / Billionaire / Romance / Fantasy…）和 All series，右侧 Cancel 退出。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "16_search_results.png",
+    "step": "搜索",
+    "name": "搜索结果",
+    "note": "输入「prince」即时出结果（1 result：The Sea Prince's Almost Bride），右侧 × 清空。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "17_search_genre.png",
+    "step": "搜索",
+    "name": "按题材筛选",
+    "note": "点题材标签「Romance」筛出这一类（正式剧目里 12 results in Romance），再点一次取消。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "18_detail_top.png",
+    "step": "剧集详情",
+    "name": "详情顶部",
+    "note": "《Running with Wolves》详情：大封面、剧名、主角一句话、集数和标签、白色「Play Episode 1」，下面是听 → 说 → 剧情改写三步图标和简介；右上收藏、分享。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "19_detail_about.png",
+    "step": "剧集详情",
+    "name": "详情简介和角色",
+    "note": "收藏后下滑：简介（More 展开）和「Story and voices generated live by AI」，About / Episodes / More like this 标签吸顶，About 下是 Cast 角色卡（头像、身份、可点播的台词试听）。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "20_detail_about_more.png",
+    "step": "剧集详情",
+    "name": "详情角色和题材",
+    "note": "About 继续往下：其余角色和旁白的台词试听，最底 Genres 题材标签。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "21_detail_episodes.png",
+    "step": "剧集详情",
+    "name": "详情剧集",
+    "note": "Episodes 标签：Ep1 可播、Ep2 After your choice，「+3 · written as you go」表示后面的集随你的选择实时写；正式版不显示免费时长、FREE 标和锁。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "22_detail_more.png",
+    "step": "剧集详情",
+    "name": "相似推荐",
+    "note": "More like this 标签：相似剧封面网格，点封面进对应详情。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "23_player.png",
+    "step": "播放器",
+    "name": "播放器",
+    "note": "顶部剧名 / 集名、收藏和更多；中间剧照 + 台词逐句滚动（当前句高亮、标角色名）；下方进度条、上一集 / 后退 / 播放暂停 / 前进 / 下一集，最底倍速、睡眠定时、剧集列表、收听方式。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "24_player_lines.png",
+    "step": "播放器",
+    "name": "播放中台词滚动",
+    "note": "隔 12 秒后的同一屏；这次正式环境进度停在 0:05 没往前走，台词也没滚（疑似音频卡住，见汇报）。",
+    "shot_at": "2026-11-20 04:50"
+  },
+  {
+    "file": "25_sheet_sleep.png",
+    "step": "播放器",
+    "name": "睡眠定时",
+    "note": "睡眠定时弹层：Off / 5 / 15 / 30 分钟 / 1 小时 / 本集结束（End of episode），当前 Off。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "26_sheet_episodes.png",
+    "step": "播放器",
+    "name": "剧集列表弹层",
+    "note": "播放器里的剧集列表：Ep1 正在播，Ep2「Written live from your choice」，Ep3 起「Depends on your choices」；正式版不标 FREE、不带锁。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "27_sheet_mode.png",
+    "step": "播放器",
+    "name": "收听方式",
+    "note": "收听方式弹层：Hands-free（我念问题、你直接说）、Lean back（故事自己往下走）、Tap to choose（屏幕上点选），当前 Hands-free。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "28_choice.png",
+    "step": "选择点",
+    "name": "选择点",
+    "note": "集尾「YOUR MOVE」问题 + A / B 两个选项 + 输入框和麦克风；免手动模式问完自动开麦（Just say it — I'm listening），最底的 Listening 计时行只露出上半截。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "29_choice_hold.png",
+    "step": "选择点",
+    "name": "选择点停住",
+    "note": "碰一下屏幕就先停住：麦克风停听，最底显示 Paused，输入框提示变成「Say or type your answer…」，等你点选项、打字或点麦克风。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "30_choice_kb.png",
+    "step": "选择点",
+    "name": "打字回答",
+    "note": "点输入框弹出键盘，可以自由打字回答，不限于 A / B。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "31_choice_typed.png",
+    "step": "选择点",
+    "name": "打好的回答",
+    "note": "打好「Don't let go. Tell me who you really are.」后右侧出现发送箭头（本次走查没发这句，接着点了 A）。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "32_generating.png",
+    "step": "下一集",
+    "name": "生成中",
+    "note": "点 A 后：你的回答作为「YOU」留在台词里，下面「Writing Ep 2」，顶部副标题变成「Writing Episode 2 for you」。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "33_live_ep2.png",
+    "step": "下一集",
+    "name": "第 2 集开播",
+    "note": "第 2 集《The Locked Exit》按你的选择实时写好并开播：换了新剧照，台词逐句出来，进度条显示本集时长。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "34_live_ep2_lines.png",
+    "step": "下一集",
+    "name": "第 2 集播放中",
+    "note": "第 2 集继续播，台词往下滚，当前句高亮。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "35_sheet_episodes_ep2.png",
+    "step": "下一集",
+    "name": "第 2 集剧集列表",
+    "note": "第 2 集时的剧集列表：Ep2「The Locked Exit · Written for you · 26 lines」（为你写的这一集，带你的回答摘要），Ep3 变成「Written live from your choice · Finish Ep 2 and choose」；不标 FREE、不带锁。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "36_home_mini.png",
+    "step": "首页",
+    "name": "迷你播放条",
+    "note": "收起播放器回首页：底部迷你播放条（封面、剧名 · Ep 2 · The Locked Exit、暂停键），Continue Listening 出现这部剧和进度。",
+    "shot_at": "2026-11-20 04:51"
+  },
+  {
+    "file": "37_home_bottom_mini.png",
+    "step": "首页",
+    "name": "首页底部 + 迷你条",
+    "note": "首页滚到底，迷你播放条一直浮在底栏上方。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "38_sheet_continue_more.png",
+    "step": "首页",
+    "name": "继续收听菜单",
+    "note": "Continue Listening 卡片的「⋯」菜单：Series page 去详情，Remove from Listening 从在听里移除。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "39_detail_progress.png",
+    "step": "剧集详情",
+    "name": "有进度的详情",
+    "note": "听过之后的详情页：主按钮变成「Continue Ep 2」，下面多了「Restart」重新开始，集数显示 2。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "40_dialog_restart.png",
+    "step": "剧集详情",
+    "name": "重新开始确认",
+    "note": "点 Restart 弹「Start over?」：已听过的保留在 Episodes 里，新一轮按新的选择走；Cancel / Start over。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "41_detail_progress_episodes.png",
+    "step": "剧集详情",
+    "name": "有进度的剧集",
+    "note": "Episodes 标签：Ep2 变成为你写的「The Locked Exit · Written for you · 26 lines」，Ep3 After your choice，「+2 · written as you go」；没有免费时长和 FREE 标。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "42_me.png",
+    "step": "我的",
+    "name": "我的",
+    "note": "顶部剧照背景、头像 M 和名字 Mia（带编辑笔，本机改名）、签名、Series / Episode / Choice 统计，右上设置齿轮；没有 Sign in、没有金币卡，下面直接是 Recently played / Saved。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "43_me_listening.png",
+    "step": "我的",
+    "name": "我的 · 在听",
+    "note": "Recently played：在听的剧封面和「Ep 2 · 进度%」；正式版「我的」底部不显示构建号。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "44_me_saved.png",
+    "step": "我的",
+    "name": "我的 · 收藏",
+    "note": "切到 Saved 标签：收藏的剧（详情页点过收藏的 Running with Wolves）。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "45_me_edit.png",
+    "step": "我的",
+    "name": "我的 · 编辑",
+    "note": "点 Edit 进入编辑：封面右上出现 × 可移除，右侧按钮变 Done。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "46_settings.png",
+    "step": "设置",
+    "name": "设置顶部",
+    "note": "账户卡只有名字 Mia（点进去本机改名）、Profile photo，没有 Sign-in 行；Listening 组：How you listen、Default speed、Autoplay next、Choice timer、Wait time、Answer from lock screen、Default sleep timer。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "47_settings_mid.png",
+    "step": "设置",
+    "name": "设置中段",
+    "note": "Notifications 只有 New episodes，然后 Language、Storage（Clear cache）、Privacy & permissions（Microphone & speech、Privacy policy、Terms of use）、Help & feedback；没有 Coins & VIP 组和签到提醒。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "48_settings_language.png",
+    "step": "设置",
+    "name": "语言",
+    "note": "语言二级页：System（跟随手机，当前手机语言中文）/ English / 中文，当前 English；「Stories switch too」故事内容语言一起切。",
+    "shot_at": "2026-11-20 04:52"
+  },
+  {
+    "file": "49_settings_bottom.png",
+    "step": "设置",
+    "name": "设置底部 · 关于",
+    "note": "Help & feedback（FAQ、Send feedback、Report a content issue）；About：Version 0.0.1 (263240448) · 6d636d2 · 11-20 04:48 · latest，Environment Production；Reset all data、Delete account & data。",
+    "shot_at": "2026-11-20 04:52"
+  }
+]

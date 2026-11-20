@@ -1,0 +1,52 @@
+[
+ {
+  "label": "PICKED FOR YOU · ROMANCE The Bride Who Wasn't Her You marry in your missing sister's place, into a house that has buried two brides. Before the ring is even on, he knows you're not her. Every scene after this is generated live from what you say.",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   555.6,
+   358.0,
+   110.4
+  ]
+ },
+ {
+  "label": "Start listening Start listening",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   678.0,
+   358.0,
+   54.0
+  ]
+ },
+ {
+  "label": "See more stories",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   131.3,
+   738.0,
+   139.4,
+   48.0
+  ]
+ }
+]

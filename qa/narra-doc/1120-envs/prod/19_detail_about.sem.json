@@ -1,0 +1,185 @@
+[
+ {
+  "label": "Magnus Thorne Pure-blooded werewolf Alpha and head of his bloodline, chairman of Thorne Maritime & Holdings, the man who was supposed to announce his engagement tonight “Don't move. Let me make sure you're real.”",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   439.2,
+   370.0,
+   150.0
+  ]
+ },
+ {
+  "label": "Luca Marlowe Beta, Magnus's right hand and executive assistant “Sir, they moved the announcement up. Ten minutes.”",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   589.2,
+   370.0,
+   116.0
+  ]
+ },
+ {
+  "label": "Selene Arkwright Pure-blooded she-wolf, Magnus's arranged political fiancée “A human, Magnus? You can't be serious.”",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   705.2,
+   370.0,
+   116.0
+  ]
+ },
+ {
+  "label": "Harland Royce Conservative elder who engineered the engagement and can convene the Council “The law is older than you, boy. Hand her over.”",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   821.2,
+   370.0,
+   52.8
+  ]
+ },
+ {
+  "label": "About",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   345.2,
+   48.9,
+   46.0
+  ]
+ },
+ {
+  "label": "Episodes",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   86.9,
+   345.2,
+   71.7,
+   46.0
+  ]
+ },
+ {
+  "label": "More like this",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   180.6,
+   345.2,
+   104.7,
+   46.0
+  ]
+ },
+ {
+  "label": "More",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   277.2,
+   35.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Play Episode 1 Play Episode 1",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   85.2,
+   370.0,
+   50.0
+  ]
+ },
+ {
+  "label": "How it works",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   282.0,
+   149.2,
+   36.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   201.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ }
+]

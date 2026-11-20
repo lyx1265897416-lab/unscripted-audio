@@ -1,0 +1,219 @@
+[
+ {
+  "label": "0.0.1 (263240453) · 6d636d2 · 11-20 04:53 · latest",
+  "flags": [],
+  "actions": [
+   "longPress"
+  ],
+  "rect": [
+   16.0,
+   667.0,
+   370.0,
+   15.0
+  ]
+ },
+ {
+  "label": "Recently played 1",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   369.2,
+   186.9,
+   40.0
+  ]
+ },
+ {
+  "label": "Saved 1",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   202.9,
+   369.2,
+   92.4,
+   40.0
+  ]
+ },
+ {
+  "label": "Edit",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   342.0,
+   369.2,
+   44.0,
+   40.0
+  ]
+ },
+ {
+  "label": "Running with Wolves Ep 2 · 29%",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   421.2,
+   115.3,
+   225.8
+  ]
+ },
+ {
+  "label": "Wallet: 100 coins, 29 free minutes left. Open coin store",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   16.0,
+   223.2,
+   370.0,
+   128.0
+  ]
+ },
+ {
+  "label": "Change background",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   402.0,
+   56.2
+  ]
+ },
+ {
+  "label": "Sign in Sign in",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   306.4,
+   59.7,
+   79.6,
+   36.0
+  ]
+ },
+ {
+  "label": "Edit bio Listening to stories that listen back",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   141.2,
+   254.4,
+   28.0
+  ]
+ },
+ {
+  "label": "Change avatar M",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   16.2,
+   80.0,
+   80.0
+  ]
+ },
+ {
+  "label": "Running with Wolves Ep 2 · The Locked Exit",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   8.0,
+   714.0,
+   386.0,
+   60.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Rewards",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   134.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   268.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ }
+]

@@ -1,0 +1,212 @@
+[
+ {
+  "label": "Choice timer Auto-continue",
+  "flags": [
+   "isButton",
+   "isHidden",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   0.0,
+   368.0,
+   13.0
+  ]
+ },
+ {
+  "label": "Wait time 5 s",
+  "flags": [
+   "isButton",
+   "isHidden",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   14.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Answer from lock screen",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   114.0,
+   368.0,
+   5.0
+  ]
+ },
+ {
+  "label": "Default sleep timer Off",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   120.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Auto-unlock episodes 10 coins/ep",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   223.0,
+   368.0,
+   61.0
+  ]
+ },
+ {
+  "label": "Coin store",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   285.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Purchase history",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   338.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Restore purchases",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   391.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "New episodes",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   494.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Check-in reminder",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   547.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Language English",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   600.0,
+   370.0,
+   76.0
+  ]
+ },
+ {
+  "label": "STORAGE Clear cache Images only 3.9 MB",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   676.0,
+   370.0,
+   112.0
+  ]
+ },
+ {
+  "label": "Microphone & speech On",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   838.0,
+   368.0,
+   36.0
+  ]
+ }
+]

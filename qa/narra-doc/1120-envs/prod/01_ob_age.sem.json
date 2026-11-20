@@ -1,0 +1,36 @@
+[
+ {
+  "label": "I’m 17 or older I’m 17 or older",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   704.0,
+   358.0,
+   54.0
+  ]
+ },
+ {
+  "label": "I’m under 17 I’m under 17",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   768.0,
+   358.0,
+   54.0
+  ]
+ }
+]

@@ -1,0 +1,176 @@
+[
+ {
+  "label": "Series details Running with Wolves Episode 1 · Ten Minutes to His Engagement",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   50.0,
+   68.5,
+   256.0,
+   39.0
+  ]
+ },
+ {
+  "label": "Remove from saved",
+  "flags": [
+   "isButton",
+   "hasToggledState",
+   "isToggled"
+  ],
+  "actions": [],
+  "rect": [
+   306.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "Share or report this episode",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   352.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE To know you're real.",
+  "flags": [
+   "isHidden"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   0.0,
+   358.0,
+   16.9
+  ]
+ },
+ {
+  "label": "His hand rises and stops an inch from your cheek. It's trembling. The gold in his eyes flares, then holds.",
+  "flags": [
+   "isHidden"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   16.9,
+   358.0,
+   98.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE Say yes, or say no. I'll listen.",
+  "flags": [
+   "isHidden"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   114.9,
+   358.0,
+   57.0
+  ]
+ },
+ {
+  "label": "Footsteps echo on the ramp, and voices come closer. The elevator doors slide open again. Nine minutes now. He still hasn't touched you. He's waiting for your answer.",
+  "flags": [
+   "isHidden"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   171.9,
+   358.0,
+   154.0
+  ]
+ },
+ {
+  "label": "A Yes. Once. Then tell me what's happening to your eyes.",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   336.2,
+   358.0,
+   61.7
+  ]
+ },
+ {
+  "label": "B I step back and say: let me go back upstairs. Now.",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   397.9,
+   358.0,
+   72.0
+  ]
+ },
+ {
+  "label": "Say or type your answer…",
+  "flags": [
+   "isTextField",
+   "isFocused",
+   "hasEnabledState",
+   "isEnabled",
+   "isMultiline",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap",
+   "setSelection",
+   "setText",
+   "focus"
+  ],
+  "rect": [
+   43.0,
+   485.4,
+   220.0,
+   41.0
+  ]
+ },
+ {
+  "label": "Speak your answer",
+  "flags": [
+   "isButton",
+   "hasToggledState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   318.0,
+   479.9,
+   52.0,
+   52.0
+  ]
+ }
+]

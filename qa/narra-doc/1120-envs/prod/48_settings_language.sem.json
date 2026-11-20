@@ -1,0 +1,57 @@
+[
+ {
+  "label": "System Phone language · 中文",
+  "flags": [
+   "isButton",
+   "isInMutuallyExclusiveGroup",
+   "isFocusable",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   127.0,
+   368.0,
+   62.0
+  ]
+ },
+ {
+  "label": "English",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "isInMutuallyExclusiveGroup",
+   "isFocusable",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   190.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "中文",
+  "flags": [
+   "isButton",
+   "isInMutuallyExclusiveGroup",
+   "isFocusable",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   243.0,
+   368.0,
+   52.0
+  ]
+ }
+]

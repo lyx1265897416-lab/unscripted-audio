@@ -1,0 +1,59 @@
+[
+ {
+  "label": "Mia",
+  "flags": [
+   "isTextField",
+   "isFocused",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap",
+   "moveCursorBackwardByCharacter",
+   "setSelection",
+   "moveCursorBackwardByWord",
+   "setText",
+   "focus"
+  ],
+  "rect": [
+   71.5,
+   449.7,
+   265.0,
+   42.0
+  ]
+ },
+ {
+  "label": "Send",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   336.5,
+   454.7,
+   32.0,
+   32.0
+  ]
+ },
+ {
+  "label": "Not now",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   501.2,
+   80.7,
+   1.8
+  ]
+ }
+]

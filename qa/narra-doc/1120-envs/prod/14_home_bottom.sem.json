@@ -1,0 +1,149 @@
+[
+ {
+  "label": "The Bride Who Wasn't Her Lucien Ashgrave · Master of Ashgrave, who has buried two brides Substitute bride · Contract marriage · Gothic mystery",
+  "flags": [
+   "isHidden",
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   402.0,
+   12.7
+  ]
+ },
+ {
+  "label": "The Duke's Fine Print Gideon Ashcombe · The Duke who wants you on a one-year contract Contract marriage · Old money · Duke",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   116.0,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Married by Noon Silas Whitlock · An heir who needs a wife before noon Sudden marriage · Secret marriage · Contract",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   219.3,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Who Invited Her? Rhys Calloway · Your stepsister's fiancé, the man you pulled from the rain five years ago, who doesn't know it was you Revenge · Hidden identity · Corporate drama",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   322.7,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "The Heir They Erased Cassian Ward · The investor holding 30% of the house, the only one who reads the seams before the names Revenge · Workplace comeback · Family power struggle",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   426.0,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Only You Remember Him Rook Calder · A lamplighter cursed to be forgotten. You are the only one who can still see him System · Death game · Only you remember",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   529.3,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "The Sea Prince's Almost Bride Rian Thalys · The merman prince who just named you his future bride Merman · Fake engagement · Undersea palace",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   632.7,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   201.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ }
+]

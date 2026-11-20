@@ -1,0 +1,79 @@
+[
+ {
+  "label": "A Romance — make my heart race",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   569.0,
+   358.0,
+   60.0
+  ]
+ },
+ {
+  "label": "B Mystery — something dark and twisty",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   629.0,
+   358.0,
+   72.0
+  ]
+ },
+ {
+  "label": "Speak your answer",
+  "flags": [
+   "isButton",
+   "hasToggledState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   37.0,
+   720.0,
+   30.0,
+   30.0
+  ]
+ },
+ {
+  "label": "Say or type your answer…",
+  "flags": [
+   "isTextField",
+   "hasEnabledState",
+   "isEnabled",
+   "isMultiline",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap",
+   "focus"
+  ],
+  "rect": [
+   75.0,
+   714.0,
+   262.0,
+   42.0
+  ]
+ },
+ {
+  "label": "Tap to skip",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [],
+  "rect": [
+   139.5,
+   799.0,
+   123.0,
+   32.0
+  ]
+ }
+]

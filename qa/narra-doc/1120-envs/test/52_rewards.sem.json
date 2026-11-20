@@ -1,0 +1,198 @@
+[
+ {
+  "label": "Daily tasks",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   33.0,
+   397.0,
+   108.7,
+   42.0
+  ]
+ },
+ {
+  "label": "New listener",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   141.7,
+   397.0,
+   125.7,
+   42.0
+  ]
+ },
+ {
+  "label": "Go Go",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   279.0,
+   495.0,
+   76.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Claim Claim",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   279.0,
+   596.0,
+   76.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Go Go",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   279.0,
+   697.0,
+   76.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Go Go",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   279.0,
+   798.0,
+   76.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Check in · +10 coins Check in · +10 coins",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   33.0,
+   309.0,
+   336.0,
+   44.0
+  ]
+ },
+ {
+  "label": "100 coins",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   308.9,
+   67.0,
+   77.1,
+   44.0
+  ]
+ },
+ {
+  "label": "Running with Wolves Ep 2 · The Locked Exit",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   8.0,
+   714.0,
+   386.0,
+   60.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Rewards",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   134.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   268.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ }
+]

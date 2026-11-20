@@ -1,0 +1,189 @@
+[
+ {
+  "label": "Series details Running with Wolves Episode 2 · The Locked Exit",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   50.0,
+   68.5,
+   256.0,
+   39.0
+  ]
+ },
+ {
+  "label": "Remove from saved",
+  "flags": [
+   "isButton",
+   "hasToggledState",
+   "isToggled"
+  ],
+  "actions": [],
+  "rect": [
+   306.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "Share or report this episode",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   352.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "His fingertips graze your cheek. The heat is electric, searing a path from your skin straight to your chest.",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   340.1,
+   358.0,
+   98.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE You are... exactly as I dreamed.",
+  "flags": [],
+  "actions": [
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   438.1,
+   358.0,
+   57.0
+  ]
+ },
+ {
+  "label": "You pull back slightly, your heart hammering against your ribs. You demand to know why his eyes are glowing like embers.",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   495.1,
+   358.0,
+   126.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE It’s the adrenaline. The... shock of finding you.",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   621.1,
+   358.0,
+   9.9
+  ]
+ },
+ {
+  "label": "8%",
+  "flags": [
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable",
+   "isSlider"
+  ],
+  "actions": [
+   "increase",
+   "decrease",
+   "focus"
+  ],
+  "rect": [
+   25.0,
+   627.0,
+   48.0,
+   48.0
+  ]
+ },
+ {
+  "label": "Pause",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   159.0,
+   686.0,
+   84.0,
+   84.0
+  ]
+ },
+ {
+  "label": "Speed · 1x",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   22.0,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Sleep timer",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   111.5,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Episodes",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   201.0,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Listening mode · Hands-free",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   290.5,
+   780.0,
+   89.5,
+   48.0
+  ]
+ }
+]

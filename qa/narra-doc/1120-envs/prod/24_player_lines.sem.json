@@ -1,0 +1,189 @@
+[
+ {
+  "label": "Series details Running with Wolves Episode 1 · Ten Minutes to His Engagement",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   50.0,
+   68.5,
+   256.0,
+   39.0
+  ]
+ },
+ {
+  "label": "Remove from saved",
+  "flags": [
+   "isButton",
+   "hasToggledState",
+   "isToggled"
+  ],
+  "actions": [],
+  "rect": [
+   306.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "Share or report this episode",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   352.0,
+   68.0,
+   40.0,
+   40.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE Don't move.",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   363.9,
+   358.0,
+   57.0
+  ]
+ },
+ {
+  "label": "The black sedan's back door flies open. A hand clamps around your wrist. Hot. Steady.",
+  "flags": [],
+  "actions": [
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   420.9,
+   358.0,
+   98.0
+  ]
+ },
+ {
+  "label": "MAGNUS THORNE Quiet. What is that… on your skin?",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   518.9,
+   358.0,
+   57.0
+  ]
+ },
+ {
+  "label": "He leans into the curve of your neck and breathes you in. Slowly.",
+  "flags": [],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   22.0,
+   575.9,
+   358.0,
+   55.1
+  ]
+ },
+ {
+  "label": "3%",
+  "flags": [
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable",
+   "isSlider"
+  ],
+  "actions": [
+   "increase",
+   "decrease",
+   "focus"
+  ],
+  "rect": [
+   9.7,
+   627.0,
+   48.0,
+   48.0
+  ]
+ },
+ {
+  "label": "Pause",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   159.0,
+   686.0,
+   84.0,
+   84.0
+  ]
+ },
+ {
+  "label": "Speed · 1x",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   22.0,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Sleep timer",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   111.5,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Episodes",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   201.0,
+   780.0,
+   89.5,
+   48.0
+  ]
+ },
+ {
+  "label": "Listening mode · Hands-free",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   290.5,
+   780.0,
+   89.5,
+   48.0
+  ]
+ }
+]

@@ -1,0 +1,223 @@
+[
+ {
+  "label": "Four Liars, One Island",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   179.0,
+   116.7,
+   248.2
+  ]
+ },
+ {
+  "label": "Open Book",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   142.7,
+   179.0,
+   116.7,
+   248.2
+  ]
+ },
+ {
+  "label": "Not Pretending This Time",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   269.3,
+   179.0,
+   116.7,
+   248.2
+  ]
+ },
+ {
+  "label": "Don't Trust This Feed",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   439.2,
+   116.7,
+   248.2
+  ]
+ },
+ {
+  "label": "No Work Today, Mii's Got You",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   142.7,
+   439.2,
+   116.7,
+   248.2
+  ]
+ },
+ {
+  "label": "Before the Mask",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   269.3,
+   439.2,
+   116.7,
+   248.2
+  ]
+ },
+ {
+  "label": "The Bride Who Wasn't Her",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   699.5,
+   116.7,
+   174.5
+  ]
+ },
+ {
+  "label": "Alibi for Two",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   142.7,
+   699.5,
+   116.7,
+   174.5
+  ]
+ },
+ {
+  "label": "The Duke's Fine Print",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   269.3,
+   699.5,
+   116.7,
+   174.5
+  ]
+ },
+ {
+  "label": "About",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   118.0,
+   48.9,
+   46.0
+  ]
+ },
+ {
+  "label": "Episodes",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   86.9,
+   118.0,
+   71.7,
+   46.0
+  ]
+ },
+ {
+  "label": "More like this",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   180.6,
+   118.0,
+   104.7,
+   46.0
+  ]
+ },
+ {
+  "label": "More",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   50.0,
+   35.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   201.0,
+   781.0,
+   201.0,
+   59.0
+  ]
+ }
+]

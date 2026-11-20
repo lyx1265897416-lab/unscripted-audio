@@ -1,0 +1,344 @@
+[
+ {
+  "label": "Romance, 21 series",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   16.0,
+   863.5,
+   181.0,
+   10.5
+  ]
+ },
+ {
+  "label": "Fantasy, 9 series",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   205.0,
+   863.5,
+   181.0,
+   10.5
+  ]
+ },
+ {
+  "label": "See all",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   341.5,
+   823.5,
+   44.5,
+   30.0
+  ]
+ },
+ {
+  "label": "Play Now, Not Pretending This Time Not Pretending This Time",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   597.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, The Villa The Villa",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   140.0,
+   597.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Open Book Open Book",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   264.0,
+   597.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Personal Growth Personal Growth",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   388.0,
+   597.5,
+   14.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Meet Me, Again Meet Me, Again",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   339.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, The Sea Prince's Almost Bride The Sea Prince's Almost Bride",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   140.0,
+   339.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Co-Parenting the Queen of Hell Co-Parenting the Queen of Hell",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   264.0,
+   339.5,
+   112.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, A Celebrity Answered My Roommate Ad A Celebrity Answered My Roommate Ad",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   388.0,
+   339.5,
+   14.0,
+   204.0
+  ]
+ },
+ {
+  "label": "Play Now, Running with Wolves Running with Wolves",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   116.0,
+   112.0,
+   169.5
+  ]
+ },
+ {
+  "label": "Play Now, Four Liars, One Island Four Liars, One Island",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   140.0,
+   116.0,
+   112.0,
+   169.5
+  ]
+ },
+ {
+  "label": "Play Now, Don't Trust This Feed Don't Trust This Feed",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   264.0,
+   116.0,
+   112.0,
+   169.5
+  ]
+ },
+ {
+  "label": "Play Now, No Work Today, Mii's Got You No Work Today, Mii's Got You",
+  "flags": [
+   "isButton",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   388.0,
+   116.0,
+   14.0,
+   169.5
+  ]
+ },
+ {
+  "label": "LIVE Not Pretending This Time Rafael Ortega · Your roommate of three years, who kissed you last night \"just for show\"",
+  "flags": [
+   "isHidden",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   11.0,
+   5.5
+  ]
+ },
+ {
+  "label": "LIVE The Villa Jace / Kai / Theo · The sunny one: a 21-year-old San Diego surf instructor and lifeguard who has been paired with Sloane as friends since Day 1",
+  "flags": [
+   "isHidden",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   11.0,
+   0.0,
+   380.0,
+   5.5
+  ]
+ },
+ {
+  "label": "LIVE Open Book Ray · Your husband, heir to the family group. He hears every thought you have, and only yours.",
+  "flags": [
+   "isHidden",
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   391.0,
+   0.0,
+   11.0,
+   5.5
+  ]
+ },
+ {
+  "label": "100 coins",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   308.9,
+   67.0,
+   77.1,
+   44.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Rewards",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   134.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   268.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ }
+]

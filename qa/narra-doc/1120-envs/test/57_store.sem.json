@@ -1,0 +1,85 @@
+[
+ {
+  "label": "Scrim",
+  "flags": [],
+  "actions": [
+   "tap",
+   "dismiss"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   402.0,
+   163.0
+  ]
+ },
+ {
+  "label": "100 · $0.99",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   18.0,
+   252.0,
+   178.0,
+   152.0
+  ]
+ },
+ {
+  "label": "300 +30 bonus · $2.99",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   206.0,
+   252.0,
+   178.0,
+   152.0
+  ]
+ },
+ {
+  "label": "600 +80 bonus · $4.99",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   18.0,
+   414.0,
+   178.0,
+   152.0
+  ]
+ },
+ {
+  "label": "1500 +300 bonus · $9.99",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   206.0,
+   414.0,
+   178.0,
+   152.0
+  ]
+ },
+ {
+  "label": "Start VIP (test) Start VIP (test)",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   35.0,
+   761.0,
+   332.0,
+   44.0
+  ]
+ }
+]

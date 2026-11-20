@@ -1,0 +1,17 @@
+[
+ {
+  "label": "Get started",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   766.0,
+   358.0,
+   52.0
+  ]
+ }
+]

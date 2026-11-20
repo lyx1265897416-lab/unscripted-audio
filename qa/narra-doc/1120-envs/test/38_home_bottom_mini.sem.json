@@ -1,0 +1,190 @@
+[
+ {
+  "label": "29 min free, Claim",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   16.0,
+   614.0,
+   370.0,
+   56.0
+  ]
+ },
+ {
+  "label": "Crack High: Fight Academy Declan · Third-year Fight B Muay Thai fighter, school rank 3, a Prefect who befriends everyone Fight school · Rankings · Action",
+  "flags": [
+   "isHidden",
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   0.0,
+   402.0,
+   91.3
+  ]
+ },
+ {
+  "label": "One Stat to Rule Them All Renn · Dawnstrider Oath's close-combat specialist, a black cat demihuman who considers himself the strongest in the party Stat 9999 · Adventuring party · Demihumans",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   116.0,
+   402.0,
+   78.7
+  ]
+ },
+ {
+  "label": "The Halls of Mythborne Sora · A second-year werewolf in House Beast who volunteers to guide newcomers on orientation day Magic academy · Gods & monsters · Houses",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   194.7,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Hero Academy: Powers & Purpose Ashton · Class 1-A's S-rank prodigy, a gravity-collapse telekinetic, and your seatmate Hero academy · Powers · Class rivalry",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   298.0,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "A Celebrity Answered My Roommate Ad Sienna Lark · The country's most recognizable actress, singer and model, hiding from paparazzi as your new roommate Celebrity roommate · Secret · Paparazzi",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   401.3,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Academia: My Heroes Dahlia · A-class Flare user and fellow freshman; fiercely competitive, she marks you as her rival on day one Hero academy · Rankings · Four factions",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   504.7,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "100 coins",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   308.9,
+   67.0,
+   77.1,
+   44.0
+  ]
+ },
+ {
+  "label": "Running with Wolves Ep 2 · The Locked Exit",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   8.0,
+   714.0,
+   386.0,
+   60.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Rewards",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   134.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   268.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ }
+]

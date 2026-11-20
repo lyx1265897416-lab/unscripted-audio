@@ -1,0 +1,4 @@
+test/*.png
+prod/*.png
+jpg/
+viewer.local.html

@@ -1,0 +1,56 @@
+[
+ {
+  "label": "Your name",
+  "flags": [
+   "isTextField",
+   "isFocused",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap",
+   "setSelection",
+   "setText",
+   "focus"
+  ],
+  "rect": [
+   71.5,
+   449.7,
+   265.0,
+   42.0
+  ]
+ },
+ {
+  "label": "Not now",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   501.2,
+   80.7,
+   1.8
+  ]
+ },
+ {
+  "label": "Tap to skip",
+  "flags": [
+   "isButton",
+   "hasEnabledState"
+  ],
+  "actions": [],
+  "rect": [
+   139.5,
+   504.0,
+   123.0,
+   32.0
+  ]
+ }
+]

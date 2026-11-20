@@ -1,0 +1,23 @@
+// 本地核对 viewer：node check27.mjs <viewer.html 绝对路径> <输出前缀>
+import { createRequire } from 'module';
+const require = createRequire('/Users/vicky/.local/share/nodejs/node-v24.18.0-darwin-arm64/lib/node_modules/');
+const { chromium } = require('playwright');
+const [file, out] = process.argv.slice(2);
+const b = await chromium.launch({ channel: 'chrome', headless: true });
+const p = await b.newPage({ viewport: { width: 1000, height: 840 } });
+const errs = [];
+p.on('pageerror', e => errs.push(e.message));
+p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+await p.goto('file://' + file);
+await p.waitForTimeout(2500);
+await p.screenshot({ path: out + '-a.png' });
+await p.click('#sw');
+const st = await p.$$('.nav .st');
+await st[st.length - 1].click();
+await p.waitForTimeout(1200);
+await p.screenshot({ path: out + '-b.png' });
+await p.click('.seg button:nth-child(2)');
+await p.waitForTimeout(2000);
+await p.screenshot({ path: out + '-c.png' });
+console.log('errors', JSON.stringify(errs));
+await b.close();

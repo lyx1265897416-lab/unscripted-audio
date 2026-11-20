@@ -1,0 +1,212 @@
+[
+ {
+  "label": "1 Ep 1 · Ten Minutes to His Engagement 3 min FREE",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   432.2,
+   370.0,
+   65.0
+  ]
+ },
+ {
+  "label": "2 Ep 2 · The Locked Exit Written for you · 29 lines FREE",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   497.2,
+   370.0,
+   65.0
+  ]
+ },
+ {
+  "label": "3 Ep 3 After your choice FREE",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   562.2,
+   370.0,
+   65.0
+  ]
+ },
+ {
+  "label": "2 more episodes, written as you go",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   16.0,
+   627.2,
+   370.0,
+   57.0
+  ]
+ },
+ {
+  "label": "About",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   347.2,
+   48.9,
+   46.0
+  ]
+ },
+ {
+  "label": "Episodes",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   86.9,
+   347.2,
+   71.7,
+   46.0
+  ]
+ },
+ {
+  "label": "More like this",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   180.6,
+   347.2,
+   104.7,
+   46.0
+  ]
+ },
+ {
+  "label": "More",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   279.2,
+   35.0,
+   36.0
+  ]
+ },
+ {
+  "label": "Continue Ep 2 Continue Ep 2",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   85.2,
+   370.0,
+   50.0
+  ]
+ },
+ {
+  "label": "Restart",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   149.5,
+   141.2,
+   103.0,
+   48.0
+  ]
+ },
+ {
+  "label": "Running with Wolves Ep 2 · The Locked Exit",
+  "flags": [
+   "isImage"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   8.0,
+   714.0,
+   386.0,
+   60.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Rewards",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   134.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   268.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ }
+]

@@ -1,0 +1,42 @@
+[
+ {
+  "label": "Your name",
+  "flags": [
+   "isTextField",
+   "isFocused",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap",
+   "setSelection",
+   "setText",
+   "focus"
+  ],
+  "rect": [
+   71.5,
+   449.8,
+   265.0,
+   42.0
+  ]
+ },
+ {
+  "label": "Not now",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   22.0,
+   501.3,
+   80.7,
+   1.7
+  ]
+ }
+]

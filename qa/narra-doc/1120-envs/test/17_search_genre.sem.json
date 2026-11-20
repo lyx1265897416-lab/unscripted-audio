@@ -1,0 +1,250 @@
+[
+ {
+  "label": "Running with Wolves Magnus · An Alpha about to marry someone else, who just claimed you as his mate Werewolf · Fated mate · Engagement night",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   270.0,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Not Pretending This Time Rafael Ortega · Your roommate of three years, who kissed you last night \"just for show\" Roommates · Fake dating · Confession",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   373.3,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Engaged Tonight Kael · Alpha of the Draven pack, engaged tonight to someone else, and undone by your scent Forbidden · Alpha & human · Dark romance",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   476.7,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "The Villa Jace / Kai / Theo · The sunny one: a 21-year-old San Diego surf instructor and lifeguard who has been paired with Sloane as friends since Day 1 Dating show · Love triangle · Dating show",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   580.0,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Open Book Ray · Your husband, heir to the family group. He hears every thought you have, and only yours. Arranged marriage · Second chance · Romance",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   683.3,
+   402.0,
+   103.3
+  ]
+ },
+ {
+  "label": "Before the Mask Adrian / Night Raven · Victor's nephew and your public fiancé, a playboy heir known for vanishing when things go wrong Fake engagement · Secret identity · Suspense",
+  "flags": [
+   "isImage",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   786.7,
+   402.0,
+   87.3
+  ]
+ },
+ {
+  "label": "Werewolf",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   180.0,
+   94.7,
+   36.0
+  ]
+ },
+ {
+  "label": "Billionaire",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   118.7,
+   180.0,
+   98.8,
+   36.0
+  ]
+ },
+ {
+  "label": "Romance",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   225.5,
+   180.0,
+   91.7,
+   36.0
+  ]
+ },
+ {
+  "label": "Fantasy",
+  "flags": [],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   325.2,
+   180.0,
+   76.8,
+   36.0
+  ]
+ },
+ {
+  "label": "Search series, characters, tropes",
+  "flags": [
+   "isTextField",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap",
+   "focus"
+  ],
+  "rect": [
+   58.0,
+   133.0,
+   252.8,
+   22.0
+  ]
+ },
+ {
+  "label": "Cancel",
+  "flags": [
+   "isButton",
+   "hasEnabledState",
+   "isEnabled",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   326.8,
+   120.0,
+   69.2,
+   48.0
+  ]
+ },
+ {
+  "label": "100 coins",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [],
+  "rect": [
+   308.9,
+   67.0,
+   77.1,
+   44.0
+  ]
+ },
+ {
+  "label": "Home",
+  "flags": [
+   "isSelected",
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   0.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Rewards",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   134.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ },
+ {
+  "label": "Me",
+  "flags": [
+   "isButton",
+   "hasSelectedState"
+  ],
+  "actions": [
+   "tap",
+   "longPress"
+  ],
+  "rect": [
+   268.0,
+   781.0,
+   134.0,
+   59.0
+  ]
+ }
+]

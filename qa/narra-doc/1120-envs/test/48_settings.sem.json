@@ -1,0 +1,208 @@
+[
+ {
+  "label": "Mia Sync across devices Sign in",
+  "flags": [
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   127.0,
+   368.0,
+   80.0
+  ]
+ },
+ {
+  "label": "Change avatar M",
+  "flags": [
+   "isButton"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   31.0,
+   141.0,
+   52.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Profile photo",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   208.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Sign-in Not signed in",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   261.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "How you listen Hands-free",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   364.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Default speed 1×",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   417.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Autoplay next On replays",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   470.0,
+   368.0,
+   61.0
+  ]
+ },
+ {
+  "label": "Choice timer Auto-continue",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   532.0,
+   368.0,
+   61.0
+  ]
+ },
+ {
+  "label": "Wait time 5 s",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   594.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Answer from lock screen",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   647.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Default sleep timer Off",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   700.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Auto-unlock episodes 10 coins/ep",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   803.0,
+   368.0,
+   61.0
+  ]
+ },
+ {
+  "label": "Coin store",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   865.0,
+   368.0,
+   9.0
+  ]
+ }
+]

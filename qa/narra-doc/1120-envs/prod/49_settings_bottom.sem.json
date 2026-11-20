@@ -1,0 +1,173 @@
+[
+ {
+  "label": "STORAGE Clear cache Images only 3.3 MB",
+  "flags": [
+   "isButton",
+   "isHidden",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   16.0,
+   0.0,
+   370.0,
+   35.0
+  ]
+ },
+ {
+  "label": "Microphone & speech On",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   114.0,
+   368.0,
+   23.0
+  ]
+ },
+ {
+  "label": "Privacy policy",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   138.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Terms of use",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   191.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "FAQ",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   294.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Send feedback",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   347.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "Report a content issue",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   400.0,
+   368.0,
+   52.0
+  ]
+ },
+ {
+  "label": "0.0.1 (263240448) · 6d636d2 · 11-20 04:48 · latest",
+  "flags": [],
+  "actions": [
+   "longPress"
+  ],
+  "rect": [
+   31.0,
+   541.0,
+   330.5,
+   18.0
+  ]
+ },
+ {
+  "label": "Environment Production",
+  "flags": [],
+  "actions": [
+   "longPress"
+  ],
+  "rect": [
+   31.0,
+   569.0,
+   99.8,
+   43.0
+  ]
+ },
+ {
+  "label": "Reset all data This phone only",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   649.0,
+   368.0,
+   61.0
+  ]
+ },
+ {
+  "label": "Delete account & data Our servers and this phone",
+  "flags": [
+   "isButton",
+   "isFocusable"
+  ],
+  "actions": [
+   "tap"
+  ],
+  "rect": [
+   17.0,
+   711.0,
+   368.0,
+   61.0
+  ]
+ }
+]
