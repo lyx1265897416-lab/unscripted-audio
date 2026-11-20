@@ -1,8 +1,8 @@
 {
- "base": "https://api.trycloudflare.com",
+ "base": "https://alloy-roulette-tue-condo.trycloudflare.com",
  "bases": [
-  "https://api.trycloudflare.com",
-  "https://api.trycloudflare.com"
+  "https://alloy-roulette-tue-condo.trycloudflare.com",
+  "https://thinkpad-constantly-skating-calendars.trycloudflare.com"
  ],
- "updated": "2026-11-19T23:18:21-0800"
+ "updated": "2026-11-19T23:19:36-0800"
 }
