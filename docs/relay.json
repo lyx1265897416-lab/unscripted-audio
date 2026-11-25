@@ -1,8 +1,7 @@
 {
- "base": "https://pichunter-accomplished-stations-enhance.trycloudflare.com",
+ "base": "https://api.trycloudflare.com",
  "bases": [
-  "https://pichunter-accomplished-stations-enhance.trycloudflare.com",
-  "https://bedrooms-conference-accommodations-suppliers.trycloudflare.com"
+  "https://api.trycloudflare.com"
  ],
- "updated": "2026-11-25T00:53:04-0800"
+ "updated": "2026-11-25T03:14:06-0800"
 }
